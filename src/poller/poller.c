@@ -390,7 +390,7 @@ static iwrc _create(int num_threads, int max_poll_events, struct poller **out_po
 
   pthread_mutex_init(&p->mtx, 0);
   RCA(p->slots = kh_init(SLOTS), finish);
-  RCC(rc, finish, iwtp_start("pooltp-", num_threads, 0, &p->tp));
+  RCC(rc, finish, iwtp_start("poller-tp-", num_threads, 0, &p->tp));
   RCN(finish, p->fd = epoll_create1(EPOLL_CLOEXEC));
   RCN(finish, p->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
   RCN(finish, p->event_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
