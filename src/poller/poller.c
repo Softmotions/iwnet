@@ -370,6 +370,10 @@ void poller_shutdown_request(struct poller *p) {
   }
 }
 
+void poller_shutdown_wait(struct poller *p) {
+  iwtp_shutdown(&p->tp, true);
+}
+
 void poller_destroy(struct poller **pp) {
   if (pp && *pp) {
     _destroy(*pp);

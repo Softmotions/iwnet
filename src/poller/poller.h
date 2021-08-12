@@ -27,6 +27,8 @@ void poller_remove(struct poller *poller, int fd);
 
 void poller_shutdown_request(struct poller *p);
 
+void poller_shutdown_wait(struct poller *p);
+
 void poller_destroy(struct poller **pp);
 
 void poller_poll(struct poller *p);
