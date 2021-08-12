@@ -120,6 +120,7 @@ set_target_properties(
   iwnet_s
   PROPERTIES VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
              COMPILE_FLAGS "-DIW_STATIC"
+             PUBLIC_HEADER "${PUB_HDRS}"
              OUTPUT_NAME iwnet-${PROJECT_VERSION_MAJOR})
 
 set(${PROJECT_NAME}_PUB_HDRS
