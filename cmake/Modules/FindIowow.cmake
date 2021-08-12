@@ -1,0 +1,13 @@
+mark_as_advanced(IOWOW_INCLUDE_DIRS IOWOW_STATIC_LIB)
+
+find_path(IOWOW_INCLUDE_DIRS NAMES iowow/iowow.h PATH_SUFFIXES ejdb2)
+find_library(IOWOW_STATIC_LIB NAMES libiowow-1.a libiowow.a)
+
+if(IOWOW_INCLUDE_DIRS AND IOWOW_STATIC_LIB)
+  set(IOWOW_FOUND ON)
+  set(IOWOW_LIBRARIES ${IOWOW_STATIC_LIB} m)
+  message("IOWOW Found ${IOWOW_LIBRARIES} ${IOWOW_INCLUDE_DIRS}")
+else()
+  message(FATAL_ERROR "IOWOW Not Found" )
+  set(IOWOW-NOTFOUND ON)
+endif()

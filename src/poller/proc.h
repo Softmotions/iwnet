@@ -1,0 +1,60 @@
+#pragma once
+
+#include "poller.h"
+
+struct proc_ctx {
+
+  /// Child pid.
+  int pid;
+
+  /// Child process wait status: `man 2 wait`
+  int wstatus;
+
+  /// Arbitrary user data.
+  void *user_data;
+};
+
+struct proc_spec {
+
+  /// Poller associated with spec
+  struct poller *poller;
+
+  /// Path to executable.
+  const char *path;
+
+  /// Zero terminated array of arguments,
+  /// args[0] is the name assocated with programm beeng executed.
+  const char **args;
+
+  /// Zero terminated array of environment vars of the form key=value.
+  const char **env;
+
+  /// Arbitrary user data.
+  void *user_data;
+
+  /// Stdout callback.
+  void (*on_stdout)(struct proc_ctx *ctx, const char *buf, size_t len);
+
+  /// Strderr callback.
+  void (*on_stderr)(struct proc_ctx *ctx, const char *buf, size_t len);
+
+  /// On child process exit.
+  void (*on_exit)(struct proc_ctx *ctx_exit);
+
+  /// It true set the ability to write into stdin of the child process
+  bool write_stdin;
+};
+
+iwrc proc_spawn(const struct proc_spec *spec, int *out_pid);
+
+iwrc proc_wait(int pid);
+
+iwrc proc_stdin_write(int pid, const void *buf, size_t len, bool close);
+
+iwrc proc_stdin_close(int pid);
+
+void proc_kill(int pid, int signum);
+
+void proc_kill_all(int signum);
+
+void proc_dispose(void);
