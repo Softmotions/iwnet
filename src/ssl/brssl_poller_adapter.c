@@ -110,11 +110,8 @@ static void _on_dispose(const struct poller_task *t) {
 static int _write_fd(struct _adapter *a, const unsigned char *buf, size_t len) {
   while (1) {
     ssize_t wlen = write(a->b.fd, buf, len);
-    if (wlen <= 0) {
-      if (wlen < 0 && errno == EINTR) {
-        continue;
-      }
-      return -1;
+    if (wlen < 0 && errno == EINTR) {
+      continue;
     }
     return (int) wlen;
   }
@@ -123,11 +120,8 @@ static int _write_fd(struct _adapter *a, const unsigned char *buf, size_t len) {
 static int _read_fd(struct _adapter *a, unsigned char *buf, size_t len) {
   while (1) {
     ssize_t rlen = read(a->b.fd, buf, len);
-    if (rlen <= 0) {
-      if (rlen < 0 && errno == EINTR) {
-        continue;
-      }
-      return -1;
+    if (rlen < 0 && errno == EINTR) {
+      continue;
     }
     return (int) rlen;
   }
@@ -170,8 +164,10 @@ static int64_t _on_ready(const struct poller_task *t, uint32_t flags) {
       size_t len;
       unsigned char *buf = br_ssl_engine_sendrec_buf(cc, &len);
       int wlen = _write_fd(a, buf, len);
-      if (wlen <= 0) {
-        if (wlen < 0 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
+      if (wlen == 0) {
+        goto finish;
+      } else if (wlen < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
           done = true;
           break;
         } else {
@@ -185,8 +181,10 @@ static int64_t _on_ready(const struct poller_task *t, uint32_t flags) {
       size_t len;
       unsigned char *buf = br_ssl_engine_recvrec_buf(cc, &len);
       int rlen = _read_fd(a, buf, len);
-      if (rlen <= 0) {
-        if (rlen < 0 && (errno == EWOULDBLOCK || errno == EAGAIN)) {
+      if (rlen == 0) {
+        goto finish;
+      } else if (rlen < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN) {
           done = true;
           break;
         } else {

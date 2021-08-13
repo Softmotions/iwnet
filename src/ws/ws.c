@@ -152,7 +152,7 @@ static iwrc _make_non_blocking(int fd) {
   return 0;
 }
 
-static iwrc _setup_ws_socket(int fd) {
+static iwrc _make_tcp_nodelay(int fd) {
   int val = 1;
   if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, (socklen_t) sizeof(val)) == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
@@ -204,9 +204,9 @@ static iwrc _handshake_output_fill(struct ws *ws) {
   RCR(iwxstr_printf(
         ws->output,
         "GET %s HTTP/1.1\r\n"
-        "Host %s:%s\r\n"
+        "Host: %s:%s\r\n"
         "Upgrade: websocket\r\n"
-        "Connection: keep-alive,Upgrade\r\n"
+        "Connection: Upgrade\r\n"
         "Sec-Websocket-Key: %s\r\n"
         "Sec-Websocket-Version: 13\r\n"
         "\r\n",
@@ -247,7 +247,10 @@ static int64_t _on_handshake_event(struct poller_adapter *pa, void *user_data, u
     ssize_t tow = iwxstr_size(ws->output);
     while (tow > 0) {
       ssize_t len = pa->write(pa, (void*) iwxstr_ptr(ws->output), tow);
-      if (len < 0) {
+      if (len == 0) {
+        ret = -1;
+        goto finish;
+      } else if (len < 0) {
         if (errno == EINTR) {
           continue;
         } else if (errno != EAGAIN) {
@@ -265,7 +268,10 @@ static int64_t _on_handshake_event(struct poller_adapter *pa, void *user_data, u
     uint8_t buf[1024];
     while (1) {
       ssize_t len = pa->read(pa, buf, sizeof(buf));
-      if (len < 0) {
+      if (len == 0) {
+        ret = -1;
+        goto finish;
+      } else if (len < 0) {
         if (errno == EINTR) {
           continue;
         } else if (errno != EAGAIN) {
@@ -293,6 +299,7 @@ static int64_t _on_handshake_event(struct poller_adapter *pa, void *user_data, u
             rc = WS_ERROR_HANDSHAKE_CLIENT_KEY;
             goto finish;
           }
+          RCC(rc, finish, _make_tcp_nodelay(ws->fd));
         }
       }
     }
@@ -467,10 +474,9 @@ iwrc ws_open(const struct ws_spec *spec, struct ws **out_ws) {
   if (__sync_bool_compare_and_swap(&_initialized, false, true)) {
     RCR(iwlog_register_ecodefn(_ecodefn));
   }
-  if (!out_ws) {
-    return IW_ERROR_INVALID_ARGS;
+  if (out_ws) {
+    *out_ws = 0;
   }
-  *out_ws = 0;
   if (!spec || !spec->url || !spec->poller || !spec->on_dispose || !spec->on_message) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -508,10 +514,6 @@ iwrc ws_open(const struct ws_spec *spec, struct ws **out_ws) {
     rc = IW_ERROR_FAIL;
     goto finish;
   }
-  curl_url_get(ws->url, CURLUPART_PORT, &ws->port, 0);
-  if (!ws->port) {
-    RCB(finish, ws->port = strdup("80"));
-  }
   curl_url_get(ws->url, CURLUPART_PATH, &ws->path, 0);
   if (!ws->path) {
     RCB(finish, ws->path = strdup("/"));
@@ -526,10 +528,14 @@ iwrc ws_open(const struct ws_spec *spec, struct ws **out_ws) {
     curl_free(ptr);
   }
 
+  curl_url_get(ws->url, CURLUPART_PORT, &ws->port, 0);
+  if (!ws->port) {
+    RCB(finish, ws->port = strdup(ws->secure ? "443" : "80"));
+  }
+
   // Now do the initial handshake
   RCC(rc, finish, _connect(ws->host, ws->port, &ws->fd));
   RCC(rc, finish, _make_non_blocking(ws->fd));
-  RCC(rc, finish, _setup_ws_socket(ws->fd));
 
   RCC(rc, finish, _wslayrc(wslay_event_context_client_init(&ws->wc, &(struct wslay_event_callbacks) {
     .recv_callback = _wslay_event_recv_callback,
@@ -563,7 +569,9 @@ iwrc ws_open(const struct ws_spec *spec, struct ws **out_ws) {
 
 finish:
   if (rc) {
-    *out_ws = 0;
+    if (out_ws) {
+      *out_ws = 0;
+    }
     _destroy(ws);
   }
   return rc;
