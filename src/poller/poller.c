@@ -50,7 +50,7 @@ struct poller_slot {
   int      fd;                                               ///< File descriptor beeng polled
   void    *user_data;                                        ///< Arbitrary user data associated with poller_task
   int64_t  (*on_ready)(const struct poller_task*, uint32_t); ///< On fd event ready
-  void     (*on_destroy)(const struct poller_task*);         ///< On destroy handler
+  void     (*on_dispose)(const struct poller_task*);         ///< On destroy handler
   uint32_t events;                                           ///< Default epoll monitoring events
   uint32_t events_mod;
   long     timeout_sec;                                      ///< Optional slot timeout
@@ -74,8 +74,8 @@ IW_INLINE time_t _time_sec() {
 
 static void _slot_destroy(struct poller_slot *s) {
   if (__sync_bool_compare_and_swap(&s->destroy_cas, false, true)) {  // Avoid recursion
-    if (s->on_destroy) {
-      s->on_destroy((void*) s);
+    if (s->on_dispose) {
+      s->on_dispose((void*) s);
     }
     int fd = s->fd;
     if (fd > -1) {
