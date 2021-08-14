@@ -216,26 +216,29 @@ void poller_remove(struct poller *p, int fd) {
   }
 }
 
+static void _poller_cleanup(struct poller *p) {
+  pthread_mutex_lock(&p->mtx);
+  int i = 0;
+  int sz = kh_size(p->slots);
+  int *fds = calloc(sz, sizeof(int));
+  for (khiter_t k = kh_begin(p->slots); k != kh_end(p->slots) && i < sz; ++k) {
+    if (!kh_exist(p->slots, k)) {
+      continue;
+    }
+    fds[i++] = kh_key(p->slots, k);
+  }
+  pthread_mutex_unlock(&p->mtx);
+  while (--i >= 0) {
+    poller_remove(p, fds[i]);
+  }
+  free(fds);
+}
+
 static void _destroy(struct poller *p) {
   if (p) {
     poller_shutdown_request(p);
     iwtp_shutdown(&p->tp, true);
-    pthread_mutex_lock(&p->mtx);
-    int i = 0;
-    int sz = kh_size(p->slots);
-    int *fds = calloc(sz, sizeof(int));
-    for (khiter_t k = kh_begin(p->slots); k != kh_end(p->slots) && i < sz; ++k) {
-      if (!kh_exist(p->slots, k)) {
-        continue;
-      }
-      fds[i++] = kh_key(p->slots, k);
-    }
-    pthread_mutex_unlock(&p->mtx);
-    while (--i >= 0) {
-      poller_remove(p, fds[i]);
-    }
-    free(fds);
-
+    _poller_cleanup(p);
     if (p->fd > -1) {
       close(p->fd);
     }
@@ -550,4 +553,6 @@ void poller_poll(struct poller *p) {
       }
     }
   }
+  // Close all polled descriptors
+  _poller_cleanup(p);
 }
