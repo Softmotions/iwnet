@@ -508,6 +508,10 @@ finish:
   }
 }
 
+bool poller_alive(struct poller *p) {
+  return p && !p->stop && p->fds_count > 0;
+}
+
 void poller_poll(struct poller *p) {
   int max_events = p->max_poll_events;
   struct epoll_event event[max_events];

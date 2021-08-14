@@ -32,3 +32,5 @@ void poller_shutdown_wait(struct poller *p);
 void poller_destroy(struct poller **pp);
 
 void poller_poll(struct poller *p);
+
+bool poller_alive(struct poller *p);
