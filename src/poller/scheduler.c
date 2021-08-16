@@ -18,6 +18,7 @@ static void _task_worker(void *arg) {
 static int64_t _on_ready(const struct poller_task *t, uint32_t events) {
   struct scheduler_spec *s = t->user_data;
   assert(s);
+  s->on_cancel = 0;
   if (s->thread_pool) {
     struct scheduler_spec *ss = malloc(sizeof(*ss));
     if (ss) {
@@ -37,6 +38,9 @@ static int64_t _on_ready(const struct poller_task *t, uint32_t events) {
 static void _on_dispose(const struct poller_task *t) {
   assert(t);
   struct scheduler_spec *s = t->user_data;
+  if (s->on_cancel) {
+    s->on_cancel(s->user_data);
+  }
   free(s);
 }
 

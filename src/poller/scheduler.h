@@ -7,6 +7,7 @@ typedef void (*scheduler_task_f)(void *arg);
 
 struct scheduler_spec {
   scheduler_task_f task_fn;  ///< Task execution function.
+  void  (*on_cancel)(void*); ///< Optional on_cancel handler before timeout event
   void *user_data;           ///< User data passed to `task_fn()` function.
   struct poller *poller;     ///< Poller
   uint32_t       timeout_ms; ///< Task timeout in milliseconds
