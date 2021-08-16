@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <sys/timerfd.h>
+#include <sys/epoll.h>
 #include <stdlib.h>
 
 static void _task_worker(void *arg) {
@@ -56,7 +57,9 @@ iwrc schedule(const struct scheduler_spec *spec) {
     .fd = fd,
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
-    .user_data = task
+    .user_data = task,
+    .events = EPOLLIN,
+    .events_mod = EPOLLET
   }));
 
   if (timerfd_settime(fd, 0, &(struct itimerspec) {
