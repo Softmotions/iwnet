@@ -33,13 +33,13 @@ struct proc_spec {
   void *user_data;
 
   /// Stdout callback.
-  void (*on_stdout)(struct proc_ctx *ctx, const char *buf, size_t len);
+  void (*on_stdout)(const struct proc_ctx *ctx, const char *buf, size_t len);
 
   /// Strderr callback.
-  void (*on_stderr)(struct proc_ctx *ctx, const char *buf, size_t len);
+  void (*on_stderr)(const struct proc_ctx *ctx, const char *buf, size_t len);
 
   /// On child process exit.
-  void (*on_exit)(struct proc_ctx *ctx_exit);
+  void (*on_exit)(const struct proc_ctx *ctx_exit);
 
   /// It true set the ability to write into stdin of the child process
   bool write_stdin;

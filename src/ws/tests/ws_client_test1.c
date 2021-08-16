@@ -35,7 +35,7 @@ static void on_message(const char *buf, size_t buf_len, const struct ws_ctx *ctx
   }
 }
 
-static void _on_ws_server_exit(struct proc_ctx *ctx) {
+static void _on_ws_server_exit(const struct proc_ctx *ctx) {
   fprintf(stderr, "On ws server exit\n");
   poller_shutdown_request(poller);
 }
@@ -47,7 +47,7 @@ static void on_dispose(const struct ws_ctx *ctx) {
   proc_wait(ws_server_pid);
 }
 
-static void _on_ws_server_output(struct proc_ctx *ctx, const char *buf, size_t len) {
+static void _on_ws_server_output(const struct proc_ctx *ctx, const char *buf, size_t len) {
   fprintf(stderr, "ws server: %s\n", buf);
   if (!strstr(buf, "0542a108-ff0f-47ef-86e3-495fd898a8ee")) {
     return;

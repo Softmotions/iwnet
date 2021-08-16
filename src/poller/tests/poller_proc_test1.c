@@ -45,15 +45,15 @@ static void shutdown(void) {
   poller_destroy(&poller);
 }
 
-static void _on_echo_stdout(struct proc_ctx *ctx, const char *buf, size_t len) {
+static void _on_echo_stdout(const struct proc_ctx *ctx, const char *buf, size_t len) {
   iwxstr_cat(xstdout, buf, len);
 }
 
-static void _on_echo_stderr(struct proc_ctx *ctx, const char *buf, size_t len) {
+static void _on_echo_stderr(const struct proc_ctx *ctx, const char *buf, size_t len) {
   iwxstr_cat(xstderr, buf, len);
 }
 
-static void _on_echo1_exit(struct proc_ctx *ctx) {
+static void _on_echo1_exit(const struct proc_ctx *ctx) {
   code = WIFEXITED(ctx->wstatus) ? WEXITSTATUS(ctx->wstatus) : -1;
 }
 
