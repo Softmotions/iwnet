@@ -62,8 +62,7 @@ iwrc schedule(const struct scheduler_spec *spec) {
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
     .user_data = task,
-    .events = EPOLLIN,
-    .events_mod = EPOLLET
+    .events = EPOLLIN
   }));
 
   task = 0;
