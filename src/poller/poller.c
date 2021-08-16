@@ -514,6 +514,10 @@ bool poller_alive(struct poller *p) {
   return p && !p->stop && p->fds_count > 0;
 }
 
+iwrc poller_task(struct poller *p, void (*task) (void*), void *arg) {
+  return iwtp_schedule(p->tp, task, arg);
+}
+
 void poller_poll(struct poller *p) {
   int max_events = p->max_poll_events;
   struct epoll_event event[max_events];
