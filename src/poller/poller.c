@@ -350,6 +350,7 @@ iwrc poller_add(const struct poller_task *task) {
   ev.data.fd = s->fd;
 
   if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) < 0) {
+    s->on_dispose = 0;
     rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
     poller_remove(p, s->fd);
     goto finish;
