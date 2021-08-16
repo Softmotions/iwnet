@@ -66,6 +66,8 @@ iwrc schedule(const struct scheduler_spec *spec) {
     .events_mod = EPOLLET
   }));
 
+  task = 0;
+
   if (timerfd_settime(fd, 0, &(struct itimerspec) {
     .it_value = {
       .tv_sec  = spec->timeout_ms / 1000,
