@@ -359,6 +359,7 @@ iwrc poller_add(const struct poller_task *task) {
 
 finish:
   if (rc) {
+    s->on_dispose = 0;
     _slot_destroy(s);
   }
   return rc;
