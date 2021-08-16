@@ -40,7 +40,7 @@ static void _on_dispose(const struct poller_task *t) {
 }
 
 iwrc schedule(const struct scheduler_spec *spec) {
-  if (!spec || spec->timeout_ms < 1 || spec->task_fn || !spec->poller) {
+  if (!spec || spec->timeout_ms < 1 || !spec->task_fn || !spec->poller) {
     return IW_ERROR_INVALID_ARGS;
   }
   iwrc rc = 0;
