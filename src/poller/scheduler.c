@@ -18,7 +18,6 @@ static void _task_worker(void *arg) {
 static int64_t _on_ready(const struct poller_task *t, uint32_t events) {
   struct scheduler_spec *s = t->user_data;
   assert(s);
-  s->on_cancel = 0;
   if (s->thread_pool) {
     struct scheduler_spec *ss = malloc(sizeof(*ss));
     if (ss) {
@@ -27,9 +26,12 @@ static int64_t _on_ready(const struct poller_task *t, uint32_t events) {
       if (rc) {
         free(ss);
         iwlog_ecode_error3(rc);
+      } else {
+        s->on_cancel = 0;
       }
     }
   } else {
+    s->on_cancel = 0;
     s->task_fn(s->user_data);
   }
   return -1;
