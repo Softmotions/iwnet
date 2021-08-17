@@ -29,7 +29,7 @@ KHASH_MAP_INIT_INT(SLOTS, struct poller_slot*)
 #define REF_LOCKED        0x02U
 #define REF_DESTROY_DEFER 0x04U
 
-struct poller {
+struct iwn_poller {
   int fd;
   int event_fd;               ///< fd to signal internal changes on poller.
   int timer_fd;               ///< fd to set up timeouts
@@ -49,12 +49,12 @@ struct poller {
 struct poller_slot {
   int      fd;                                               ///< File descriptor beeng polled
   void    *user_data;                                        ///< Arbitrary user data associated with poller_task
-  int64_t  (*on_ready)(const struct poller_task*, uint32_t); ///< On fd event ready
-  void     (*on_dispose)(const struct poller_task*);         ///< On destroy handler
+  int64_t  (*on_ready)(const struct iwn_poller_task*, uint32_t); ///< On fd event ready
+  void     (*on_dispose)(const struct iwn_poller_task*);         ///< On destroy handler
   uint32_t events;                                           ///< Default epoll monitoring events
   uint32_t events_mod;
   long     timeout_sec;                                      ///< Optional slot timeout
-  struct poller *poller;                                     ///< Poller
+  struct iwn_poller *poller;                                     ///< Poller
 
   int      refs;
   uint32_t events_processing;
@@ -88,7 +88,7 @@ static void _slot_destroy(struct poller_slot *s) {
 }
 
 static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
-  struct poller *p = s->poller;
+  struct iwn_poller *p = s->poller;
   if (!(flags & REF_LOCKED)) {
     pthread_mutex_lock(&p->mtx);
   }
@@ -113,7 +113,7 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
 }
 
 static iwrc _slot_ref(struct poller_slot *s) {
-  struct poller *p = s->poller;
+  struct iwn_poller *p = s->poller;
   struct poller_slot *old = 0;
   bool old_destroy = false;
   iwrc rc = 0;
@@ -147,7 +147,7 @@ static iwrc _slot_ref(struct poller_slot *s) {
   return rc;
 }
 
-static struct poller_slot* _slot_ref_id(struct poller *p, int fd, uint8_t flags) {
+static struct poller_slot* _slot_ref_id(struct iwn_poller *p, int fd, uint8_t flags) {
   struct poller_slot *s = 0;
   if (!(flags & REF_LOCKED)) {
     pthread_mutex_lock(&p->mtx);
@@ -169,7 +169,7 @@ static struct poller_slot* _slot_ref_id(struct poller *p, int fd, uint8_t flags)
   return s;
 }
 
-static inline struct poller_slot* _slot_peek_leave_locked(struct poller *p, int fd) {
+static inline struct poller_slot* _slot_peek_leave_locked(struct iwn_poller *p, int fd) {
   struct poller_slot *s = 0;
   pthread_mutex_lock(&p->mtx);
   khiter_t k = kh_get(SLOTS, p->slots, fd);
@@ -179,7 +179,7 @@ static inline struct poller_slot* _slot_peek_leave_locked(struct poller *p, int 
   return s;
 }
 
-static iwrc _slot_remove_unref(struct poller *p, int fd) {
+static iwrc _slot_remove_unref(struct iwn_poller *p, int fd) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
   if (!s || (s->flags & SLOT_REMOVE_PENDING)) {
     pthread_mutex_unlock(&p->mtx);
@@ -197,7 +197,7 @@ static iwrc _slot_remove_unref(struct poller *p, int fd) {
   return 0;
 }
 
-void poller_remove(struct poller *p, int fd) {
+void iwn_poller_remove(struct iwn_poller *p, int fd) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
   if (!s) {
     pthread_mutex_unlock(&p->mtx);
@@ -216,7 +216,7 @@ void poller_remove(struct poller *p, int fd) {
   }
 }
 
-static void _poller_cleanup(struct poller *p) {
+static void _poller_cleanup(struct iwn_poller *p) {
   pthread_mutex_lock(&p->mtx);
   int i = 0;
   int sz = kh_size(p->slots);
@@ -229,14 +229,14 @@ static void _poller_cleanup(struct poller *p) {
   }
   pthread_mutex_unlock(&p->mtx);
   while (--i >= 0) {
-    poller_remove(p, fds[i]);
+    iwn_poller_remove(p, fds[i]);
   }
   free(fds);
 }
 
-static void _destroy(struct poller *p) {
+static void _destroy(struct iwn_poller *p) {
   if (p) {
-    poller_shutdown_request(p);
+    iwn_poller_shutdown_request(p);
     iwtp_shutdown(&p->tp, true);
     _poller_cleanup(p);
     if (p->fd > -1) {
@@ -256,7 +256,7 @@ static void _destroy(struct poller *p) {
   }
 }
 
-static void _timer_ready_impl(struct poller *p) {
+static void _timer_ready_impl(struct iwn_poller *p) {
   time_t ctime = _time_sec();
   time_t timeout_next = ctime + 24 * 60 * 60;
   if (ctime != p->timeout_checktime) {
@@ -290,8 +290,8 @@ static void _timer_ready_impl(struct poller *p) {
   timerfd_settime(p->timer_fd, 0, &next, 0);
 }
 
-IW_INLINE int64_t _timer_ready(const struct poller_task *t, uint32_t events) {
-  struct poller *p = t->poller;
+IW_INLINE int64_t _timer_ready(const struct iwn_poller_task *t, uint32_t events) {
+  struct iwn_poller *p = t->poller;
   if (__sync_bool_compare_and_swap(&p->housekeeping, false, true)) {
     _timer_ready_impl(p);
     __sync_bool_compare_and_swap(&p->housekeeping, true, false);
@@ -299,13 +299,13 @@ IW_INLINE int64_t _timer_ready(const struct poller_task *t, uint32_t events) {
   return 0;
 }
 
-IW_INLINE void _timer_check(const struct poller_task *t, time_t time_limit) {
+IW_INLINE void _timer_check(const struct iwn_poller_task *t, time_t time_limit) {
   if (time_limit < t->poller->timeout_next) {
     _timer_ready(t, 0);
   }
 }
 
-iwrc poller_arm_events(struct poller *p, int fd, uint32_t events) {
+iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
   int rci = 0;
   struct epoll_event ev = { 0 };
   ev.events = events;
@@ -326,12 +326,12 @@ iwrc poller_arm_events(struct poller *p, int fd, uint32_t events) {
   return 0;
 }
 
-iwrc poller_add(const struct poller_task *task) {
+iwrc iwn_poller_add(const struct iwn_poller_task *task) {
   if (!task || task->fd < 0 || !task->poller) {
     return IW_ERROR_INVALID_ARGS;
   }
   iwrc rc = 0;
-  struct poller *p = task->poller;
+  struct iwn_poller *p = task->poller;
   assert(p);
   struct poller_slot *s = calloc(1, sizeof(*s));
   if (!s) {
@@ -352,7 +352,7 @@ iwrc poller_add(const struct poller_task *task) {
   if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) < 0) {
     s->on_dispose = 0;
     rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-    poller_remove(p, s->fd);
+    iwn_poller_remove(p, s->fd);
     goto finish;
   }
 
@@ -366,7 +366,7 @@ finish:
   return rc;
 }
 
-void poller_shutdown_request(struct poller *p) {
+void iwn_poller_shutdown_request(struct iwn_poller *p) {
   if (p && __sync_bool_compare_and_swap(&p->stop, false, true)) {
     if (p->event_fd > 0) {
       int64_t data = 1;
@@ -375,20 +375,20 @@ void poller_shutdown_request(struct poller *p) {
   }
 }
 
-void poller_shutdown_wait(struct poller *p) {
+void iwn_poller_shutdown_wait(struct iwn_poller *p) {
   iwtp_shutdown(&p->tp, true);
 }
 
-void poller_destroy(struct poller **pp) {
+void iwn_poller_destroy(struct iwn_poller **pp) {
   if (pp && *pp) {
     _destroy(*pp);
     *pp = 0;
   }
 }
 
-static iwrc _create(int num_threads, int max_poll_events, struct poller **out_poller) {
+static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **out_poller) {
   iwrc rc = 0;
-  struct poller *p = calloc(1, sizeof(*p));
+  struct iwn_poller *p = calloc(1, sizeof(*p));
   if (!p) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -416,12 +416,12 @@ finish:
   return rc;
 }
 
-iwrc poller_create(int num_threads, int max_poll_events, struct poller **out_poller) {
+iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller **out_poller) {
   if (!out_poller || max_poll_events > 1024 || num_threads > 1024) {
     return IW_ERROR_INVALID_ARGS;
   }
   *out_poller = 0;
-  struct poller *p;
+  struct iwn_poller *p;
 
   if (num_threads < 1) {
     num_threads = iwp_num_cpu_cores();
@@ -435,13 +435,13 @@ iwrc poller_create(int num_threads, int max_poll_events, struct poller **out_pol
 
   iwrc rc = RCR(_create(num_threads, max_poll_events, &p));
 
-  RCC(rc, finish, poller_add(&(struct poller_task) {
+  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = p,
     .fd = p->event_fd,
     .events = EPOLLIN
   }));
 
-  RCC(rc, finish, poller_add(&(struct poller_task) {
+  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = p,
     .fd = p->timer_fd,
     .on_ready = _timer_ready,
@@ -462,7 +462,7 @@ static void _worker_fn(void *arg) {
   int rci = 0;
   bool destroy = false;
   struct poller_slot *s = arg;
-  struct poller *p = s->poller;
+  struct iwn_poller *p = s->poller;
 
   struct epoll_event ev = { 0 };
   ev.data.fd = s->fd;
@@ -502,7 +502,7 @@ finish:
     _slot_destroy(s);
   } else {
     if (rci < 0) {
-      poller_remove(p, ev.data.fd);
+      iwn_poller_remove(p, ev.data.fd);
     } else if (s->timeout_sec > 0) {
       s->timeout_limit = _time_sec() + s->timeout_sec;
       _timer_check((void*) s, s->timeout_limit);
@@ -510,15 +510,15 @@ finish:
   }
 }
 
-bool poller_alive(struct poller *p) {
+bool iwn_poller_alive(struct iwn_poller *p) {
   return p && !p->stop && p->fds_count > 0;
 }
 
-iwrc poller_task(struct poller *p, void (*task) (void*), void *arg) {
+iwrc iwn_poller_task(struct iwn_poller *p, void (*task) (void*), void *arg) {
   return iwtp_schedule(p->tp, task, arg);
 }
 
-void poller_poll(struct poller *p) {
+void iwn_poller_poll(struct iwn_poller *p) {
   int max_events = p->max_poll_events;
   struct epoll_event event[max_events];
 
@@ -535,7 +535,7 @@ void poller_poll(struct poller *p) {
     for (int i = 0; i < nfds; ++i) {
       int fd = event[i].data.fd;
       if (event[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
-        poller_remove(p, fd);
+        iwn_poller_remove(p, fd);
         continue;
       }
       struct poller_slot *s = _slot_ref_id(p, fd, REF_SET_LOCKED);

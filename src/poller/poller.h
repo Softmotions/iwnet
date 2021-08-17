@@ -4,35 +4,35 @@
 
 #include <stdint.h>
 
-struct poller;
+struct iwn_poller;
 
-struct poller_task {                                         // !!! Sync fields with poller.c
-  int      fd;                                               ///< File descriptor beeng polled
-  void    *user_data;                                        ///< Arbitrary user data associated with poller_task
-  int64_t  (*on_ready)(const struct poller_task*, uint32_t); ///< On fd event ready
-  void     (*on_dispose)(const struct poller_task*);         ///< On destroy handler
-  uint32_t events;                                           ///< Initial poll monitoring events
-  uint32_t events_mod;                                       ///< Extra event flags added for every poll rearm
-  long     timeout_sec;                                      ///< Optional slot timeout
-  struct poller *poller;                                     ///< Poller
+struct iwn_poller_task {                                         // !!! Sync fields with poller.c
+  int      fd;                                                   ///< File descriptor beeng polled
+  void    *user_data;                                            ///< Arbitrary user data associated with poller_task
+  int64_t  (*on_ready)(const struct iwn_poller_task*, uint32_t); ///< On fd event ready
+  void     (*on_dispose)(const struct iwn_poller_task*);         ///< On destroy handler
+  uint32_t events;                                               ///< Initial poll monitoring events
+  uint32_t events_mod;                                           ///< Extra event flags added for every poll rearm
+  long     timeout_sec;                                          ///< Optional slot timeout
+  struct iwn_poller *poller;                                     ///< Poller
 };
 
-iwrc poller_create(int num_threads, int one_shot_events, struct poller **out_poller);
+iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iwn_poller **out_poller);
 
-iwrc poller_add(const struct poller_task *task);
+iwrc iwn_poller_add(const struct iwn_poller_task *task);
 
-iwrc poller_arm_events(struct poller *poller, int fd, uint32_t events);
+iwrc iwn_poller_arm_events(struct iwn_poller *poller, int fd, uint32_t events);
 
-void poller_remove(struct poller *poller, int fd);
+void iwn_poller_remove(struct iwn_poller *poller, int fd);
 
-void poller_shutdown_request(struct poller *p);
+void iwn_poller_shutdown_request(struct iwn_poller *p);
 
-void poller_shutdown_wait(struct poller *p);
+void iwn_poller_shutdown_wait(struct iwn_poller *p);
 
-void poller_destroy(struct poller **pp);
+void iwn_poller_destroy(struct iwn_poller **pp);
 
-iwrc poller_task(struct poller *p, void (*task)(void*), void *arg);
+iwrc iwn_poller_task(struct iwn_poller *p, void (*task) (void*), void *arg);
 
-void poller_poll(struct poller *p);
+void iwn_poller_poll(struct iwn_poller *p);
 
-bool poller_alive(struct poller *p);
+bool iwn_poller_alive(struct iwn_poller *p);

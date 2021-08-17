@@ -9,17 +9,17 @@
 #include <stdlib.h>
 
 static void _task_worker(void *arg) {
-  struct scheduler_spec *ss = arg;
+  struct iwn_scheduler_spec *ss = arg;
   assert(arg);
   ss->task_fn(ss->user_data);
   free(ss);
 }
 
-static int64_t _on_ready(const struct poller_task *t, uint32_t events) {
-  struct scheduler_spec *s = t->user_data;
+static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t events) {
+  struct iwn_scheduler_spec *s = t->user_data;
   assert(s);
   if (s->thread_pool) {
-    struct scheduler_spec *ss = malloc(sizeof(*ss));
+    struct iwn_scheduler_spec *ss = malloc(sizeof(*ss));
     if (ss) {
       *ss = *s;
       iwrc rc = iwtp_schedule(s->thread_pool, _task_worker, ss);
@@ -37,28 +37,28 @@ static int64_t _on_ready(const struct poller_task *t, uint32_t events) {
   return -1;
 }
 
-static void _on_dispose(const struct poller_task *t) {
+static void _on_dispose(const struct iwn_poller_task *t) {
   assert(t);
-  struct scheduler_spec *s = t->user_data;
+  struct iwn_scheduler_spec *s = t->user_data;
   if (s->on_cancel) {
     s->on_cancel(s->user_data);
   }
   free(s);
 }
 
-iwrc schedule(const struct scheduler_spec *spec) {
+iwrc iwn_schedule(const struct iwn_scheduler_spec *spec) {
   if (!spec || spec->timeout_ms < 1 || !spec->task_fn || !spec->poller) {
     return IW_ERROR_INVALID_ARGS;
   }
   iwrc rc = 0;
-  struct scheduler_spec *task = malloc(sizeof(*task));
+  struct iwn_scheduler_spec *task = malloc(sizeof(*task));
   RCB(finish, task);
   *task = *spec;
 
   int fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
   RCN(finish, fd);
 
-  RCC(rc, finish, poller_add(&(struct poller_task) {
+  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = spec->poller,
     .fd = fd,
     .on_ready = _on_ready,
@@ -76,7 +76,7 @@ iwrc schedule(const struct scheduler_spec *spec) {
     }
   }, 0) < 0) {
     rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
-    poller_remove(spec->poller, fd);
+    iwn_poller_remove(spec->poller, fd);
   }
 
 finish:

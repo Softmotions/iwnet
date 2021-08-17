@@ -32,7 +32,7 @@ struct _proc {
   char  **envp;
   IWPOOL *pool;
   IWXSTR *buf_stdin;
-  struct proc_spec spec;
+  struct iwn_proc_spec spec;
   int fds[3]; // {stdout, stderr, stdin}
   pthread_mutex_t mtx;
   bool exited;
@@ -54,7 +54,7 @@ static void _proc_destroy(struct _proc *proc) {
   }
   for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
     if (proc->fds[i] > -1) {
-      poller_remove(proc->spec.poller, proc->fds[i]);
+      iwn_poller_remove(proc->spec.poller, proc->fds[i]);
       proc->fds[i] = -1;
     }
   }
@@ -127,7 +127,7 @@ static void _proc_unref(pid_t pid, int wstatus) {
 
   for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
     if (proc->fds[i] > -1) {
-      poller_remove(proc->spec.poller, proc->fds[i]);
+      iwn_poller_remove(proc->spec.poller, proc->fds[i]);
       proc->fds[i] = -1;
     }
   }
@@ -154,7 +154,7 @@ static void _proc_wait_worker(void *arg) {
   }
 }
 
-static struct _proc* _proc_create(const struct proc_spec *spec) {
+static struct _proc* _proc_create(const struct iwn_proc_spec *spec) {
   IWPOOL *pool = iwpool_create(sizeof(struct _proc));
   if (!pool) {
     return 0;
@@ -188,7 +188,7 @@ static iwrc _make_non_blocking(int fd) {
 
 static iwrc _proc_init(struct _proc *proc, int fds[6]) {
   iwrc rc = 0;
-  struct proc_spec *spec = &proc->spec;
+  struct iwn_proc_spec *spec = &proc->spec;
   IWPOOL *pool = proc->pool;
 
   proc->path = iwpool_strdup(pool, spec->path, &rc);
@@ -242,7 +242,7 @@ finish:
 }
 
 static int64_t _on_ready(
-  const struct poller_task *t,
+  const struct iwn_poller_task *t,
   uint32_t                  flags,
   int                       fdi) {
 
@@ -294,15 +294,15 @@ finish:
   return rc ? -1 : ret;
 }
 
-static int64_t _on_stdout_ready(const struct poller_task *t, uint32_t flags) {
+static int64_t _on_stdout_ready(const struct iwn_poller_task *t, uint32_t flags) {
   return _on_ready(t, flags, FDS_STDOUT);
 }
 
-static int64_t _on_stderr_ready(const struct poller_task *t, uint32_t flags) {
+static int64_t _on_stderr_ready(const struct iwn_poller_task *t, uint32_t flags) {
   return _on_ready(t, flags, FDS_STDERR);
 }
 
-static int64_t _on_stdin_write(const struct poller_task *t, uint32_t flags) {
+static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) {
   iwrc rc = 0;
   int64_t ret = 0;
   int fd = t->fd;
@@ -350,7 +350,7 @@ static int64_t _on_stdin_write(const struct poller_task *t, uint32_t flags) {
   return ret;
 }
 
-iwrc proc_stdin_write(int pid, const void *buf, size_t len, bool close) {
+iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close) {
   iwrc rc = 0;
   struct _proc *proc = _proc_ref(pid);
   if (!proc) {
@@ -366,7 +366,7 @@ iwrc proc_stdin_write(int pid, const void *buf, size_t len, bool close) {
   if (close) {
     iwxstr_user_data_set(proc->buf_stdin, (void*) (intptr_t) 1, 0);
   }
-  rc = poller_arm_events(proc->spec.poller, proc->fds[2], EPOLLOUT);
+  rc = iwn_poller_arm_events(proc->spec.poller, proc->fds[2], EPOLLOUT);
 
 finish:
   pthread_mutex_unlock(&proc->mtx);
@@ -374,11 +374,11 @@ finish:
   return rc;
 }
 
-iwrc proc_stdin_close(int pid) {
-  return proc_stdin_write(pid, "", 0, true);
+iwrc iwn_proc_stdin_close(int pid) {
+  return iwn_proc_stdin_write(pid, "", 0, true);
 }
 
-iwrc proc_wait(int pid) {
+iwrc iwn_proc_wait(int pid) {
   pthread_mutex_lock(&cc.mtx);
   struct _proc *proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
   if (!proc) {
@@ -400,11 +400,11 @@ iwrc proc_wait(int pid) {
   return 0;
 }
 
-void proc_kill(int pid, int signum) {
+void iwn_proc_kill(int pid, int signum) {
   kill(pid, signum);
 }
 
-void proc_kill_all(int signum) {
+void iwn_proc_kill_all(int signum) {
   pthread_mutex_lock(&cc.mtx);
   int len = iwhmap_count(cc.map);
   if (len < 1) {
@@ -429,7 +429,7 @@ void proc_kill_all(int signum) {
   }
 }
 
-iwrc proc_spawn(const struct proc_spec *spec, int *out_pid) {
+iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
   iwrc rc = 0;
   if (!spec || !spec->path || !spec->poller || !out_pid) {
     return IW_ERROR_INVALID_ARGS;
@@ -439,7 +439,7 @@ iwrc proc_spawn(const struct proc_spec *spec, int *out_pid) {
 
   bool bv;
   struct _proc *proc = 0;
-  struct poller *poller = spec->poller;
+  struct iwn_poller *poller = spec->poller;
   int fds[6] = { -1, -1, -1, -1, -1, -1 };
 
   RCB(finish, proc = _proc_create(spec));
@@ -461,7 +461,7 @@ iwrc proc_spawn(const struct proc_spec *spec, int *out_pid) {
     }
     if (fds[1] > -1) {
       close(fds[1]);
-      rc = poller_add(&(struct poller_task) {
+      rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[0],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stdout_ready,
@@ -478,7 +478,7 @@ iwrc proc_spawn(const struct proc_spec *spec, int *out_pid) {
     }
     if (fds[3] > -1) {
       close(fds[3]);
-      rc = poller_add(&(struct poller_task) {
+      rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[2],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stderr_ready,
@@ -495,7 +495,7 @@ iwrc proc_spawn(const struct proc_spec *spec, int *out_pid) {
     }
     if (fds[4] > -1) {
       close(fds[4]);
-      rc = poller_add(&(struct poller_task) {
+      rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[5],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stdin_write,
@@ -545,9 +545,9 @@ child_exit:
   exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
-void proc_dispose(void) {
+void iwn_proc_dispose(void) {
   IWHMAP *map = 0;
-  proc_kill_all(SIGTERM);
+  iwn_proc_kill_all(SIGTERM);
   pthread_mutex_lock(&cc.mtx);
   map = cc.map;
   cc.map = 0;

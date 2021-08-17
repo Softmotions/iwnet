@@ -4,7 +4,7 @@
 #include <iowow/iwp.h>
 #include <iowow/iwutils.h>
 
-static bool utils_is_zero(void *p, size_t len) {
+static bool iwn_is_zero(void *p, size_t len) {
   for (size_t i = 0; i < len; ++i) {
     if (*((char*) p + i) != 0) {
       return false;
@@ -13,7 +13,7 @@ static bool utils_is_zero(void *p, size_t len) {
   return true;
 }
 
-static char* utils_argument_or_file(char *arg) {
+static char* iwn_argument_or_file(char *arg) {
   if (!arg || *arg == '\0') {
     return 0;
   }
@@ -24,7 +24,7 @@ static char* utils_argument_or_file(char *arg) {
   }
 }
 
-static iwrc utils_ts(int64_t *out) {
+static iwrc iwn_ts(int64_t *out) {
   iwrc rc;
   uint64_t llv;
   if ((rc = iwp_current_time_ms(&llv, false)) == 0) {

@@ -36,9 +36,9 @@
    + ((((BIN_LEN) -((BIN_LEN) / 3U) * 3U) | (((BIN_LEN) -((BIN_LEN) / 3U) * 3U) >> 1)) & 1U)   \
    * (4U - (~((((VARIANT) & 2U) >> 1) - 1U) & (3U - ((BIN_LEN) -((BIN_LEN) / 3U) * 3U)))) + 1U)
 
-size_t base64_encoded_len(const size_t bin_len, const int variant);
+size_t iwn_base64_encoded_len(const size_t bin_len, const int variant);
 
-char *base64_encode(
+char *iwn_base64_encode(
   char* const                b64,
   const size_t               b64_maxlen,
   size_t                    *out_b64_len,
@@ -47,7 +47,7 @@ char *base64_encode(
   const int                  variant)
 __attribute__((nonnull(1)));
 
-int base64_decode(
+int iwn_base64_decode(
   unsigned char* const bin,
   const size_t         bin_maxlen,
   const char* const    b64,
@@ -58,4 +58,4 @@ int base64_decode(
   const int            variant)
 __attribute__((nonnull(1)));
 
-char *base64_encode_url(const void *buf, size_t buf_len, size_t *out_len);
+char *iwn_base64_encode_url(const void *buf, size_t buf_len, size_t *out_len);

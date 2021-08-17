@@ -3,15 +3,15 @@
 #include "poller.h"
 #include <iowow/iwtp.h>
 
-typedef void (*scheduler_task_f)(void *arg);
+typedef void (*iwn_scheduler_task_f)(void *arg);
 
-struct scheduler_spec {
-  scheduler_task_f task_fn;  ///< Task execution function.
+struct iwn_scheduler_spec {
+  iwn_scheduler_task_f task_fn;  ///< Task execution function.
   void  (*on_cancel)(void*); ///< Optional on_cancel handler before timeout event
   void *user_data;           ///< User data passed to `task_fn()` function.
-  struct poller *poller;     ///< Poller
+  struct iwn_poller *poller;     ///< Poller
   uint32_t       timeout_ms; ///< Task timeout in milliseconds
   IWTP thread_pool;          ///< Thread pool used for `task_fn()` execution. Optional.
 };
 
-iwrc schedule(const struct scheduler_spec *spec);
+iwrc iwn_schedule(const struct iwn_scheduler_spec *spec);

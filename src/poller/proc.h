@@ -2,7 +2,7 @@
 
 #include "poller.h"
 
-struct proc_ctx {
+struct iwn_proc_ctx {
 
   /// Child pid.
   int pid;
@@ -14,10 +14,10 @@ struct proc_ctx {
   void *user_data;
 };
 
-struct proc_spec {
+struct iwn_proc_spec {
 
   /// Poller associated with spec
-  struct poller *poller;
+  struct iwn_poller *poller;
 
   /// Path to executable.
   const char *path;
@@ -33,28 +33,28 @@ struct proc_spec {
   void *user_data;
 
   /// Stdout callback.
-  void (*on_stdout)(const struct proc_ctx *ctx, const char *buf, size_t len);
+  void (*on_stdout)(const struct iwn_proc_ctx *ctx, const char *buf, size_t len);
 
   /// Strderr callback.
-  void (*on_stderr)(const struct proc_ctx *ctx, const char *buf, size_t len);
+  void (*on_stderr)(const struct iwn_proc_ctx *ctx, const char *buf, size_t len);
 
   /// On child process exit.
-  void (*on_exit)(const struct proc_ctx *ctx_exit);
+  void (*on_exit)(const struct iwn_proc_ctx *ctx_exit);
 
   /// It true set the ability to write into stdin of the child process
   bool write_stdin;
 };
 
-iwrc proc_spawn(const struct proc_spec *spec, int *out_pid);
+iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid);
 
-iwrc proc_wait(int pid);
+iwrc iwn_proc_wait(int pid);
 
-iwrc proc_stdin_write(int pid, const void *buf, size_t len, bool close);
+iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close);
 
-iwrc proc_stdin_close(int pid);
+iwrc iwn_proc_stdin_close(int pid);
 
-void proc_kill(int pid, int signum);
+void iwn_proc_kill(int pid, int signum);
 
-void proc_kill_all(int signum);
+void iwn_proc_kill_all(int signum);
 
-void proc_dispose(void);
+void iwn_proc_dispose(void);

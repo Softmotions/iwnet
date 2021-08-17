@@ -6,34 +6,34 @@
 
 static int cnt;
 static int64_t st, et;
-static struct poller *poller;
+static struct iwn_poller *poller;
 static IWTP tp;
 
 static void _on_timeout(void *arg) {
-  utils_ts(&et);
+  iwn_ts(&et);
   IWN_ASSERT(et - st < 200 && et - st >= 150);
-  poller_shutdown_request(poller);
+  iwn_poller_shutdown_request(poller);
 }
 
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();
   RCC(rc, finish, iwtp_start("stest1-", 4, 0, &tp));
-  RCC(rc, finish, poller_create(1, 1, &poller));
-  RCC(rc, finish, utils_ts(&st));
-  RCC(rc, finish, schedule(&(struct scheduler_spec) {
+  RCC(rc, finish, iwn_poller_create(1, 1, &poller));
+  RCC(rc, finish, iwn_ts(&st));
+  RCC(rc, finish, iwn_schedule(&(struct iwn_scheduler_spec) {
     .task_fn = _on_timeout,
     .poller = poller,
     .timeout_ms = 155,
     .thread_pool = tp
   }));
 
-  poller_poll(poller);
+  iwn_poller_poll(poller);
 
 finish:
-  poller_destroy(&poller);
+  iwn_poller_destroy(&poller);
   iwtp_shutdown(&tp, true);
   IWN_ASSERT(rc == 0);
   IWN_ASSERT(et >= st);
-  return asserts_failed > 0 ? 1 : 0;
+  return iwn_asserts_failed > 0 ? 1 : 0;
 }

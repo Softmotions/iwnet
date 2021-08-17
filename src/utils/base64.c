@@ -185,14 +185,14 @@ static int base64_check_variant(const int variant) {
   return 1;
 }
 
-size_t base64_encoded_len(const size_t bin_len, const int variant) {
+size_t iwn_base64_encoded_len(const size_t bin_len, const int variant) {
   if (!base64_check_variant(variant)) {
     return 0;
   }
   return base64_ENCODED_LEN(bin_len, variant);
 }
 
-char *base64_encode(
+char *iwn_base64_encode(
   char* const                b64,
   const size_t               b64_maxlen,
   size_t                    *out_b64_len,
@@ -205,7 +205,7 @@ char *base64_encode(
   size_t bin_pos = (size_t) 0;
   unsigned int acc = 0U;
 
-  size_t b64_len = base64_encoded_len(bin_len, variant);
+  size_t b64_len = iwn_base64_encoded_len(bin_len, variant);
   if (b64_maxlen < b64_len) {
     *out_b64_len = 0;
     return 0;
@@ -266,7 +266,7 @@ static int _base642bin_skip_padding(
   return 0;
 }
 
-int base64_decode(
+int iwn_base64_decode(
   unsigned char* const bin, const size_t bin_maxlen,
   const char* const b64, const size_t b64_len,
   const char* const ignore, size_t* const bin_len,
@@ -339,11 +339,11 @@ int base64_decode(
   return ret;
 }
 
-char *base64_encode_url(const void *buf, size_t buf_len, size_t *out_len) {
+char *iwn_base64_encode_url(const void *buf, size_t buf_len, size_t *out_len) {
   size_t encoded_len = base64_ENCODED_LEN(buf_len, base64_VARIANT_URLSAFE_NO_PADDING);
   char *encoded = calloc(1, encoded_len);
   if (!encoded) {
     return 0;
   }
-  return base64_encode(encoded, encoded_len, out_len, buf, buf_len, base64_VARIANT_URLSAFE_NO_PADDING);
+  return iwn_base64_encode(encoded, encoded_len, out_len, buf, buf_len, base64_VARIANT_URLSAFE_NO_PADDING);
 }

@@ -10,7 +10,6 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 
-
 struct x509_context {
   const br_x509_class    *vtable;
   br_x509_minimal_context minimal;
@@ -18,10 +17,10 @@ struct x509_context {
   bool verifypeer;
 };
 
-struct _adapter {
-  struct poller_adapter     b;
-  on_poller_adapter_event   on_event;
-  on_poller_adapter_dispose on_dispose;
+struct _pa {
+  struct iwn_poller_adapter     b;
+  iwn_on_poller_adapter_event   on_event;
+  iwn_on_poller_adapter_dispose on_dispose;
   void *user_data;
   pthread_mutex_t       mtx;
   br_ssl_client_context bc;
@@ -49,8 +48,8 @@ static void _init(void) {
   }
 }
 
-static ssize_t _read(struct poller_adapter *pa, uint8_t *data, size_t len) {
-  struct _adapter *a = (void*) pa;
+static ssize_t _read(struct iwn_poller_adapter *pa, uint8_t *data, size_t len) {
+  struct _pa *a = (void*) pa;
   br_ssl_engine_context *cc = &a->bc.eng;
   size_t tor = len;
   while (tor > 0 && (br_ssl_engine_current_state(cc) & BR_SSL_RECVAPP)) {
@@ -72,8 +71,8 @@ static ssize_t _read(struct poller_adapter *pa, uint8_t *data, size_t len) {
   }
 }
 
-static ssize_t _write(struct poller_adapter *pa, const uint8_t *data, size_t len) {
-  struct _adapter *a = (void*) pa;
+static ssize_t _write(struct iwn_poller_adapter *pa, const uint8_t *data, size_t len) {
+  struct _pa *a = (void*) pa;
   br_ssl_engine_context *cc = &a->bc.eng;
   size_t tow = len;
   while (tow > 0 && (br_ssl_engine_current_state(cc) & BR_SSL_SENDAPP)) {
@@ -96,18 +95,18 @@ static ssize_t _write(struct poller_adapter *pa, const uint8_t *data, size_t len
   }
 }
 
-IW_INLINE void _destroy(struct _adapter *a) {
+IW_INLINE void _destroy(struct _pa *a) {
   VEC_CLEAREXT(a->anchors, &free_ta_contents);
   free(a);
 }
 
-static void _on_dispose(const struct poller_task *t) {
-  struct _adapter *a = t->user_data;
+static void _on_dispose(const struct iwn_poller_task *t) {
+  struct _pa *a = t->user_data;
   a->on_dispose((void*) a, a->user_data);
   _destroy(a);
 }
 
-static int _write_fd(struct _adapter *a, const unsigned char *buf, size_t len) {
+static int _write_fd(struct _pa *a, const unsigned char *buf, size_t len) {
   while (1) {
     ssize_t wlen = write(a->b.fd, buf, len);
     if (wlen < 0 && errno == EINTR) {
@@ -117,7 +116,7 @@ static int _write_fd(struct _adapter *a, const unsigned char *buf, size_t len) {
   }
 }
 
-static int _read_fd(struct _adapter *a, unsigned char *buf, size_t len) {
+static int _read_fd(struct _pa *a, unsigned char *buf, size_t len) {
   while (1) {
     ssize_t rlen = read(a->b.fd, buf, len);
     if (rlen < 0 && errno == EINTR) {
@@ -145,8 +144,8 @@ static inline int64_t _next_poll(br_ssl_engine_context *cc) {
   return ret | EPOLLET;
 }
 
-static int64_t _on_ready(const struct poller_task *t, uint32_t flags) {
-  struct _adapter *a = t->user_data;
+static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
+  struct _pa *a = t->user_data;
   br_ssl_engine_context *cc = &a->bc.eng;
   bool done = !(flags & EPOLLIN);
   bool locked = false;
@@ -284,14 +283,14 @@ static const br_x509_class x509_vtable = {
   x509_get_pkey
 };
 
-iwrc brssl_create_poller_adapter(const struct brssl_poller_adapter_spec *spec) {
-  struct poller *p = spec->poller;
+iwrc iwn_brssl_create_poller_adapter(const struct iwn_brssl_poller_adapter_spec *spec) {
+  struct iwn_poller *p = spec->poller;
   iwrc rc = 0;
   int rci = 0;
 
   _init();
 
-  struct _adapter *a = calloc(1, sizeof(*a));
+  struct _pa *a = calloc(1, sizeof(*a));
   if (!a) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -320,7 +319,7 @@ iwrc brssl_create_poller_adapter(const struct brssl_poller_adapter_spec *spec) {
   br_ssl_engine_set_x509(&a->bc.eng, &a->x509.vtable);
   br_ssl_client_reset(&a->bc, spec->host, 0);
 
-  rc = poller_add(&(struct poller_task) {
+  rc = iwn_poller_add(&(struct iwn_poller_task) {
     .fd = spec->fd,
     .poller = p,
     .user_data = a,

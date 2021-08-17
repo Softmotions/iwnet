@@ -11,22 +11,22 @@ typedef enum {
   WS_ERROR_CHANNEL_CLOSED,       ///< Websocket communication channel is closed (WS_ERROR_CHANNEL_CLOSED)
   WS_ERROR,                      ///< Websocket generic error (WS_ERROR)
   _WS_ERROR_END,
-} ws_ecode_e;
+} iwn_ws_ecode_e;
 
-struct ws;
+struct iwn_ws;
 
-struct ws_ctx {
-  struct poller *poller;
-  struct ws     *ws;
+struct iwn_ws_ctx {
+  struct iwn_poller *poller;
+  struct iwn_ws     *ws;
   void *user_data;
 };
 
-struct ws_spec {
-  const char    *url;                                                            ///< Required
-  struct poller *poller;                                                         ///< Required
-  void (*on_message)(const char *buf, size_t buf_len, const struct ws_ctx *ctx); ///< Required
-  void (*on_dispose)(const struct ws_ctx *ctx);                                  ///< Required
-  void (*on_connected)(const struct ws_ctx *ctx);
+struct iwn_ws_spec {
+  const char *url;                                                                   ///< Required
+  struct iwn_poller *poller;                                                         ///< Required
+  void (*on_message)(const char *buf, size_t buf_len, const struct iwn_ws_ctx *ctx); ///< Required
+  void (*on_dispose)(const struct iwn_ws_ctx *ctx);                                  ///< Required
+  void (*on_connected)(const struct iwn_ws_ctx *ctx);
 
   void *user_data;
   long  timeout_sec;           ///< Comm inactivity timeout
@@ -34,9 +34,9 @@ struct ws_spec {
   bool  verify_host;
 };
 
-iwrc ws_open(const struct ws_spec *spec, struct ws **out_ws);
+iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws);
 
 /// Notify poller to close websocket. `on_dispose` handler will be called afterward.
-void ws_close(struct ws *ws);
+void iwn_ws_close(struct iwn_ws *ws);
 
-iwrc ws_write_text(struct ws *ws, const void *buf, size_t buf_len);
+iwrc iwn_ws_write_text(struct iwn_ws *ws, const void *buf, size_t buf_len);
