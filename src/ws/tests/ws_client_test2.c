@@ -59,8 +59,6 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     .on_connected = on_connected,
     .on_message = on_message,
     .on_dispose = on_dispose,
-    .verify_peer = false,
-    .verify_host = false
   }, &ws);
   IWN_ASSERT(rc == 0);
   if (rc) {

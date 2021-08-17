@@ -50,8 +50,7 @@ int main(int argc, char *argv[]) {
     .on_connected = on_connected,
     .on_message = on_message,
     .on_dispose = on_dispose,
-    .verify_peer = true,
-    .verify_host = true
+    .flags = (IWN_WS_VERIFY_HOST | IWN_WS_VERIFY_PEER)
   }, &ws));
 
   iwn_poller_poll(poller);

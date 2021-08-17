@@ -21,6 +21,9 @@ struct iwn_ws_ctx {
   void *user_data;
 };
 
+#define IWN_WS_VERIFY_PEER 0x01U
+#define IWN_WS_VERIFY_HOST 0x02U
+
 struct iwn_ws_spec {
   const char *url;                                                                   ///< Required
   struct iwn_poller *poller;                                                         ///< Required
@@ -28,10 +31,9 @@ struct iwn_ws_spec {
   void (*on_dispose)(const struct iwn_ws_ctx *ctx);                                  ///< Required
   void (*on_connected)(const struct iwn_ws_ctx *ctx);
 
-  void *user_data;
-  long  timeout_sec;           ///< Comm inactivity timeout
-  bool  verify_peer;           ///< Do ssl verification on remote peer
-  bool  verify_host;
+  void   *user_data;
+  long    timeout_sec;         ///< Comm inactivity timeout
+  uint8_t flags; ///< `IWN_WS_VERIFY_*` flags
 };
 
 iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws);

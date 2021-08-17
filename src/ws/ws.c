@@ -555,16 +555,16 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
       .events = EPOLLOUT,
       .events_mod = EPOLLET,
       .fd = ws->fd,
-      .verify_peer = spec->verify_peer,
-      .verify_host = spec->verify_host
+      .verify_peer = spec->flags & IWN_WS_VERIFY_PEER,
+      .verify_host = spec->flags & IWN_WS_VERIFY_HOST
     }));
   } else {
     RCC(rc, finish,
         iwn_direct_poller_adapter_create(spec->poller, ws->fd,
-                                     _on_poller_adapter_event,
-                                     _on_poller_adapter_dispose,
-                                     ws, EPOLLOUT, EPOLLET,
-                                     spec->timeout_sec));
+                                         _on_poller_adapter_event,
+                                         _on_poller_adapter_dispose,
+                                         ws, EPOLLOUT, EPOLLET,
+                                         spec->timeout_sec));
   }
 
 finish:
