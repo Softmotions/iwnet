@@ -38,6 +38,7 @@ struct iwn_ws {
   char  *host;
   char  *port;
   char  *path;
+  char  *query;
   wslay_event_context_ptr wc;
   IWXSTR *output;
   IWXSTR *input;
@@ -78,6 +79,7 @@ static void _destroy(struct iwn_ws *ws) {
   curl_free(ws->host);
   curl_free(ws->port);
   curl_free(ws->path);
+  curl_free(ws->query);
   curl_url_cleanup(ws->url);
   wslay_event_context_free(ws->wc);
   iwxstr_destroy(ws->output);
@@ -203,14 +205,16 @@ static iwrc _handshake_output_fill(struct iwn_ws *ws) {
   iwrc rc = RCR(_handshake_write_client_key_b64(ws->client_key));
   RCR(iwxstr_printf(
         ws->output,
-        "GET %s HTTP/1.1\r\n"
+        "GET %s%s%s HTTP/1.1\r\n"
         "Host: %s:%s\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
         "Sec-Websocket-Key: %s\r\n"
         "Sec-Websocket-Version: 13\r\n"
         "\r\n",
-        ws->path, ws->host, ws->port, ws->client_key));
+        ws->path, (ws->query ? "?" : ""), (ws->query ? ws->query : ""),
+        ws->host, ws->port,
+        ws->client_key));
   return 0;
 }
 
@@ -518,6 +522,7 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
   if (!ws->path) {
     RCB(finish, ws->path = strdup("/"));
   }
+  curl_url_get(ws->url, CURLUPART_QUERY, &ws->query, 0);
 
   ptr = 0;
   curl_url_get(ws->url, CURLUPART_SCHEME, &ptr, 0);
