@@ -43,9 +43,9 @@ struct xcurlreq {
   const char *payload;
   size_t      payload_len;
   struct curl_slist *headers;
-  IWXSTR *_xstr;
-  IWXSTR *_qxstr;
-  uint8_t flags;
+  IWXSTR  *_xstr;
+  IWXSTR  *_qxstr;
+  uint64_t flags;
 };
 
 struct xcurlresp {
