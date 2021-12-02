@@ -10,7 +10,7 @@ find_package(Wslay REQUIRED)
 find_package(Bearssl REQUIRED)
 find_package(Iowow REQUIRED)
 
-set(MODULES utils poller ssl ws)
+set(MODULES utils poller ssl ws http)
 
 list(APPEND PROJECT_LIBRARIES ${CURL_LIBRARIES} ${WSLAY_LIBRARIES}
      ${BEARSSL_LIBRARIES} ${IOWOW_LIBRARIES})
