@@ -32,4 +32,4 @@ struct iwn_http_server_spec {
 
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec, iwn_http_server_fd_t *out_fd);
 
-iwrc iwn_http_server_request_dispose(iwn_http_server_fd_t h);
+iwrc iwn_http_server_request_dispose(iwn_http_server_fd_t fd);
