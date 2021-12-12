@@ -20,7 +20,7 @@ typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server *server)
 typedef void (*iwn_http_server_on_connection)(const struct iwn_http_server_connection *conn);
 
 struct iwn_http_server_spec {
-  const struct iwn_poller *poller;
+  struct iwn_poller *poller;
   const char *listen;
   void       *user_data;
   iwn_http_server_on_connection on_connection;
