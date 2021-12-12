@@ -136,6 +136,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
 finish:
   if (rc) {
     _impl_destroy(&impl);
+  } else {
+    *out_fd = impl->fd;
   }
   return rc;
 }
