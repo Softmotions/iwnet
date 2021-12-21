@@ -15,11 +15,20 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-struct iwn_http_server_impl {
+struct _server {
   struct iwn_http_server_spec spec;
   int     fd;
   IWPOOL *pool;
 };
+
+struct _client {
+  int     fd;
+  IWPOOL *pool;
+};
+
+///////////////////////////////////////////////////////////////////////////
+//								              Client                                   //
+///////////////////////////////////////////////////////////////////////////
 
 static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   return 0;
@@ -28,41 +37,90 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
 static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
 }
 
-static void _impl_destroy(struct iwn_http_server_impl **implp) {
-  if (!implp) {
+static void _client_destroy(struct _client *client) {
+  if (!client) {
     return;
   }
-  struct iwn_http_server_impl *impl = *implp;
-  if (impl->fd > -1) {
-    close(impl->fd);
+  if (client->fd > -1) {
+    close(client->fd);
   }
-  if (impl->pool) {
-    iwpool_destroy(impl->pool);
-  }
-  *implp = 0;
+  iwpool_destroy(client->pool);
 }
 
-static int64_t _impl_on_ready(const struct iwn_poller_task *t, uint32_t events) {
-  return events;
+static iwrc _client_accept(int fd) {
+  iwrc rc = 0;
+  IWPOOL *pool = iwpool_create_empty();
+  if (!pool) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  struct _client *client;
+  RCA(client = iwpool_alloc(sizeof(*client), pool), finish);
+  client->pool = pool;
+
+finish:
+  if (rc) {
+    if (client) {
+      _client_destroy(client);
+    } else {
+      iwpool_destroy(pool);
+    }
+  }
+
+  return rc;
 }
 
-static void _impl_on_dispose(const struct iwn_poller_task *t) {
+///////////////////////////////////////////////////////////////////////////
+//								             Server                                    //
+///////////////////////////////////////////////////////////////////////////
+
+static void _server_destroy(struct _server *server) {
+  if (!server) {
+    return;
+  }
+  if (server->fd > -1) {
+    close(server->fd);
+  }
+  iwpool_destroy(server->pool);
+}
+
+static int64_t _server_on_ready(const struct iwn_poller_task *t, uint32_t events) {
+  struct _server *srv = t->user_data;
+  int sfd = 0;
+
+  do {
+    sfd = accept(t->fd, 0, 0);
+    if (sfd == -1) {
+      break;
+    }
+    iwrc rc = _client_accept(sfd);
+    if (rc) {
+      iwlog_ecode_error3(rc);
+    }
+  } while (1);
+
+  return 0;
+}
+
+static void _server_on_dispose(const struct iwn_poller_task *t) {
+  struct _server *srv = t->user_data;
+  // TODO:
+  _server_destroy(srv);
 }
 
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_server_fd_t *out_fd) {
   iwrc rc = 0;
   *out_fd = 0;
   int optval;
-  struct iwn_http_server_impl *impl;
+  struct _server *server;
   struct iwn_http_server_spec *spec;
 
   IWPOOL *pool = iwpool_create_empty();
   if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
-  RCA(impl = iwpool_calloc(sizeof(*impl), pool), finish);
-  impl->pool = pool;
-  spec = &impl->spec;
+  RCA(server = iwpool_calloc(sizeof(*server), pool), finish);
+  server->pool = pool;
+  spec = &server->spec;
   memcpy(spec, spec_, sizeof(*spec));
 
   if (!spec->poller) {
@@ -79,9 +137,9 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   RCA(spec->listen = iwpool_strdup2(pool, spec->listen), finish);
 
   struct iwn_poller_task task = {
-    .user_data  = impl,
-    .on_ready   = _impl_on_ready,
-    .on_dispose = _impl_on_dispose,
+    .user_data  = server,
+    .on_ready   = _server_on_ready,
+    .on_dispose = _server_on_dispose,
     .events     = EPOLLIN,
     .events_mod = EPOLLET,
     .poller     = spec->poller
@@ -92,6 +150,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
     .ai_family   = AF_UNSPEC,
     .ai_flags    = AI_PASSIVE | AI_NUMERICSERV
   };
+
   struct addrinfo *result, *rp;
   char port[32];
   snprintf(port, sizeof(port), "%d", spec->port);
@@ -106,7 +165,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   optval = 1;
   for (rp = result; rp; rp = rp->ai_next) {
     task.fd = socket(rp->ai_family, rp->ai_socktype | SOCK_CLOEXEC, rp->ai_protocol);
-    impl->fd = task.fd;
+    server->fd = task.fd;
     if (task.fd < 0) {
       continue;
     }
@@ -135,9 +194,13 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
 
 finish:
   if (rc) {
-    _impl_destroy(&impl);
+    if (server) {
+      _server_destroy(server);
+    } else {
+      iwpool_destroy(pool);
+    }
   } else {
-    *out_fd = impl->fd;
+    *out_fd = server->fd;
   }
   return rc;
 }
