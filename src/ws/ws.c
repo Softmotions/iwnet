@@ -550,7 +550,7 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
   }, ws)));
 
   if (ws->secure) {
-    RCC(rc, finish, iwn_brssl_create_poller_adapter(&(struct iwn_brssl_poller_adapter_spec) {
+    RCC(rc, finish, iwn_brssl_client_poller_adapter(&(struct iwn_brssl_client_poller_adapter_spec) {
       .poller = spec->poller,
       .host = ws->host,
       .on_event = _on_poller_adapter_event,

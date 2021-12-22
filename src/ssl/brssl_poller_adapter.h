@@ -9,7 +9,7 @@ typedef enum {
 } iwn_brssl_poller_adapter_e;
 
 
-struct iwn_brssl_poller_adapter_spec {
+struct iwn_brssl_client_poller_adapter_spec {
   struct iwn_poller *poller;
   const char *host;
   iwn_on_poller_adapter_event   on_event;
@@ -23,4 +23,12 @@ struct iwn_brssl_poller_adapter_spec {
   bool     verify_host;
 };
 
-iwrc iwn_brssl_create_poller_adapter(const struct iwn_brssl_poller_adapter_spec *spec);
+iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapter_spec *spec);
+
+
+struct iwn_brssl_server_poller_adapter_spec {
+  struct iwn_poller *poller;
+  iwn_on_poller_adapter_event   on_event;
+  iwn_on_poller_adapter_dispose on_dispose;
+  void *user_data;
+};

@@ -1,5 +1,7 @@
 #include "http_server.h"
 #include "poller_adapter.h"
+#include "poller/direct_poller_adapter.h"
+#include "ssl/brssl_poller_adapter.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwpool.h>
@@ -30,11 +32,11 @@ struct _client {
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
 
-static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
+static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   return 0;
 }
 
-static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
+static void _client_on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
 }
 
 static void _client_destroy(struct _client *client) {
@@ -47,7 +49,7 @@ static void _client_destroy(struct _client *client) {
   iwpool_destroy(client->pool);
 }
 
-static iwrc _client_accept(int fd) {
+static iwrc _client_accept(struct _server *server, int fd) {
   iwrc rc = 0;
   IWPOOL *pool = iwpool_create_empty();
   if (!pool) {
@@ -56,6 +58,26 @@ static iwrc _client_accept(int fd) {
   struct _client *client;
   RCA(client = iwpool_alloc(sizeof(*client), pool), finish);
   client->pool = pool;
+  client->fd = fd;
+
+  int flags = fcntl(fd, F_GETFL, 0);
+  RCN(finish, flags);
+  RCN(finish, fcntl(fd, F_SETFL, flags | O_NONBLOCK));
+
+  if (server->spec.https) {
+  
+    
+
+  } else {
+
+    RCC(rc, finish,
+        iwn_direct_poller_adapter_create(
+          server->spec.poller, fd,
+          _client_on_poller_adapter_event,
+          _client_on_poller_adapter_dispose,
+          client, EPOLLIN, EPOLLET,
+          server->spec.connection_timeout_sec));
+  }
 
 finish:
   if (rc) {
@@ -84,7 +106,7 @@ static void _server_destroy(struct _server *server) {
 }
 
 static int64_t _server_on_ready(const struct iwn_poller_task *t, uint32_t events) {
-  struct _server *srv = t->user_data;
+  struct _server *server = t->user_data;
   int sfd = 0;
 
   do {
@@ -92,7 +114,7 @@ static int64_t _server_on_ready(const struct iwn_poller_task *t, uint32_t events
     if (sfd == -1) {
       break;
     }
-    iwrc rc = _client_accept(sfd);
+    iwrc rc = _client_accept(server, sfd);
     if (rc) {
       iwlog_ecode_error3(rc);
     }
@@ -134,6 +156,10 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   if (!spec->listen) {
     spec->listen = "localhost";
   }
+  if (spec->connection_timeout_sec < 1) {
+    spec->connection_timeout_sec = 30;
+  }
+
   RCA(spec->listen = iwpool_strdup2(pool, spec->listen), finish);
 
   struct iwn_poller_task task = {

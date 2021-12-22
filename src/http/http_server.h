@@ -27,7 +27,7 @@ struct iwn_http_server_spec {
   iwn_http_server_on_dispose    on_dispose;
   long connection_timeout_sec;
   int  port;
-  bool https;
+  bool https;                ///< Enable HTTPS mode
 };
 
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec, iwn_http_server_fd_t *out_fd);

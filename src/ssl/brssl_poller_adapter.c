@@ -283,7 +283,10 @@ static const br_x509_class x509_vtable = {
   x509_get_pkey
 };
 
-iwrc iwn_brssl_create_poller_adapter(const struct iwn_brssl_poller_adapter_spec *spec) {
+
+
+
+iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapter_spec *spec) {
   struct iwn_poller *p = spec->poller;
   iwrc rc = 0;
   int rci = 0;
