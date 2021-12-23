@@ -17,6 +17,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define CLIENT_INIT  0
+#define CLIENT_READ  1
+#define CLIENT_WRITE 2
+#define CLIENT_NOP   3
+
 struct _server {
   struct iwn_http_server_spec spec;
   int     fd;
@@ -26,6 +31,7 @@ struct _server {
 
 struct _client {
   int     fd;
+  int     state;
   IWPOOL *pool;
 };
 
@@ -33,7 +39,7 @@ struct _client {
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
 
-static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
+static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {  
   return 0;
 }
 
