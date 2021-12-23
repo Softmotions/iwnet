@@ -10,9 +10,9 @@
 #define IWN_POLLOUT EPOLLOUT
 #define IWN_POLLET  EPOLLET
 #elif defined(__FreeBSD__) || defined(__APPLE__)
-#error kqueue is not yet supported
+#error "Kqueue is not yet supported"
 #else
-#error Unsupported operating system
+#error "Unsupported operating system"
 #endif
 
 struct iwn_poller;
