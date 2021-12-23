@@ -565,7 +565,7 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
     }));
   } else {
     RCC(rc, finish,
-        iwn_direct_poller_adapter_create(spec->poller, ws->fd,
+        iwn_direct_poller_adapter(spec->poller, ws->fd,
                                          _on_poller_adapter_event,
                                          _on_poller_adapter_dispose,
                                          ws, EPOLLOUT, EPOLLET,

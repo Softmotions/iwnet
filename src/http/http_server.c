@@ -21,6 +21,7 @@ struct _server {
   struct iwn_http_server_spec spec;
   int     fd;
   IWPOOL *pool;
+  bool    https;
 };
 
 struct _client {
@@ -64,14 +65,28 @@ static iwrc _client_accept(struct _server *server, int fd) {
   RCN(finish, flags);
   RCN(finish, fcntl(fd, F_SETFL, flags | O_NONBLOCK));
 
-  if (server->spec.https) {
-  
-    
+  if (server->https) {
 
+    RCC(rc, finish, iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
+      .certs_data = server->spec.certs_data,
+      .certs_data_in_buffer = server->spec.certs_data_in_buffer,
+      .certs_data_len = server->spec.certs_data_len,
+      .events = EPOLLIN,
+      .events_mod = EPOLLET,
+      .fd = fd,
+      .on_dispose = _client_on_poller_adapter_dispose,
+      .on_event = _client_on_poller_adapter_event,
+      .poller = server->spec.poller,
+      .private_key = server->spec.private_key,
+      .private_key_in_buffer = server->spec.private_key_in_buffer,
+      .private_key_len = server->spec.private_key_len,
+      .timeout_sec = server->spec.connection_timeout_sec,
+      .user_data = client,
+    }));
   } else {
 
     RCC(rc, finish,
-        iwn_direct_poller_adapter_create(
+        iwn_direct_poller_adapter(
           server->spec.poller, fd,
           _client_on_poller_adapter_event,
           _client_on_poller_adapter_dispose,
@@ -150,8 +165,17 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
     iwlog_ecode_error2(rc, "No poller specified");
     goto finish;
   }
+
+  server->https = spec->certs_data && spec->certs_data_len && spec->private_key && spec->private_key_len;
+  if (server->https) {
+    spec->certs_data = iwpool_strndup(pool, spec->certs_data, spec->certs_data_len, &rc);
+    RCGO(rc, finish);
+    spec->private_key = iwpool_strndup(pool, spec->private_key, spec->private_key_len, &rc);
+    RCGO(rc, finish);
+  }
+
   if (!spec->port) {
-    spec->port = spec->https ? 8443 : 8080;
+    spec->port = server->https ? 8443 : 8080;
   }
   if (!spec->listen) {
     spec->listen = "localhost";

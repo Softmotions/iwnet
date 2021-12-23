@@ -36,7 +36,7 @@ static void _on_dispose(const struct iwn_poller_task *t) {
   _destroy(a);
 }
 
-iwrc iwn_direct_poller_adapter_create(
+iwrc iwn_direct_poller_adapter(
   struct iwn_poller            *p,
   int                           fd,
   iwn_on_poller_adapter_event   on_event,

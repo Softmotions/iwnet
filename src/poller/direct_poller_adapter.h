@@ -2,7 +2,7 @@
 
 #include "poller_adapter.h"
 
-iwrc iwn_direct_poller_adapter_create(
+iwrc iwn_direct_poller_adapter(
   struct iwn_poller            *p,
   int                           fd,
   iwn_on_poller_adapter_event   on_event,

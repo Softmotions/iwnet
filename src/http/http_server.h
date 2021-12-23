@@ -25,9 +25,14 @@ struct iwn_http_server_spec {
   void       *user_data;
   iwn_http_server_on_connection on_connection;
   iwn_http_server_on_dispose    on_dispose;
+  const char *certs_data;
+  size_t      certs_data_len;
+  const char *private_key;
+  size_t      private_key_len;
   long connection_timeout_sec;
   int  port;
-  bool https;                ///< Enable HTTPS mode
+  bool certs_data_in_buffer;      ///< true if `certs_data` specified as data buffer rather a file name.
+  bool private_key_in_buffer;     ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec, iwn_http_server_fd_t *out_fd);
