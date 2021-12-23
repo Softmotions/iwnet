@@ -330,7 +330,7 @@ static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) 
         pthread_mutex_unlock(&proc->mtx);
         continue;
       } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        ret = EPOLLOUT;
+        ret = IWN_POLLOUT;
         pthread_mutex_unlock(&proc->mtx);
         break;
       }
@@ -366,7 +366,7 @@ iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close) {
   if (close) {
     iwxstr_user_data_set(proc->buf_stdin, (void*) (intptr_t) 1, 0);
   }
-  rc = iwn_poller_arm_events(proc->spec.poller, proc->fds[2], EPOLLOUT);
+  rc = iwn_poller_arm_events(proc->spec.poller, proc->fds[2], IWN_POLLOUT);
 
 finish:
   pthread_mutex_unlock(&proc->mtx);
@@ -465,8 +465,8 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         .fd = fds[0],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stdout_ready,
-        .events = EPOLLIN,
-        .events_mod = EPOLLET,
+        .events = IWN_POLLIN,
+        .events_mod = IWN_POLLET,
         .poller = spec->poller
       });
       if (rc) {
@@ -482,8 +482,8 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         .fd = fds[2],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stderr_ready,
-        .events = EPOLLIN,
-        .events_mod = EPOLLET,
+        .events = IWN_POLLIN,
+        .events_mod = IWN_POLLET,
         .poller = spec->poller
       });
       if (rc) {
@@ -499,7 +499,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         .fd = fds[5],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stdin_write,
-        .events_mod = EPOLLET,
+        .events_mod = IWN_POLLET,
         .poller = spec->poller,
       });
       if (rc) {

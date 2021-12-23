@@ -244,7 +244,7 @@ static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_dat
   struct iwn_ws *ws = user_data;
 
   if (!(ws->state & _STATE_HANDSHAKE_SEND)) {
-    ret = EPOLLOUT;
+    ret = IWN_POLLOUT;
     if (iwxstr_size(ws->output) == 0) {
       RCC(rc, finish, _handshake_output_fill(ws));
     }
@@ -268,7 +268,7 @@ static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_dat
     }
     ws->state |= _STATE_HANDSHAKE_SEND;
   } else if (!(ws->state & _STATE_HANDSHAKE_RECV)) {  // Recieve response
-    ret = EPOLLIN;
+    ret = IWN_POLLIN;
     uint8_t buf[1024];
     while (1) {
       ssize_t len = pa->read(pa, buf, sizeof(buf));
@@ -342,10 +342,10 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
 
   ret = 0;
   if (wslay_event_want_read(ws->wc)) {
-    ret |= EPOLLIN;
+    ret |= IWN_POLLIN;
   }
   if (wslay_event_want_write(ws->wc)) {
-    ret |= EPOLLOUT;
+    ret |= IWN_POLLOUT;
   }
   if (ret == 0) {
     ret = -1;
@@ -468,7 +468,7 @@ iwrc iwn_ws_write_text(struct iwn_ws *ws, const void *buf, size_t buf_len) {
     .msg_length = buf_len
   }));
   if (!rc) {
-    rc = iwn_poller_arm_events(ws->poller_adapter->poller, ws->fd, EPOLLOUT | EPOLLET);
+    rc = iwn_poller_arm_events(ws->poller_adapter->poller, ws->fd, IWN_POLLOUT | IWN_POLLET);
   }
   pthread_mutex_unlock(&ws->mtx);
   return rc;
@@ -557,8 +557,8 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
       .on_dispose = _on_poller_adapter_dispose,
       .user_data = ws,
       .timeout_sec = spec->timeout_sec,
-      .events = EPOLLOUT,
-      .events_mod = EPOLLET,
+      .events = IWN_POLLOUT,
+      .events_mod = IWN_POLLET,
       .fd = ws->fd,
       .verify_peer = spec->flags & IWN_WS_VERIFY_PEER,
       .verify_host = spec->flags & IWN_WS_VERIFY_HOST
@@ -568,7 +568,7 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
         iwn_direct_poller_adapter(spec->poller, ws->fd,
                                          _on_poller_adapter_event,
                                          _on_poller_adapter_dispose,
-                                         ws, EPOLLOUT, EPOLLET,
+                                         ws, IWN_POLLOUT, IWN_POLLET,
                                          spec->timeout_sec));
   }
 

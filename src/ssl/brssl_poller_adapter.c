@@ -159,21 +159,21 @@ static inline int64_t _next_poll(br_ssl_engine_context *cc) {
     return -1;
   }
   if (st & BR_SSL_RECVREC) {
-    ret |= EPOLLIN;
+    ret |= IWN_POLLIN;
   }
   if (st & BR_SSL_SENDREC) {
-    ret |= EPOLLOUT;
+    ret |= IWN_POLLOUT;
   }
   if (ret == 0) {
-    ret |= EPOLLIN;
+    ret |= IWN_POLLIN;
   }
-  return ret | EPOLLET;
+  return ret | IWN_POLLET;
 }
 
 static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
   struct _pa *a = t->user_data;
   br_ssl_engine_context *cc = a->eng;
-  bool done = !(flags & EPOLLIN);
+  bool done = !(flags & IWN_POLLIN);
   bool locked = false;
   int64_t nflags;
 
@@ -220,19 +220,19 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
     }
 
     while (br_ssl_engine_current_state(cc) & BR_SSL_SENDAPP) {
-      int64_t n = a->on_event((void*) a, a->user_data, EPOLLOUT);
+      int64_t n = a->on_event((void*) a, a->user_data, IWN_POLLOUT);
       if (n == -1) {
         goto finish;
-      } else if (!(n & EPOLLOUT)) {
+      } else if (!(n & IWN_POLLOUT)) {
         break;
       }
     }
 
     while (br_ssl_engine_current_state(cc) & BR_SSL_RECVAPP) {
-      int64_t n = a->on_event((void*) a, a->user_data, EPOLLIN);
+      int64_t n = a->on_event((void*) a, a->user_data, IWN_POLLIN);
       if (n == -1) {
         goto finish;
-      } else if (!(n & EPOLLIN)) {
+      } else if (!(n & IWN_POLLIN)) {
         break;
       }
     }

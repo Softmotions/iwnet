@@ -77,8 +77,8 @@ static iwrc _client_accept(struct _server *server, int fd) {
       .certs_data = server->spec.certs_data,
       .certs_data_in_buffer = server->spec.certs_data_in_buffer,
       .certs_data_len = server->spec.certs_data_len,
-      .events = EPOLLIN,
-      .events_mod = EPOLLET,
+      .events = IWN_POLLIN,
+      .events_mod = IWN_POLLET,
       .fd = fd,
       .on_dispose = _client_on_poller_adapter_dispose,
       .on_event = _client_on_poller_adapter_event,
@@ -96,7 +96,7 @@ static iwrc _client_accept(struct _server *server, int fd) {
           server->spec.poller, fd,
           _client_on_poller_adapter_event,
           _client_on_poller_adapter_dispose,
-          client, EPOLLIN, EPOLLET,
+          client, IWN_POLLIN, IWN_POLLET,
           server->spec.connection_timeout_sec));
   }
 
@@ -196,8 +196,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
     .user_data  = server,
     .on_ready   = _server_on_ready,
     .on_dispose = _server_on_dispose,
-    .events     = EPOLLIN,
-    .events_mod = EPOLLET,
+    .events     = IWN_POLLIN,
+    .events_mod = IWN_POLLET,
     .poller     = spec->poller
   };
 

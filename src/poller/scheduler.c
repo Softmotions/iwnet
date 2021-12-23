@@ -64,7 +64,7 @@ iwrc iwn_schedule(const struct iwn_scheduler_spec *spec) {
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
     .user_data = task,
-    .events = EPOLLIN
+    .events = IWN_POLLIN
   }));
 
   task = 0;

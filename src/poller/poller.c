@@ -438,14 +438,14 @@ iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller *
   RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = p,
     .fd = p->event_fd,
-    .events = EPOLLIN
+    .events = IWN_POLLIN
   }));
 
   RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = p,
     .fd = p->timer_fd,
     .on_ready = _timer_ready,
-    .events = EPOLLIN
+    .events = IWN_POLLIN
   }));
 
 finish:
