@@ -22,18 +22,23 @@
 #define CLIENT_WRITE 2
 #define CLIENT_NOP   3
 
-struct _server {
+struct server {
   struct iwn_http_server_spec spec;
   int     fd;
   IWPOOL *pool;
   bool    https;
 };
 
-struct _client {
+struct client {
   int     fd;
   int     state;
   IWPOOL *pool;
 };
+
+
+
+
+
 
 ///////////////////////////////////////////////////////////////////////////
 //								              Client                                   //
@@ -46,7 +51,7 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
 static void _client_on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
 }
 
-static void _client_destroy(struct _client *client) {
+static void _client_destroy(struct client *client) {
   if (!client) {
     return;
   }
@@ -56,13 +61,13 @@ static void _client_destroy(struct _client *client) {
   iwpool_destroy(client->pool);
 }
 
-static iwrc _client_accept(struct _server *server, int fd) {
+static iwrc _client_accept(struct server *server, int fd) {
   iwrc rc = 0;
   IWPOOL *pool = iwpool_create_empty();
   if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
-  struct _client *client;
+  struct client *client;
   RCA(client = iwpool_alloc(sizeof(*client), pool), finish);
   client->pool = pool;
   client->fd = fd;
@@ -72,7 +77,6 @@ static iwrc _client_accept(struct _server *server, int fd) {
   RCN(finish, fcntl(fd, F_SETFL, flags | O_NONBLOCK));
 
   if (server->https) {
-
     RCC(rc, finish, iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
       .certs_data = server->spec.certs_data,
       .certs_data_in_buffer = server->spec.certs_data_in_buffer,
@@ -90,7 +94,6 @@ static iwrc _client_accept(struct _server *server, int fd) {
       .user_data = client,
     }));
   } else {
-
     RCC(rc, finish,
         iwn_direct_poller_adapter(
           server->spec.poller, fd,
@@ -116,7 +119,7 @@ finish:
 //								             Server                                    //
 ///////////////////////////////////////////////////////////////////////////
 
-static void _server_destroy(struct _server *server) {
+static void _server_destroy(struct server *server) {
   if (!server) {
     return;
   }
@@ -127,7 +130,7 @@ static void _server_destroy(struct _server *server) {
 }
 
 static int64_t _server_on_ready(const struct iwn_poller_task *t, uint32_t events) {
-  struct _server *server = t->user_data;
+  struct server *server = t->user_data;
   int sfd = 0;
 
   do {
@@ -145,7 +148,7 @@ static int64_t _server_on_ready(const struct iwn_poller_task *t, uint32_t events
 }
 
 static void _server_on_dispose(const struct iwn_poller_task *t) {
-  struct _server *srv = t->user_data;
+  struct server *srv = t->user_data;
   // TODO:
   _server_destroy(srv);
 }
@@ -154,7 +157,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   iwrc rc = 0;
   *out_fd = 0;
   int optval;
-  struct _server *server;
+  struct server *server;
   struct iwn_http_server_spec *spec;
 
   IWPOOL *pool = iwpool_create_empty();

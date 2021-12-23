@@ -4,12 +4,16 @@
 
 #include <stdint.h>
 
+#if defined(__FreeBSD__) || defined(__APPLE__) || defined(__NetBSD__) || defined(__OpenBSD__)
+#define IWN_KQUEUE
+#endif
+
 #ifdef __linux__
 #include <sys/epoll.h>
 #define IWN_POLLIN  EPOLLIN
 #define IWN_POLLOUT EPOLLOUT
 #define IWN_POLLET  EPOLLET
-#elif defined(__FreeBSD__) || defined(__APPLE__)
+#elif defined(IWN_KQUEUE)
 #error "Kqueue is not yet supported"
 #else
 #error "Unsupported operating system"
