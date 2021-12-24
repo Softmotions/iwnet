@@ -28,7 +28,7 @@ struct iwn_poller_task {                                         // !!! Sync fie
   void     (*on_dispose)(const struct iwn_poller_task*);         ///< On destroy handler
   uint32_t events;                                               ///< Initial poll monitoring events
   uint32_t events_mod;                                           ///< Extra event flags added for every poll rearm
-  long     timeout_sec;                                          ///< Optional slot timeout
+  long     timeout_sec;                                          ///< Fd activity timeout
   struct iwn_poller *poller;                                     ///< Poller
 };
 
@@ -37,6 +37,8 @@ iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iwn_poller *
 iwrc iwn_poller_add(const struct iwn_poller_task *task);
 
 iwrc iwn_poller_arm_events(struct iwn_poller *poller, int fd, uint32_t events);
+
+void iwn_poller_set_timeout(struct iwn_poller *poller, int fd, long timeout_sec);
 
 void iwn_poller_remove(struct iwn_poller *poller, int fd);
 

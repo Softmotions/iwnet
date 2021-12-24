@@ -29,8 +29,14 @@ struct iwn_http_server_spec {
   size_t      certs_data_len;
   const char *private_key;
   size_t      private_key_len;
-  long connection_timeout_sec;
+  long http_max_total_mem_usage;
   int  port;
+  int  request_timeout_sec;
+  int  request_keepalive_timeout_sec;
+  int  request_buf_size;
+  int  response_buf_size;
+  int  http_max_token_len;
+  int  http_max_request_buf_size;
   bool certs_data_in_buffer;      ///< true if `certs_data` specified as data buffer rather a file name.
   bool private_key_in_buffer;     ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };

@@ -1,3 +1,7 @@
+/*
+ * Based on https://github.com/jeremycw/httpserver.h
+ */
+
 #include "http_server.h"
 #include "poller_adapter.h"
 #include "poller/direct_poller_adapter.h"
@@ -19,11 +23,6 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define CLIENT_INIT  0
-#define CLIENT_READ  1
-#define CLIENT_WRITE 2
-#define CLIENT_NOP   3
-
 struct server {
   struct iwn_http_server_spec spec;
   int fd;
@@ -40,6 +39,251 @@ struct client {
   int state;
 };
 
+// http session states
+#define HTTP_SESSION_INIT  0
+#define HTTP_SESSION_READ  1
+#define HTTP_SESSION_WRITE 2
+#define HTTP_SESSION_NOP   3
+
+// stream flags
+#define HS_SF_CONSUMED 0x1
+
+// parser flags
+#define HS_PF_IN_CONTENT_LEN  0x1
+#define HS_PF_IN_TRANSFER_ENC 0x2
+#define HS_PF_CHUNKED         0x4
+#define HS_PF_CKEND           0x8
+#define HS_PF_REQ_END         0x10
+
+// http session states
+#define HTTP_SESSION_INIT  0
+#define HTTP_SESSION_READ  1
+#define HTTP_SESSION_WRITE 2
+#define HTTP_SESSION_NOP   3
+
+// http session flags
+#define HTTP_END_SESSION      0x2
+#define HTTP_AUTOMATIC        0x8
+#define HTTP_CHUNKED_RESPONSE 0x20
+
+// http version indicators
+#define HTTP_1_0 0
+#define HTTP_1_1 1
+
+// *INDENT-OFF*
+enum hs_token {
+  HS_TOK_NONE,        HS_TOK_METHOD,     HS_TOK_TARGET,     HS_TOK_VERSION,
+  HS_TOK_HEADER_KEY,  HS_TOK_HEADER_VAL, HS_TOK_CHUNK_BODY, HS_TOK_BODY,
+  HS_TOK_BODY_STREAM, HS_TOK_REQ_END,    HS_TOK_EOF,        HS_TOK_ERROR
+};
+
+enum hs_state {
+  ST, MT, MS, TR, TS, VN, RR, RN, HK, HS, HV, HR, HE,
+  ER, HN, BD, CS, CB, CE, CR, CN, CD, C1, C2, BR, HS_STATE_LEN
+};
+
+enum hs_char_type {
+  HS_SPC,   HS_NL,  HS_CR,    HS_COLN,  HS_TAB,   HS_SCOLN,
+  HS_DIGIT, HS_HEX, HS_ALPHA, HS_TCHAR, HS_VCHAR, HS_ETC,   HS_CHAR_TYPE_LEN
+};
+
+enum hs_meta_state {
+  M_WFK, M_ANY, M_MTE, M_MCL, M_CLV, M_MCK, M_SML, M_CHK, M_BIG, M_ZER, M_CSZ,
+  M_CBD, M_LST, M_STR, M_SEN, M_BDY, M_END, M_ERR
+};
+
+enum hs_meta_type {
+  HS_META_NOT_CONTENT_LEN, HS_META_NOT_TRANSFER_ENC, HS_META_END_KEY,
+  HS_META_END_VALUE,       HS_META_END_HEADERS,      HS_META_LARGE_BODY,
+  HS_META_TYPE_LEN
+};
+// *INDENT-ON*
+
+#define HS_META_NOT_CHUNKED  0
+#define HS_META_NON_ZERO     0
+#define HS_META_END_CHK_SIZE 1
+#define HS_META_END_CHUNK    2
+#define HS_META_NEXT         0
+
+// *INDENT-OFF*
+char const * hs_status_text[] = {
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+
+  //100s
+  "Continue", "Switching Protocols", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+
+  //200s
+  "OK", "Created", "Accepted", "Non-Authoritative Information", "No Content",
+  "Reset Content", "Partial Content", "", "", "",
+
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+
+  //300s
+  "Multiple Choices", "Moved Permanently", "Found", "See Other", "Not Modified",
+  "Use Proxy", "", "Temporary Redirect", "", "",
+
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+
+  //400s
+  "Bad Request", "Unauthorized", "Payment Required", "Forbidden", "Not Found",
+  "Method Not Allowed", "Not Acceptable", "Proxy Authentication Required",
+  "Request Timeout", "Conflict",
+
+  "Gone", "Length Required", "", "Payload Too Large", "", "", "", "", "", "",
+
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+
+  //500s
+  "Internal Server Error", "Not Implemented", "Bad Gateway", "Service Unavailable",
+  "Gateway Timeout", "", "", "", "", "",
+
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", "",
+  "", "", "", "", "", "", "", "", "", ""
+};
+
+static int const hs_transitions[] = {
+//                                            A-Z G-Z
+//                spc \n  \r  :   \t  ;   0-9 a-f g-z tch vch etc
+/* ST start */    BR, BR, BR, BR, BR, BR, BR, MT, MT, MT, BR, BR,
+/* MT method */   MS, BR, BR, BR, BR, BR, MT, MT, MT, MT, BR, BR,
+/* MS methodsp */ BR, BR, BR, BR, BR, BR, TR, TR, TR, TR, TR, BR,
+/* TR target */   TS, BR, BR, TR, BR, TR, TR, TR, TR, TR, TR, BR,
+/* TS targetsp */ BR, BR, BR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
+/* VN version */  BR, BR, RR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
+/* RR rl \r */    BR, RN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* RN rl \n */    BR, BR, BR, BR, BR, BR, HK, HK, HK, HK, BR, BR,
+/* HK headkey */  BR, BR, BR, HS, BR, BR, HK, HK, HK, HK, BR, BR,
+/* HS headspc */  HS, HS, HS, HV, HS, HV, HV, HV, HV, HV, HV, BR,
+/* HV headval */  HV, BR, HR, HV, HV, HV, HV, HV, HV, HV, HV, BR,
+/* HR head\r */   BR, HE, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* HE head\n */   BR, BR, ER, BR, BR, BR, HK, HK, HK, HK, BR, BR,
+/* ER hend\r */   BR, HN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* HN hend\n */   BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
+/* BD body */     BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
+/* CS chksz */    BR, BR, CR, BR, BR, CE, CS, CS, BR, BR, BR, BR,
+/* CB chkbd */    CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
+/* CE chkext */   BR, BR, CR, CE, CE, CE, CE, CE, CE, CE, CE, BR,
+/* CR chksz\r */  BR, CN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* CN chksz\n */  CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
+/* CD chkend */   BR, BR, C1, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* C1 chkend\r */ BR, C2, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* C2 chkend\n */ BR, BR, BR, BR, BR, BR, CS, CS, BR, BR, BR, BR
+};
+
+static int const hs_meta_transitions[] = {
+//                 no chk
+//                 not cl not te endkey endval end h  toobig
+/* WFK wait */     M_WFK, M_WFK, M_WFK, M_ANY, M_END, M_ERR,
+/* ANY matchkey */ M_MTE, M_MCL, M_WFK, M_ERR, M_END, M_ERR,
+/* MTE matchte */  M_MTE, M_WFK, M_MCK, M_ERR, M_ERR, M_ERR,
+/* MCL matchcl */  M_WFK, M_MCL, M_CLV, M_ERR, M_ERR, M_ERR,
+/* CLV clvalue */  M_ERR, M_ERR, M_ERR, M_SML, M_ERR, M_ERR,
+/* MCK matchchk */ M_WFK, M_ERR, M_ERR, M_CHK, M_ERR, M_ERR,
+/* SML smallbdy */ M_SML, M_SML, M_SML, M_SML, M_BDY, M_BIG,
+/* CHK chunkbdy */ M_CHK, M_CHK, M_CHK, M_CHK, M_ZER, M_ERR,
+/* BIG bigbody */  M_BIG, M_BIG, M_BIG, M_BIG, M_STR, M_ERR,
+
+//                         *** chunked body ***
+
+//                 nonzer endsz  endchk
+/* ZER zerochk */  M_CSZ, M_LST, M_ERR, M_ERR, M_ERR, M_ERR,
+/* CSZ chksize */  M_CSZ, M_CBD, M_ERR, M_ERR, M_ERR, M_ERR,
+/* CBD readchk */  M_CBD, M_CBD, M_ZER, M_ERR, M_ERR, M_ERR,
+/* LST lastchk */  M_LST, M_END, M_END, M_ERR, M_ERR, M_ERR,
+
+//                         *** streamed body ***
+
+//                 next
+/* STR readstr */  M_SEN, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+/* SEN strend */   M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+
+//                         *** small body ***
+
+//                 next
+/* BDY readbody */ M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+/* END reqend */   M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
+};
+
+static int const hs_ctype[] = {
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
+  HS_ETC,   HS_ETC,   HS_TAB,   HS_NL,    HS_ETC,   HS_ETC,   HS_CR,
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_SPC,   HS_TCHAR, HS_VCHAR,
+  HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_VCHAR,
+  HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_DIGIT,
+  HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT,
+  HS_DIGIT, HS_DIGIT, HS_COLN,  HS_SCOLN, HS_VCHAR, HS_VCHAR, HS_VCHAR,
+  HS_VCHAR, HS_VCHAR, HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,
+  HS_HEX,   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_VCHAR, HS_VCHAR, HS_VCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_HEX,
+  HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_VCHAR, HS_TCHAR, HS_VCHAR,
+  HS_TCHAR, HS_ETC
+};
+
+static int const hs_token_start_states[] = {
+//ST MT             MS TR             TS VN              RR RN HK
+  0, HS_TOK_METHOD, 0, HS_TOK_TARGET, 0, HS_TOK_VERSION, 0, 0, HS_TOK_HEADER_KEY,
+//HS HV                 HR HE ER HN BD           CS CB                 CE CR CN
+  0, HS_TOK_HEADER_VAL, 0, 0, 0, 0, HS_TOK_BODY, 0, HS_TOK_CHUNK_BODY, 0, 0, 0,
+//CD C1 C2
+  0, 0, 0,
+};
+
+// *INDENT-ON*
 
 static struct server* _server_ref(struct server *server);
 static void _server_unref(struct server *server);
@@ -100,7 +344,7 @@ static iwrc _client_accept(struct server *server, int fd) {
       .private_key = server->spec.private_key,
       .private_key_in_buffer = server->spec.private_key_in_buffer,
       .private_key_len = server->spec.private_key_len,
-      .timeout_sec = server->spec.connection_timeout_sec,
+      .timeout_sec = server->spec.request_timeout_sec,
       .user_data = client,
     }));
   } else {
@@ -110,7 +354,7 @@ static iwrc _client_accept(struct server *server, int fd) {
           _client_on_poller_adapter_event,
           _client_on_poller_adapter_dispose,
           client, IWN_POLLIN, IWN_POLLET,
-          server->spec.connection_timeout_sec));
+          server->spec.request_timeout_sec));
   }
 
 finish:
@@ -209,6 +453,28 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
     goto finish;
   }
 
+  if (spec->request_buf_size < 1024) {
+    spec->request_buf_size = 1024;
+  }
+  if (spec->response_buf_size < 1024) {
+    spec->response_buf_size = 1024;
+  }
+  if (spec->request_timeout_sec < 1) {
+    spec->request_timeout_sec = 20;
+  }
+  if (spec->request_keepalive_timeout_sec < 1) {
+    spec->request_keepalive_timeout_sec = 120;
+  }
+  if (spec->http_max_token_len < 8192) {
+    spec->http_max_token_len = 8192;
+  }
+  if (spec->http_max_total_mem_usage < 1024 * 1024 * 10) {    // 10M
+    spec->http_max_total_mem_usage = 4L * 1024 * 1024 * 1024; // 4Gb
+  }
+  if (spec->http_max_request_buf_size < 1024 * 1024) {
+    spec->http_max_request_buf_size = 8 * 1024 * 1024;
+  }
+
   server->https = spec->certs_data && spec->certs_data_len && spec->private_key && spec->private_key_len;
   if (server->https) {
     spec->certs_data = iwpool_strndup(pool, spec->certs_data, spec->certs_data_len, &rc);
@@ -222,9 +488,6 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   }
   if (!spec->listen) {
     spec->listen = "localhost";
-  }
-  if (spec->connection_timeout_sec < 1) {
-    spec->connection_timeout_sec = 30;
   }
 
   RCA(spec->listen = iwpool_strdup2(pool, spec->listen), finish);

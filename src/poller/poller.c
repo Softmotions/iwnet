@@ -366,6 +366,17 @@ finish:
   return rc;
 }
 
+void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
+  struct poller_slot *s = _slot_peek_leave_locked(p, fd);
+  if (!s || s->timeout_sec == timeout_sec) {
+    pthread_mutex_unlock(&p->mtx);
+    return;
+  }
+  s->timeout_sec = timeout_sec;
+  pthread_mutex_unlock(&p->mtx);
+  _timer_check((void*) s, 0);
+}
+
 void iwn_poller_shutdown_request(struct iwn_poller *p) {
   if (p && __sync_bool_compare_and_swap(&p->stop, false, true)) {
     if (p->event_fd > 0) {
