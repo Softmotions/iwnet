@@ -35,15 +35,10 @@ struct server {
 struct client {
   IWPOOL *pool;
   struct server *server;
-  int fd;
-  int state;
+  int     fd;
+  uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
+  uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
 };
-
-// http session states
-#define HTTP_SESSION_INIT  0
-#define HTTP_SESSION_READ  1
-#define HTTP_SESSION_WRITE 2
-#define HTTP_SESSION_NOP   3
 
 // stream flags
 #define HS_SF_CONSUMED 0x1
@@ -292,8 +287,28 @@ static void _server_unref(struct server *server);
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
 
+static iwrc _client_init(struct client *client) {
+  iwrc rc = 0;
+
+  return rc;
+}
+
 static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
-  return 0;
+  iwrc rc = 0;
+  uint32_t resp = 0;
+  struct client *client = user_data;
+
+  switch (client->state) {
+    case HTTP_SESSION_INIT:
+      rc = _client_init(client);
+      break;
+  }
+
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    resp = -1;
+  }
+  return resp;
 }
 
 static void _client_destroy(struct client *client) {
