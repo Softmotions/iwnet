@@ -12,6 +12,7 @@
 
 #include <assert.h>
 #include <arpa/inet.h>
+#include <stdatomic.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <errno.h>
@@ -29,12 +30,49 @@ struct server {
   int refs;
   pthread_mutex_t mtx;
   IWPOOL *pool;
-  bool    https;
+  atomic_int_fast64_t memused;
+  bool https;
+};
+
+struct token {
+  int index;
+  int len;
+  int type;
+};
+
+struct tokens_buf {
+  struct token *buf;
+  ssize_t       capacity;
+  ssize_t       size;
+};
+
+struct stream {
+  uint8_t     *buf;
+  struct token token;
+  ssize_t      bytes_total;
+  ssize_t      capacity;
+  ssize_t      length;
+  ssize_t      index;
+  ssize_t      anchor;
+  uint8_t      flags;
+};
+
+struct parser {
+  int64_t content_length;
+  int64_t body_consumed;
+  int16_t match_index;
+  int16_t header_count;
+  int8_t  state;
+  int8_t  meta;
 };
 
 struct client {
+  struct iwn_http_request req;
   IWPOOL *pool;
-  struct server *server;
+  struct server    *server;
+  struct tokens_buf tokens;
+  struct stream     stream;
+  struct parser     parser;
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
@@ -82,12 +120,12 @@ enum hs_char_type {
   HS_DIGIT, HS_HEX, HS_ALPHA, HS_TCHAR, HS_VCHAR, HS_ETC,   HS_CHAR_TYPE_LEN
 };
 
-enum hs_meta_state {
+enum meta_state {
   M_WFK, M_ANY, M_MTE, M_MCL, M_CLV, M_MCK, M_SML, M_CHK, M_BIG, M_ZER, M_CSZ,
   M_CBD, M_LST, M_STR, M_SEN, M_BDY, M_END, M_ERR
 };
 
-enum hs_meta_type {
+enum meta_type {
   HS_META_NOT_CONTENT_LEN, HS_META_NOT_TRANSFER_ENC, HS_META_END_KEY,
   HS_META_END_VALUE,       HS_META_END_HEADERS,      HS_META_LARGE_BODY,
   HS_META_TYPE_LEN
@@ -184,7 +222,7 @@ char const * hs_status_text[] = {
   "", "", "", "", "", "", "", "", "", ""
 };
 
-static int const hs_transitions[] = {
+static int const _transitions[] = {
 //                                            A-Z G-Z
 //                spc \n  \r  :   \t  ;   0-9 a-f g-z tch vch etc
 /* ST start */    BR, BR, BR, BR, BR, BR, BR, MT, MT, MT, BR, BR,
@@ -213,7 +251,7 @@ static int const hs_transitions[] = {
 /* C2 chkend\n */ BR, BR, BR, BR, BR, BR, CS, CS, BR, BR, BR, BR
 };
 
-static int const hs_meta_transitions[] = {
+static int const _meta_transitions[] = {
 //                 no chk
 //                 not cl not te endkey endval end h  toobig
 /* WFK wait */     M_WFK, M_WFK, M_WFK, M_ANY, M_END, M_ERR,
@@ -247,7 +285,7 @@ static int const hs_meta_transitions[] = {
 /* END reqend */   M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
 };
 
-static int const hs_ctype[] = {
+static int const _ctype[] = {
   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
   HS_ETC,   HS_ETC,   HS_TAB,   HS_NL,    HS_ETC,   HS_ETC,   HS_CR,
   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
@@ -269,7 +307,7 @@ static int const hs_ctype[] = {
   HS_TCHAR, HS_ETC
 };
 
-static int const hs_token_start_states[] = {
+static int const _token_start_states[] = {
 //ST MT             MS TR             TS VN              RR RN HK
   0, HS_TOK_METHOD, 0, HS_TOK_TARGET, 0, HS_TOK_VERSION, 0, 0, HS_TOK_HEADER_KEY,
 //HS HV                 HR HE ER HN BD           CS CB                 CE CR CN
@@ -287,23 +325,161 @@ static void _server_unref(struct server *server);
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
 
+static void _client_response_error(struct client *client, int code, const char *response) {
+  // TODO:
+}
+
 static iwrc _client_init(struct client *client) {
   iwrc rc = 0;
+  client->flags = HTTP_AUTOMATIC;
+  client->parser = (struct parser) {};
+  client->stream = (struct stream) {};
+  if (client->tokens.buf) {
+    free(client->tokens.buf);
+  }
+  client->tokens.capacity = 32;
+  client->tokens.size = 0;
+  client->tokens.buf = malloc(sizeof(struct token) * client->tokens.capacity);
+  if (!client->tokens.buf) {
+    client->tokens.capacity = 0;
+    rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
+    goto finish;
+  }
 
+finish:
   return rc;
+}
+
+static void _client_write(struct client *client, struct iwn_poller_adapter *pa) {
+}
+
+static int _client_read_pa(struct client *client, struct iwn_poller_adapter *pa) {
+  struct stream *stream = &client->stream;
+  struct server *server = client->server;
+  if (stream->index < stream->length) {
+    return 1;
+  }
+  if (!stream->buf) {
+    stream->buf = calloc(1, server->spec.request_buf_size);
+    if (!stream->buf) {
+      return 0;
+    }
+    stream->capacity = server->spec.request_buf_size;
+    server->memused += stream->capacity;
+  }
+  ssize_t bytes;
+  do {
+    bytes = pa->read(pa, stream->buf + stream->length, stream->capacity - stream->length);
+    if (bytes > 0) {
+      stream->length += bytes;
+      stream->bytes_total += bytes;
+    }
+    if (stream->length == stream->capacity && stream->capacity != server->spec.request_buf_max_size) {
+      server->memused -= stream->capacity;
+      ssize_t ncap = stream->capacity * 2;
+      if (ncap > server->spec.request_buf_max_size) {
+        ncap = server->spec.request_buf_max_size;
+      }
+      uint8_t *nbuf = realloc(stream->buf, ncap);
+      if (!nbuf) {
+        bytes = 0;
+        break;
+      }
+      stream->capacity = ncap;
+      stream->buf = nbuf;
+      server->memused += stream->capacity;
+    }
+  } while (bytes > 0 && stream->capacity < server->spec.request_buf_max_size);
+  return bytes ? 1 : 0;
+}
+
+IW_INLINE void _meta_trigger(struct parser *parser, int event) {
+  int to = _meta_transitions[parser->meta * HS_META_TYPE_LEN + event];
+  parser->meta = to;
+}
+
+struct token _token_meta_emit(struct parser *parser) {
+  struct token token = { 0 };
+  switch (parser->meta) {
+    case M_SEN:
+      token.type = HS_TOK_CHUNK_BODY;
+      _meta_trigger(parser, HS_META_NEXT);
+      break;
+    case M_END:
+      token.type = HS_TOK_REQ_END;
+      memset(parser, 0, sizeof(*parser));
+      break;
+  }
+  return token;
+}
+
+struct token _token_parse(struct parser *parser, struct stream *stream) {
+  struct token token = _token_meta_emit(parser);
+
+  return token;
+}
+
+static void _client_read(struct client *client, struct iwn_poller_adapter *pa) {
+  client->state = HTTP_SESSION_READ;
+  struct token token;
+  int rci = _client_read_pa(client, pa);
+  if (rci == 0) {
+    client->flags |= HTTP_END_SESSION;
+    return;
+  }
+  do {
+    token = _token_parse(&client->parser, &client->stream);
+    if (token.type != HS_TOK_NONE) {
+      if (client->tokens.size == client->tokens.capacity) {
+        ssize_t ncap = client->tokens.capacity * 2;
+        struct token *nbuf = realloc(client->tokens.buf, ncap * sizeof(client->tokens.buf[0]));
+        if (!nbuf) {
+          client->flags = HTTP_END_SESSION;
+          return;
+        }
+        client->tokens.buf = nbuf;
+        client->tokens.capacity = ncap;
+      }
+      client->tokens.buf[client->tokens.size++] = token;
+    }
+    switch (token.type) {
+      case HS_TOK_ERROR:
+        _client_response_error(client, 400, "Bad request");
+        break;
+      case HS_TOK_BODY:
+      case HS_TOK_BODY_STREAM:
+
+        break;
+    }
+  } while (token.type != HS_TOK_NONE && client->state == HTTP_SESSION_READ);
 }
 
 static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   iwrc rc = 0;
-  uint32_t resp = 0;
+  int64_t resp = 0;
   struct client *client = user_data;
 
   switch (client->state) {
     case HTTP_SESSION_INIT:
-      rc = _client_init(client);
+      RCC(rc, finish, _client_init(client));
+      client->state = HTTP_SESSION_READ;
+      if (client->server->memused > client->server->spec.http_max_total_mem_usage) {
+        _client_response_error(client, 503, "Service Unavailable");
+        return -1;
+      }
+    case HTTP_SESSION_READ:
+      _client_read(client, pa);
+      break;
+    case HTTP_SESSION_WRITE:
+      _client_write(client, pa);
       break;
   }
 
+  if (client->flags & HTTP_END_SESSION) {
+    resp = -1;
+  }
+
+finish:
   if (rc) {
     iwlog_ecode_error3(rc);
     resp = -1;
@@ -317,6 +493,10 @@ static void _client_destroy(struct client *client) {
   }
   if (client->fd > -1) {
     close(client->fd);
+  }
+  if (client->stream.buf) {
+    client->server->memused -= client->stream.capacity;
+    free(client->stream.buf);
   }
   if (client->server) {
     _server_unref(client->server);
@@ -461,7 +641,11 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   server->pool = pool;
   spec = &server->spec;
   memcpy(spec, spec_, sizeof(*spec));
-
+    
+  if (!spec->request_handler) {
+    rc = IW_ERROR_INVALID_ARGS;
+    iwlog_ecode_error2(rc, "No request_handler specified");
+  }
   if (!spec->poller) {
     rc = IW_ERROR_INVALID_ARGS;
     iwlog_ecode_error2(rc, "No poller specified");
@@ -477,17 +661,17 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   if (spec->request_timeout_sec < 1) {
     spec->request_timeout_sec = 20;
   }
-  if (spec->request_keepalive_timeout_sec < 1) {
-    spec->request_keepalive_timeout_sec = 120;
+  if (spec->request_timeout_keepalive_sec < 1) {
+    spec->request_timeout_keepalive_sec = 120;
   }
-  if (spec->http_max_token_len < 8192) {
-    spec->http_max_token_len = 8192;
+  if (spec->request_token_max_len < 8192) {
+    spec->request_token_max_len = 8192;
   }
   if (spec->http_max_total_mem_usage < 1024 * 1024 * 10) {    // 10M
     spec->http_max_total_mem_usage = 4L * 1024 * 1024 * 1024; // 4Gb
   }
-  if (spec->http_max_request_buf_size < 1024 * 1024) {
-    spec->http_max_request_buf_size = 8 * 1024 * 1024;
+  if (spec->request_buf_max_size < 1024 * 1024) {
+    spec->request_buf_max_size = 8 * 1024 * 1024;
   }
 
   server->https = spec->certs_data && spec->certs_data_len && spec->private_key && spec->private_key_len;
