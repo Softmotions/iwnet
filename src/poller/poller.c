@@ -47,14 +47,14 @@ struct iwn_poller {
 };
 
 struct poller_slot {
-  int      fd;                                               ///< File descriptor beeng polled
-  void    *user_data;                                        ///< Arbitrary user data associated with poller_task
+  int      fd;                                                   ///< File descriptor beeng polled
+  void    *user_data;                                            ///< Arbitrary user data associated with poller_task
   int64_t  (*on_ready)(const struct iwn_poller_task*, uint32_t); ///< On fd event ready
   void     (*on_dispose)(const struct iwn_poller_task*);         ///< On destroy handler
-  uint32_t events;                                           ///< Default epoll monitoring events
+  uint32_t events;                                               ///< Default epoll monitoring events
   uint32_t events_mod;
   long     timeout_sec;                                      ///< Optional slot timeout
-  struct iwn_poller *poller;                                     ///< Poller
+  struct iwn_poller *poller;                                 ///< Poller
 
   int      refs;
   uint32_t events_processing;

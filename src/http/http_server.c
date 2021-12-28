@@ -1,5 +1,5 @@
 /*
- * Based on https://github.com/jeremycw/httpserver.h
+ * HTTP protocol parser is based on https://github.com/jeremycw/httpserver.h MIT code.
  */
 
 #include "http_server.h"
@@ -47,7 +47,7 @@ struct tokens_buf {
 };
 
 struct stream {
-  uint8_t     *buf;
+  char *buf;
   struct token token;
   ssize_t      bytes_total;
   ssize_t      capacity;
@@ -58,8 +58,8 @@ struct stream {
 };
 
 struct parser {
-  int64_t content_length;
-  int64_t body_consumed;
+  ssize_t content_length;
+  ssize_t body_consumed;
   int16_t match_index;
   int16_t header_count;
   int8_t  state;
@@ -67,8 +67,11 @@ struct parser {
 };
 
 struct client {
-  struct iwn_http_request req;
+  struct iwn_http_request request;
+  void    (*chunk_cb)(struct iwn_http_request*, void*);
+  void   *chunk_cb_user_data;
   IWPOOL *pool;
+  struct iwn_poller_adapter *pa;
   struct server    *server;
   struct tokens_buf tokens;
   struct stream     stream;
@@ -79,14 +82,14 @@ struct client {
 };
 
 // stream flags
-#define HS_SF_CONSUMED 0x1
+#define HS_SF_CONSUMED 0x01U
 
 // parser flags
-#define HS_PF_IN_CONTENT_LEN  0x1
-#define HS_PF_IN_TRANSFER_ENC 0x2
-#define HS_PF_CHUNKED         0x4
-#define HS_PF_CKEND           0x8
-#define HS_PF_REQ_END         0x10
+#define HS_PF_IN_CONTENT_LEN  0x01U
+#define HS_PF_IN_TRANSFER_ENC 0x02U
+#define HS_PF_CHUNKED         0x04U
+#define HS_PF_CKEND           0x08U
+#define HS_PF_REQ_END         0x10U
 
 // http session states
 #define HTTP_SESSION_INIT  0
@@ -95,37 +98,38 @@ struct client {
 #define HTTP_SESSION_NOP   3
 
 // http session flags
-#define HTTP_END_SESSION      0x2
-#define HTTP_AUTOMATIC        0x8
-#define HTTP_CHUNKED_RESPONSE 0x20
+#define HTTP_STEAMED          0x01U
+#define HTTP_END_SESSION      0x02U
+#define HTTP_AUTOMATIC        0x08U
+#define HTTP_CHUNKED_RESPONSE 0x20U
 
 // http version indicators
 #define HTTP_1_0 0
 #define HTTP_1_1 1
 
 // *INDENT-OFF*
-enum hs_token {
+enum token_e {
   HS_TOK_NONE,        HS_TOK_METHOD,     HS_TOK_TARGET,     HS_TOK_VERSION,
   HS_TOK_HEADER_KEY,  HS_TOK_HEADER_VAL, HS_TOK_CHUNK_BODY, HS_TOK_BODY,
   HS_TOK_BODY_STREAM, HS_TOK_REQ_END,    HS_TOK_EOF,        HS_TOK_ERROR
 };
 
-enum hs_state {
+enum state_e {
   ST, MT, MS, TR, TS, VN, RR, RN, HK, HS, HV, HR, HE,
   ER, HN, BD, CS, CB, CE, CR, CN, CD, C1, C2, BR, HS_STATE_LEN
 };
 
-enum hs_char_type {
+enum char_type_e {
   HS_SPC,   HS_NL,  HS_CR,    HS_COLN,  HS_TAB,   HS_SCOLN,
   HS_DIGIT, HS_HEX, HS_ALPHA, HS_TCHAR, HS_VCHAR, HS_ETC,   HS_CHAR_TYPE_LEN
 };
 
-enum meta_state {
+enum meta_state_e {
   M_WFK, M_ANY, M_MTE, M_MCL, M_CLV, M_MCK, M_SML, M_CHK, M_BIG, M_ZER, M_CSZ,
   M_CBD, M_LST, M_STR, M_SEN, M_BDY, M_END, M_ERR
 };
 
-enum meta_type {
+enum meta_type_e {
   HS_META_NOT_CONTENT_LEN, HS_META_NOT_TRANSFER_ENC, HS_META_END_KEY,
   HS_META_END_VALUE,       HS_META_END_HEADERS,      HS_META_LARGE_BODY,
   HS_META_TYPE_LEN
@@ -139,7 +143,101 @@ enum meta_type {
 #define HS_META_NEXT         0
 
 // *INDENT-OFF*
-char const * hs_status_text[] = {
+static const int8_t _transitions[] = {
+//                                            A-Z G-Z
+//                spc \n  \r  :   \t  ;   0-9 a-f g-z tch vch etc
+/* ST start */    BR, BR, BR, BR, BR, BR, BR, MT, MT, MT, BR, BR,
+/* MT method */   MS, BR, BR, BR, BR, BR, MT, MT, MT, MT, BR, BR,
+/* MS methodsp */ BR, BR, BR, BR, BR, BR, TR, TR, TR, TR, TR, BR,
+/* TR target */   TS, BR, BR, TR, BR, TR, TR, TR, TR, TR, TR, BR,
+/* TS targetsp */ BR, BR, BR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
+/* VN version */  BR, BR, RR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
+/* RR rl \r */    BR, RN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* RN rl \n */    BR, BR, BR, BR, BR, BR, HK, HK, HK, HK, BR, BR,
+/* HK headkey */  BR, BR, BR, HS, BR, BR, HK, HK, HK, HK, BR, BR,
+/* HS headspc */  HS, HS, HS, HV, HS, HV, HV, HV, HV, HV, HV, BR,
+/* HV headval */  HV, BR, HR, HV, HV, HV, HV, HV, HV, HV, HV, BR,
+/* HR head\r */   BR, HE, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* HE head\n */   BR, BR, ER, BR, BR, BR, HK, HK, HK, HK, BR, BR,
+/* ER hend\r */   BR, HN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* HN hend\n */   BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
+/* BD body */     BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
+/* CS chksz */    BR, BR, CR, BR, BR, CE, CS, CS, BR, BR, BR, BR,
+/* CB chkbd */    CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
+/* CE chkext */   BR, BR, CR, CE, CE, CE, CE, CE, CE, CE, CE, BR,
+/* CR chksz\r */  BR, CN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* CN chksz\n */  CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
+/* CD chkend */   BR, BR, C1, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* C1 chkend\r */ BR, C2, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* C2 chkend\n */ BR, BR, BR, BR, BR, BR, CS, CS, BR, BR, BR, BR
+};
+
+static const int8_t _meta_transitions[] = {
+//                 no chk
+//                 not cl not te endkey endval end h  toobig
+/* WFK wait */     M_WFK, M_WFK, M_WFK, M_ANY, M_END, M_ERR,
+/* ANY matchkey */ M_MTE, M_MCL, M_WFK, M_ERR, M_END, M_ERR,
+/* MTE matchte */  M_MTE, M_WFK, M_MCK, M_ERR, M_ERR, M_ERR,
+/* MCL matchcl */  M_WFK, M_MCL, M_CLV, M_ERR, M_ERR, M_ERR,
+/* CLV clvalue */  M_ERR, M_ERR, M_ERR, M_SML, M_ERR, M_ERR,
+/* MCK matchchk */ M_WFK, M_ERR, M_ERR, M_CHK, M_ERR, M_ERR,
+/* SML smallbdy */ M_SML, M_SML, M_SML, M_SML, M_BDY, M_BIG,
+/* CHK chunkbdy */ M_CHK, M_CHK, M_CHK, M_CHK, M_ZER, M_ERR,
+/* BIG bigbody */  M_BIG, M_BIG, M_BIG, M_BIG, M_STR, M_ERR,
+
+//                         *** chunked body ***
+
+//                 nonzer endsz  endchk
+/* ZER zerochk */  M_CSZ, M_LST, M_ERR, M_ERR, M_ERR, M_ERR,
+/* CSZ chksize */  M_CSZ, M_CBD, M_ERR, M_ERR, M_ERR, M_ERR,
+/* CBD readchk */  M_CBD, M_CBD, M_ZER, M_ERR, M_ERR, M_ERR,
+/* LST lastchk */  M_LST, M_END, M_END, M_ERR, M_ERR, M_ERR,
+
+//                         *** streamed body ***
+
+//                 next
+/* STR readstr */  M_SEN, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+/* SEN strend */   M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+
+//                         *** small body ***
+
+//                 next
+/* BDY readbody */ M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+/* END reqend */   M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
+};
+
+static const int8_t _ctype[] = {
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
+  HS_ETC,   HS_ETC,   HS_TAB,   HS_NL,    HS_ETC,   HS_ETC,   HS_CR,
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
+  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_SPC,   HS_TCHAR, HS_VCHAR,
+  HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_VCHAR,
+  HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_DIGIT,
+  HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT,
+  HS_DIGIT, HS_DIGIT, HS_COLN,  HS_SCOLN, HS_VCHAR, HS_VCHAR, HS_VCHAR,
+  HS_VCHAR, HS_VCHAR, HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,
+  HS_HEX,   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_VCHAR, HS_VCHAR, HS_VCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_HEX,
+  HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_VCHAR, HS_TCHAR, HS_VCHAR,
+  HS_TCHAR, HS_ETC
+};
+
+static int8_t const _token_start_states[] = {
+//ST MT             MS TR             TS VN              RR RN HK
+  0, HS_TOK_METHOD, 0, HS_TOK_TARGET, 0, HS_TOK_VERSION, 0, 0, HS_TOK_HEADER_KEY,
+//HS HV                 HR HE ER HN BD           CS CB                 CE CR CN
+  0, HS_TOK_HEADER_VAL, 0, 0, 0, 0, HS_TOK_BODY, 0, HS_TOK_CHUNK_BODY, 0, 0, 0,
+//CD C1 C2
+  0, 0, 0,
+};
+
+static char const *_status_text[] = {
   "", "", "", "", "", "", "", "", "", "",
   "", "", "", "", "", "", "", "", "", "",
   "", "", "", "", "", "", "", "", "", "",
@@ -221,101 +319,6 @@ char const * hs_status_text[] = {
   "", "", "", "", "", "", "", "", "", "",
   "", "", "", "", "", "", "", "", "", ""
 };
-
-static int const _transitions[] = {
-//                                            A-Z G-Z
-//                spc \n  \r  :   \t  ;   0-9 a-f g-z tch vch etc
-/* ST start */    BR, BR, BR, BR, BR, BR, BR, MT, MT, MT, BR, BR,
-/* MT method */   MS, BR, BR, BR, BR, BR, MT, MT, MT, MT, BR, BR,
-/* MS methodsp */ BR, BR, BR, BR, BR, BR, TR, TR, TR, TR, TR, BR,
-/* TR target */   TS, BR, BR, TR, BR, TR, TR, TR, TR, TR, TR, BR,
-/* TS targetsp */ BR, BR, BR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
-/* VN version */  BR, BR, RR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
-/* RR rl \r */    BR, RN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* RN rl \n */    BR, BR, BR, BR, BR, BR, HK, HK, HK, HK, BR, BR,
-/* HK headkey */  BR, BR, BR, HS, BR, BR, HK, HK, HK, HK, BR, BR,
-/* HS headspc */  HS, HS, HS, HV, HS, HV, HV, HV, HV, HV, HV, BR,
-/* HV headval */  HV, BR, HR, HV, HV, HV, HV, HV, HV, HV, HV, BR,
-/* HR head\r */   BR, HE, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* HE head\n */   BR, BR, ER, BR, BR, BR, HK, HK, HK, HK, BR, BR,
-/* ER hend\r */   BR, HN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* HN hend\n */   BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
-/* BD body */     BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
-/* CS chksz */    BR, BR, CR, BR, BR, CE, CS, CS, BR, BR, BR, BR,
-/* CB chkbd */    CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
-/* CE chkext */   BR, BR, CR, CE, CE, CE, CE, CE, CE, CE, CE, BR,
-/* CR chksz\r */  BR, CN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* CN chksz\n */  CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
-/* CD chkend */   BR, BR, C1, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* C1 chkend\r */ BR, C2, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* C2 chkend\n */ BR, BR, BR, BR, BR, BR, CS, CS, BR, BR, BR, BR
-};
-
-static int const _meta_transitions[] = {
-//                 no chk
-//                 not cl not te endkey endval end h  toobig
-/* WFK wait */     M_WFK, M_WFK, M_WFK, M_ANY, M_END, M_ERR,
-/* ANY matchkey */ M_MTE, M_MCL, M_WFK, M_ERR, M_END, M_ERR,
-/* MTE matchte */  M_MTE, M_WFK, M_MCK, M_ERR, M_ERR, M_ERR,
-/* MCL matchcl */  M_WFK, M_MCL, M_CLV, M_ERR, M_ERR, M_ERR,
-/* CLV clvalue */  M_ERR, M_ERR, M_ERR, M_SML, M_ERR, M_ERR,
-/* MCK matchchk */ M_WFK, M_ERR, M_ERR, M_CHK, M_ERR, M_ERR,
-/* SML smallbdy */ M_SML, M_SML, M_SML, M_SML, M_BDY, M_BIG,
-/* CHK chunkbdy */ M_CHK, M_CHK, M_CHK, M_CHK, M_ZER, M_ERR,
-/* BIG bigbody */  M_BIG, M_BIG, M_BIG, M_BIG, M_STR, M_ERR,
-
-//                         *** chunked body ***
-
-//                 nonzer endsz  endchk
-/* ZER zerochk */  M_CSZ, M_LST, M_ERR, M_ERR, M_ERR, M_ERR,
-/* CSZ chksize */  M_CSZ, M_CBD, M_ERR, M_ERR, M_ERR, M_ERR,
-/* CBD readchk */  M_CBD, M_CBD, M_ZER, M_ERR, M_ERR, M_ERR,
-/* LST lastchk */  M_LST, M_END, M_END, M_ERR, M_ERR, M_ERR,
-
-//                         *** streamed body ***
-
-//                 next
-/* STR readstr */  M_SEN, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
-/* SEN strend */   M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
-
-//                         *** small body ***
-
-//                 next
-/* BDY readbody */ M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
-/* END reqend */   M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
-};
-
-static int const _ctype[] = {
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
-  HS_ETC,   HS_ETC,   HS_TAB,   HS_NL,    HS_ETC,   HS_ETC,   HS_CR,
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_SPC,   HS_TCHAR, HS_VCHAR,
-  HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_VCHAR,
-  HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_DIGIT,
-  HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT,
-  HS_DIGIT, HS_DIGIT, HS_COLN,  HS_SCOLN, HS_VCHAR, HS_VCHAR, HS_VCHAR,
-  HS_VCHAR, HS_VCHAR, HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,
-  HS_HEX,   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
-  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
-  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
-  HS_VCHAR, HS_VCHAR, HS_VCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_HEX,
-  HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_ALPHA, HS_ALPHA,
-  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
-  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
-  HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_VCHAR, HS_TCHAR, HS_VCHAR,
-  HS_TCHAR, HS_ETC
-};
-
-static int const _token_start_states[] = {
-//ST MT             MS TR             TS VN              RR RN HK
-  0, HS_TOK_METHOD, 0, HS_TOK_TARGET, 0, HS_TOK_VERSION, 0, 0, HS_TOK_HEADER_KEY,
-//HS HV                 HR HE ER HN BD           CS CB                 CE CR CN
-  0, HS_TOK_HEADER_VAL, 0, 0, 0, 0, HS_TOK_BODY, 0, HS_TOK_CHUNK_BODY, 0, 0, 0,
-//CD C1 C2
-  0, 0, 0,
-};
-
 // *INDENT-ON*
 
 static struct server* _server_ref(struct server *server);
@@ -350,10 +353,12 @@ finish:
   return rc;
 }
 
-static void _client_write(struct client *client, struct iwn_poller_adapter *pa) {
+static void _client_write(struct client *client) {
+  // TODO:
 }
 
-static int _client_read_pa(struct client *client, struct iwn_poller_adapter *pa) {
+static int _client_read_data(struct client *client) {
+  struct iwn_poller_adapter *pa = client->pa;
   struct stream *stream = &client->stream;
   struct server *server = client->server;
   if (stream->index < stream->length) {
@@ -363,13 +368,13 @@ static int _client_read_pa(struct client *client, struct iwn_poller_adapter *pa)
     stream->buf = calloc(1, server->spec.request_buf_size);
     if (!stream->buf) {
       return 0;
-    }
+    }  
     stream->capacity = server->spec.request_buf_size;
     server->memused += stream->capacity;
   }
   ssize_t bytes;
   do {
-    bytes = pa->read(pa, stream->buf + stream->length, stream->capacity - stream->length);
+    bytes = pa->read(pa, (uint8_t*) stream->buf + stream->length, stream->capacity - stream->length);
     if (bytes > 0) {
       stream->length += bytes;
       stream->bytes_total += bytes;
@@ -380,7 +385,7 @@ static int _client_read_pa(struct client *client, struct iwn_poller_adapter *pa)
       if (ncap > server->spec.request_buf_max_size) {
         ncap = server->spec.request_buf_max_size;
       }
-      uint8_t *nbuf = realloc(stream->buf, ncap);
+      char *nbuf = realloc(stream->buf, ncap);
       if (!nbuf) {
         bytes = 0;
         break;
@@ -394,7 +399,7 @@ static int _client_read_pa(struct client *client, struct iwn_poller_adapter *pa)
 }
 
 IW_INLINE void _meta_trigger(struct parser *parser, int event) {
-  int to = _meta_transitions[parser->meta * HS_META_TYPE_LEN + event];
+  int8_t to = _meta_transitions[parser->meta * HS_META_TYPE_LEN + event];
   parser->meta = to;
 }
 
@@ -413,22 +418,249 @@ struct token _token_meta_emit(struct parser *parser) {
   return token;
 }
 
-struct token _token_parse(struct parser *parser, struct stream *stream) {
-  struct token token = _token_meta_emit(parser);
+static int _stream_next(struct stream *stream, char *c) {
+  stream->flags &= ~HS_SF_CONSUMED;
+  if (stream->index >= stream->length) {
+    return 0;
+  }
+  *c = stream->buf[stream->index];
+  return 1;
+}
 
+static void _stream_consume(struct stream *stream) {
+  if (stream->flags & HS_SF_CONSUMED) {
+    return;
+  }
+  stream->flags |= HS_SF_CONSUMED;
+  stream->index++;
+  int nlen = stream->token.len + 1;
+  stream->token.len = stream->token.type == 0 ? 0 : nlen;
+}
+
+static void _stream_shift(struct stream *stream) {
+  if (stream->token.index == stream->anchor) {
+    return;
+  }
+  if (stream->token.len > 0) {
+    char *dst = stream->buf + stream->anchor;
+    char *src = stream->buf + stream->token.index;
+    memcpy(dst, src, stream->length - stream->token.index);
+  }
+  stream->token.index = stream->anchor;
+  stream->index = stream->anchor + stream->token.len;
+  stream->length = stream->index;
+}
+
+IW_INLINE void _stream_anchor(struct stream *stream) {
+  stream->anchor = stream->index;
+}
+
+IW_INLINE void _stream_begin_token(struct stream *stream, int token_type) {
+  stream->token.type = token_type;
+  stream->token.index = stream->index;
+}
+
+IW_INLINE struct token _stream_emit(struct stream *stream) {
+  struct token token = stream->token;
+  struct token none = { 0 };
+  stream->token = none;
   return token;
 }
 
-static void _client_read(struct client *client, struct iwn_poller_adapter *pa) {
-  client->state = HTTP_SESSION_READ;
+IW_INLINE bool _stream_can_contain(struct client *client, int64_t size) {
+  return client->server->spec.request_buf_max_size - client->stream.index + 1 >= size;
+}
+
+static bool _stream_jump(struct stream *stream, int offset) {
+  stream->flags |= HS_SF_CONSUMED;
+  if (stream->index + offset > stream->length) {
+    return false;
+  }
+  int nlen = stream->token.len + offset;
+  stream->token.len = stream->token.type ? nlen : 0;
+  return true;
+}
+
+static ssize_t _stream_jumpall(struct stream *stream) {
+  stream->flags |= HS_SF_CONSUMED;
+  ssize_t offset = stream->length - stream->index;
+  stream->index += offset;
+  stream->token.len = stream->token.type ? (int) (stream->token.len + offset) : 0;
+  return offset;
+}
+
+struct token _transition(struct client *client, char c, int8_t from, int8_t to) {
+  struct server *server = client->server;
+  struct parser *parser = &client->parser;
+  struct stream *stream = &client->stream;
+  struct token emitted = { 0 };
+  if (from == HN) {
+    _stream_anchor(stream);
+  }
+  if (from != to) {
+    int8_t type = _token_start_states[to];
+    if (type != HS_TOK_NONE) {
+      _stream_begin_token(stream, type);
+    }
+    if (from == CS) {
+      _meta_trigger(parser, HS_META_END_CHK_SIZE);
+    }
+    if (to == HK) {
+      parser->header_count++;
+      if (parser->header_count > server->spec.request_max_header_count) {
+        emitted.type = HS_TOK_ERROR;
+      }
+    } else if (to == HS) {
+      _meta_trigger(parser, HS_META_END_KEY);
+      emitted = _stream_emit(stream);
+    }
+    parser->match_index = 0;
+  }
+
+  char low, m = '\0';
+  int in_bounds = 0;
+  ssize_t body_left = 0;
+
+#define _NMATCH(str__, meta__) \
+  in_bounds = parser->match_index < (int) sizeof(str__) - 1; \
+  m = in_bounds ? str__[parser->match_index] : m; \
+  low = c >= 'A' && c <= 'Z' ? c + 32 : c; \
+  if (low != m) _meta_trigger(parser, meta__)
+
+  switch (to) {
+    case MS:
+    case TS:
+      emitted = _stream_emit(stream);
+      break;
+    case RR:
+    case HR:
+      _meta_trigger(parser, HS_META_END_VALUE);
+      emitted = _stream_emit(stream);
+      break;
+    case HK:
+      _NMATCH("transfer-encoding", HS_META_NOT_TRANSFER_ENC);
+      _NMATCH("content-length", HS_META_NOT_CONTENT_LEN);
+      parser->match_index++;
+      break;
+    case HV:
+      if (parser->meta == M_MCK) {
+        _NMATCH("chunked", HS_META_NOT_CHUNKED);
+        parser->match_index++;
+      } else if (parser->meta == M_CLV) {
+        parser->content_length *= 10;
+        parser->content_length += c - '0';
+      }
+      break;
+    case HN:
+      if (parser->meta == M_SML && !_stream_can_contain(client, parser->content_length)) {
+        _meta_trigger(parser, HS_META_LARGE_BODY);
+      }
+      if (parser->meta == M_BIG || parser->meta == M_CHK) {
+        emitted.type = HS_TOK_BODY_STREAM;
+      }
+      _meta_trigger(parser, HS_META_END_HEADERS);
+      if (parser->content_length == 0 && parser->meta == M_BDY) {
+        parser->meta = M_END;
+      }
+      if (parser->meta == M_END) {
+        emitted.type = HS_TOK_BODY;
+      }
+      break;
+    case CS:
+      if (c != '0') {
+        _meta_trigger(parser, HS_META_NON_ZERO);
+      }
+      if (c >= 'A' && c <= 'F') {
+        parser->content_length *= 0x10;
+        parser->content_length += c - 55;
+      } else if (c >= 'a' && c <= 'f') {
+        parser->content_length *= 0x10;
+        parser->content_length += c - 87;
+      } else if (c >= '0' && c <= '9') {
+        parser->content_length *= 0x10;
+        parser->content_length += c - '0';
+      }
+      break;
+    case CB:
+    case BD:
+      if (parser->meta == M_STR) {
+        _stream_begin_token(stream, HS_TOK_CHUNK_BODY);
+      }
+      body_left = parser->content_length - parser->body_consumed;
+      if (_stream_jump(stream, body_left)) {
+        emitted = _stream_emit(stream);
+        _meta_trigger(parser, HS_META_NEXT);
+        if (to == CB) {
+          parser->state = CD;
+        }
+        parser->content_length = 0;
+        parser->body_consumed = 0;
+      } else {
+        parser->body_consumed += _stream_jumpall(stream);
+        if (parser->meta == M_STR) {
+          emitted = _stream_emit(stream);
+          _stream_shift(stream);
+        }
+      }
+      break;
+    case C2:
+      _meta_trigger(parser, HS_META_END_CHUNK);
+      break;
+    case BR:
+      emitted.type = HS_TOK_ERROR;
+      break;
+  }
+#undef _NMATCH
+
+  return emitted;
+}
+
+struct token _token_parse(struct client *client) {
+  struct server *server = client->server;
+  struct parser *parser = &client->parser;
+  struct stream *stream = &client->stream;
+  char c = 0;
+  struct token token = _token_meta_emit(parser);
+  if (token.type != HS_TOK_NONE) {
+    return token;
+  }
+  while (_stream_next(stream, &c)) {
+    int8_t type = c < 0 ? HS_ETC : _ctype[(size_t) c];
+    int8_t to = _transitions[parser->state * HS_CHAR_TYPE_LEN + type];
+    if (parser->meta == M_ZER && parser->state == HN && to == BD) {
+      to = CS;
+    }
+    int8_t from = parser->state;
+    parser->state = to;
+    struct token emitted = _transition(client, c, from, to);
+    _stream_consume(stream);
+    if (emitted.type != HS_TOK_NONE) {
+      return emitted;
+    }
+  }
+  if (parser->state == CB) {
+    _stream_shift(stream);
+  }
+  token = _token_meta_emit(parser);
+  struct token *ct = &stream->token;
+  if (  ct->type != HS_TOK_CHUNK_BODY
+     && ct->type != HS_TOK_BODY
+     && ct->len > server->spec.request_token_max_len) {
+    token.type = HS_TOK_ERROR;
+  }
+  return token;
+}
+
+static void _client_read(struct client *client) {
   struct token token;
-  int rci = _client_read_pa(client, pa);
+  client->state = HTTP_SESSION_READ;
+  int rci = _client_read_data(client);
   if (rci == 0) {
     client->flags |= HTTP_END_SESSION;
     return;
   }
   do {
-    token = _token_parse(&client->parser, &client->stream);
+    token = _token_parse(client);
     if (token.type != HS_TOK_NONE) {
       if (client->tokens.size == client->tokens.capacity) {
         ssize_t ncap = client->tokens.capacity * 2;
@@ -448,7 +680,17 @@ static void _client_read(struct client *client, struct iwn_poller_adapter *pa) {
         break;
       case HS_TOK_BODY:
       case HS_TOK_BODY_STREAM:
-
+        if (token.type == HS_TOK_BODY_STREAM) {
+          client->flags |= HTTP_STEAMED;
+        }
+        client->state = HTTP_SESSION_NOP;
+        client->server->spec.request_handler((void*) client);
+        break;
+      case HS_TOK_CHUNK_BODY:
+        client->state = HTTP_SESSION_NOP;
+        if (client->chunk_cb) {
+          client->chunk_cb((void*) client, client->chunk_cb_user_data);
+        }
         break;
     }
   } while (token.type != HS_TOK_NONE && client->state == HTTP_SESSION_READ);
@@ -458,6 +700,9 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
   iwrc rc = 0;
   int64_t resp = 0;
   struct client *client = user_data;
+  if (client->pa != pa) {
+    client->pa = pa;
+  }
 
   switch (client->state) {
     case HTTP_SESSION_INIT:
@@ -467,11 +712,12 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
         _client_response_error(client, 503, "Service Unavailable");
         return -1;
       }
+    //NOTE: Fallthrough
     case HTTP_SESSION_READ:
-      _client_read(client, pa);
+      _client_read(client);
       break;
     case HTTP_SESSION_WRITE:
-      _client_write(client, pa);
+      _client_write(client);
       break;
   }
 
@@ -520,6 +766,7 @@ static iwrc _client_accept(struct server *server, int fd) {
   client->pool = pool;
   client->fd = fd;
   client->server = _server_ref(server);
+  client->request.user_data = client->server->spec.user_data;
 
   int flags = fcntl(fd, F_GETFL, 0);
   RCN(finish, flags);
@@ -562,6 +809,21 @@ finish:
   }
 
   return rc;
+}
+
+bool iwn_http_is_streamed(struct iwn_http_request *req) {
+  struct client *client = (void*) req;
+  return (client->flags & HTTP_STEAMED);
+}
+
+void iwn_http_stream_read_next(
+  struct iwn_http_request *req,
+  void (*chunk_cb) (struct iwn_http_request*, void*),
+  void *user_data) {
+  struct client *client = (void*) req;
+  client->chunk_cb = chunk_cb;
+  client->chunk_cb_user_data = user_data;
+  _client_read(client);
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -641,7 +903,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   server->pool = pool;
   spec = &server->spec;
   memcpy(spec, spec_, sizeof(*spec));
-    
+
   if (!spec->request_handler) {
     rc = IW_ERROR_INVALID_ARGS;
     iwlog_ecode_error2(rc, "No request_handler specified");
@@ -669,6 +931,9 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   }
   if (spec->http_max_total_mem_usage < 1024 * 1024 * 10) {    // 10M
     spec->http_max_total_mem_usage = 4L * 1024 * 1024 * 1024; // 4Gb
+  }
+  if (spec->request_max_header_count < 1) {
+    spec->request_max_header_count = 127;
   }
   if (spec->request_buf_max_size < 1024 * 1024) {
     spec->request_buf_max_size = 8 * 1024 * 1024;

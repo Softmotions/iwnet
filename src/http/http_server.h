@@ -3,6 +3,11 @@
 
 typedef int iwn_http_server_fd_t;
 
+struct iwn_http_chunk {
+  const char *buf;
+  int len;
+};
+
 struct iwn_http_server {
   const char *listen;
   void       *user_data;
@@ -16,6 +21,7 @@ struct iwn_http_server_connection {
 };
 
 struct iwn_http_request {
+  void *user_data;
   // TODO:
 };
 
@@ -26,7 +32,7 @@ typedef void (*iwn_http_server_on_connection)(const struct iwn_http_server_conne
 struct iwn_http_server_spec {
   /// Required request handler function.
   /// Returns `false` if client connection shold be removed from poller (terminated).
-  bool (*request_handler) (struct iwn_http_request*);
+  bool (*request_handler)(struct iwn_http_request*);
   struct iwn_poller *poller; ///< Required poller reference.
   const char *listen;
   void       *user_data;
@@ -43,6 +49,7 @@ struct iwn_http_server_spec {
   int  request_timeout_keepalive_sec;
   int  request_timeout_sec;
   int  request_token_max_len;
+  int  request_max_header_count;
   int  response_buf_size;
   bool certs_data_in_buffer;      ///< true if `certs_data` specified as data buffer rather a file name.
   bool private_key_in_buffer;     ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
@@ -51,3 +58,9 @@ struct iwn_http_server_spec {
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec, iwn_http_server_fd_t *out_fd);
 
 iwrc iwn_http_server_request_dispose(iwn_http_server_fd_t fd);
+
+void iwn_http_stream_read_next(struct iwn_http_request *req, void (*chunk_cb) (struct iwn_http_request*, void*), void*);
+
+bool iwn_http_is_streamed(struct iwn_http_request *req);
+
+struct iwn_http_chunk iwn_http_stream_chunk(struct iwn_http_request *req);
