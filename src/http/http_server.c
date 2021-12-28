@@ -206,7 +206,7 @@ static const int8_t _meta_transitions[] = {
 /* END reqend */   M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
 };
 
-static const int8_t _ctype[] = {
+static const int8_t _chtype[] = {
   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
   HS_ETC,   HS_ETC,   HS_TAB,   HS_NL,    HS_ETC,   HS_ETC,   HS_CR,
   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
@@ -353,22 +353,51 @@ finish:
   return rc;
 }
 
-static void _client_write(struct client *client) {
-  // TODO:
+static bool _client_write_data(struct client *client) {
+  struct iwn_poller_adapter *pa = client->pa;
+  struct stream *stream = &client->stream;
+  ssize_t bytes = pa->write(pa,
+                            (uint8_t*) stream->buf + stream->bytes_total,
+                            stream->length - stream->bytes_total);
+  if (bytes > 0) {
+    stream->bytes_total += bytes;
+  }
+  return errno == EPIPE ? false : true;
 }
 
-static int _client_read_data(struct client *client) {
+static void _client_write(struct client *client) {
+  iwrc rc = 0;
+  struct stream *stream = &client->stream;
+  if (!_client_write_data(client)) {
+    client->flags |= HTTP_END_SESSION;
+    return;
+  }
+  if (stream->bytes_total != stream->length) {
+    // All bytes of the body were not written and we need to wait until the
+    // socket is writable again to complete the write
+    RCC(rc, finish, iwn_poller_arm_events(client->server->spec.poller, client->server->fd, IWN_POLLOUT));
+  } else {    
+  }
+
+finish:  
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    client->flags |= HTTP_END_SESSION;    
+  }
+}
+
+static bool _client_read_data(struct client *client) {
   struct iwn_poller_adapter *pa = client->pa;
   struct stream *stream = &client->stream;
   struct server *server = client->server;
   if (stream->index < stream->length) {
-    return 1;
+    return true;
   }
   if (!stream->buf) {
     stream->buf = calloc(1, server->spec.request_buf_size);
     if (!stream->buf) {
-      return 0;
-    }  
+      return false;
+    }
     stream->capacity = server->spec.request_buf_size;
     server->memused += stream->capacity;
   }
@@ -395,7 +424,7 @@ static int _client_read_data(struct client *client) {
       server->memused += stream->capacity;
     }
   } while (bytes > 0 && stream->capacity < server->spec.request_buf_max_size);
-  return bytes ? 1 : 0;
+  return bytes ? true : false;
 }
 
 IW_INLINE void _meta_trigger(struct parser *parser, int event) {
@@ -403,7 +432,7 @@ IW_INLINE void _meta_trigger(struct parser *parser, int event) {
   parser->meta = to;
 }
 
-struct token _token_meta_emit(struct parser *parser) {
+struct token _meta_emit_token(struct parser *parser) {
   struct token token = { 0 };
   switch (parser->meta) {
     case M_SEN:
@@ -418,13 +447,13 @@ struct token _token_meta_emit(struct parser *parser) {
   return token;
 }
 
-static int _stream_next(struct stream *stream, char *c) {
+static bool _stream_next(struct stream *stream, char *c) {
   stream->flags &= ~HS_SF_CONSUMED;
   if (stream->index >= stream->length) {
-    return 0;
+    return false;
   }
   *c = stream->buf[stream->index];
-  return 1;
+  return true;
 }
 
 static void _stream_consume(struct stream *stream) {
@@ -494,6 +523,7 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
   struct parser *parser = &client->parser;
   struct stream *stream = &client->stream;
   struct token emitted = { 0 };
+
   if (from == HN) {
     _stream_anchor(stream);
   }
@@ -521,7 +551,7 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
   int in_bounds = 0;
   ssize_t body_left = 0;
 
-#define _NMATCH(str__, meta__) \
+#define MATCH(str__, meta__) \
   in_bounds = parser->match_index < (int) sizeof(str__) - 1; \
   m = in_bounds ? str__[parser->match_index] : m; \
   low = c >= 'A' && c <= 'Z' ? c + 32 : c; \
@@ -538,13 +568,13 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       emitted = _stream_emit(stream);
       break;
     case HK:
-      _NMATCH("transfer-encoding", HS_META_NOT_TRANSFER_ENC);
-      _NMATCH("content-length", HS_META_NOT_CONTENT_LEN);
+      MATCH("transfer-encoding", HS_META_NOT_TRANSFER_ENC);
+      MATCH("content-length", HS_META_NOT_CONTENT_LEN);
       parser->match_index++;
       break;
     case HV:
       if (parser->meta == M_MCK) {
-        _NMATCH("chunked", HS_META_NOT_CHUNKED);
+        MATCH("chunked", HS_META_NOT_CHUNKED);
         parser->match_index++;
       } else if (parser->meta == M_CLV) {
         parser->content_length *= 10;
@@ -610,7 +640,7 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       emitted.type = HS_TOK_ERROR;
       break;
   }
-#undef _NMATCH
+#undef MATCH
 
   return emitted;
 }
@@ -619,13 +649,15 @@ struct token _token_parse(struct client *client) {
   struct server *server = client->server;
   struct parser *parser = &client->parser;
   struct stream *stream = &client->stream;
+
   char c = 0;
-  struct token token = _token_meta_emit(parser);
+  struct token token = _meta_emit_token(parser);
   if (token.type != HS_TOK_NONE) {
     return token;
   }
+
   while (_stream_next(stream, &c)) {
-    int8_t type = c < 0 ? HS_ETC : _ctype[(size_t) c];
+    int8_t type = c < 0 ? HS_ETC : _chtype[(size_t) c];
     int8_t to = _transitions[parser->state * HS_CHAR_TYPE_LEN + type];
     if (parser->meta == M_ZER && parser->state == HN && to == BD) {
       to = CS;
@@ -641,7 +673,7 @@ struct token _token_parse(struct client *client) {
   if (parser->state == CB) {
     _stream_shift(stream);
   }
-  token = _token_meta_emit(parser);
+  token = _meta_emit_token(parser);
   struct token *ct = &stream->token;
   if (  ct->type != HS_TOK_CHUNK_BODY
      && ct->type != HS_TOK_BODY
