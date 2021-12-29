@@ -25,6 +25,7 @@
 #include <pthread.h>
 
 struct server {
+  struct iwn_http_server      server;
   struct iwn_http_server_spec spec;
   int fd;
   int refs;
@@ -76,6 +77,7 @@ struct client {
   struct tokens_buf tokens;
   struct stream     stream;
   struct parser     parser;
+  // TODO: response data struct  
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
@@ -98,10 +100,11 @@ struct client {
 #define HTTP_SESSION_NOP   3
 
 // http session flags
-#define HTTP_STEAMED          0x01U
-#define HTTP_END_SESSION      0x02U
+#define HTTP_KEEP_ALIVE       0x01U
+#define HTTP_STREAMED         0x02U
+#define HTTP_END_SESSION      0x04U
 #define HTTP_AUTOMATIC        0x08U
-#define HTTP_CHUNKED_RESPONSE 0x20U
+#define HTTP_CHUNKED_RESPONSE 0x10U
 
 // http version indicators
 #define HTTP_1_0 0
@@ -324,127 +327,13 @@ static char const *_status_text[] = {
 static struct server* _server_ref(struct server *server);
 static void _server_unref(struct server *server);
 
-///////////////////////////////////////////////////////////////////////////
-//								              Client                                   //
-///////////////////////////////////////////////////////////////////////////
-
-static void _client_response_error(struct client *client, int code, const char *response) {
-  // TODO:
-}
-
-static iwrc _client_init(struct client *client) {
-  iwrc rc = 0;
-  client->flags = HTTP_AUTOMATIC;
-  client->parser = (struct parser) {};
-  client->stream = (struct stream) {};
-  if (client->tokens.buf) {
-    free(client->tokens.buf);
-  }
-  client->tokens.capacity = 32;
-  client->tokens.size = 0;
-  client->tokens.buf = malloc(sizeof(struct token) * client->tokens.capacity);
-  if (!client->tokens.buf) {
-    client->tokens.capacity = 0;
-    rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
-    goto finish;
-  }
-
-finish:
-  return rc;
-}
-
-static bool _client_write_data(struct client *client) {
-  struct iwn_poller_adapter *pa = client->pa;
+static void _stream_reset_buffer(struct client *client) {
   struct stream *stream = &client->stream;
-  ssize_t bytes = pa->write(pa,
-                            (uint8_t*) stream->buf + stream->bytes_total,
-                            stream->length - stream->bytes_total);
-  if (bytes > 0) {
-    stream->bytes_total += bytes;
+  if (stream->buf) {
+    free(stream->buf);
+    client->server->memused -= stream->capacity;
+    stream->buf = 0;
   }
-  return errno == EPIPE ? false : true;
-}
-
-static void _client_write(struct client *client) {
-  iwrc rc = 0;
-  struct stream *stream = &client->stream;
-  if (!_client_write_data(client)) {
-    client->flags |= HTTP_END_SESSION;
-    return;
-  }
-  if (stream->bytes_total != stream->length) {
-    // All bytes of the body were not written and we need to wait until the
-    // socket is writable again to complete the write
-    RCC(rc, finish, iwn_poller_arm_events(client->server->spec.poller, client->server->fd, IWN_POLLOUT));
-  } else {    
-  }
-
-finish:  
-  if (rc) {
-    iwlog_ecode_error3(rc);
-    client->flags |= HTTP_END_SESSION;    
-  }
-}
-
-static bool _client_read_data(struct client *client) {
-  struct iwn_poller_adapter *pa = client->pa;
-  struct stream *stream = &client->stream;
-  struct server *server = client->server;
-  if (stream->index < stream->length) {
-    return true;
-  }
-  if (!stream->buf) {
-    stream->buf = calloc(1, server->spec.request_buf_size);
-    if (!stream->buf) {
-      return false;
-    }
-    stream->capacity = server->spec.request_buf_size;
-    server->memused += stream->capacity;
-  }
-  ssize_t bytes;
-  do {
-    bytes = pa->read(pa, (uint8_t*) stream->buf + stream->length, stream->capacity - stream->length);
-    if (bytes > 0) {
-      stream->length += bytes;
-      stream->bytes_total += bytes;
-    }
-    if (stream->length == stream->capacity && stream->capacity != server->spec.request_buf_max_size) {
-      server->memused -= stream->capacity;
-      ssize_t ncap = stream->capacity * 2;
-      if (ncap > server->spec.request_buf_max_size) {
-        ncap = server->spec.request_buf_max_size;
-      }
-      char *nbuf = realloc(stream->buf, ncap);
-      if (!nbuf) {
-        bytes = 0;
-        break;
-      }
-      stream->capacity = ncap;
-      stream->buf = nbuf;
-      server->memused += stream->capacity;
-    }
-  } while (bytes > 0 && stream->capacity < server->spec.request_buf_max_size);
-  return bytes ? true : false;
-}
-
-IW_INLINE void _meta_trigger(struct parser *parser, int event) {
-  int8_t to = _meta_transitions[parser->meta * HS_META_TYPE_LEN + event];
-  parser->meta = to;
-}
-
-struct token _meta_emit_token(struct parser *parser) {
-  struct token token = { 0 };
-  switch (parser->meta) {
-    case M_SEN:
-      token.type = HS_TOK_CHUNK_BODY;
-      _meta_trigger(parser, HS_META_NEXT);
-      break;
-    case M_END:
-      token.type = HS_TOK_REQ_END;
-      memset(parser, 0, sizeof(*parser));
-      break;
-  }
-  return token;
 }
 
 static bool _stream_next(struct stream *stream, char *c) {
@@ -516,6 +405,172 @@ static ssize_t _stream_jumpall(struct stream *stream) {
   stream->index += offset;
   stream->token.len = stream->token.type ? (int) (stream->token.len + offset) : 0;
   return offset;
+}
+
+///////////////////////////////////////////////////////////////////////////
+//								              Client                                   //
+///////////////////////////////////////////////////////////////////////////
+
+static void _client_response_error(struct client *client, int code, const char *response) {
+  // TODO:
+}
+
+static void _client_reset(struct client *client) {
+  client->state = HTTP_SESSION_INIT;
+  _stream_reset_buffer(client);
+}
+
+static void _client_destroy(struct client *client) {
+  if (!client) {
+    return;
+  }
+  if (client->fd > -1) {
+    close(client->fd);
+  }
+  _stream_reset_buffer(client);
+  if (client->server) {
+    if (client->server->spec.on_connection_close) {
+      client->server->spec.on_connection_close(
+        &(struct iwn_http_server_connection) {
+        .server = (void*) client->server,
+        .fd = client->fd
+      });
+    }
+    _server_unref(client->server);
+  }
+  iwpool_destroy(client->pool);
+}
+
+static iwrc _client_init(struct client *client) {
+  iwrc rc = 0;
+  client->flags = HTTP_AUTOMATIC;
+  client->parser = (struct parser) {};
+  client->stream = (struct stream) {};
+  if (client->tokens.buf) {
+    free(client->tokens.buf);
+  }
+  client->tokens.capacity = 32;
+  client->tokens.size = 0;
+  client->tokens.buf = malloc(sizeof(struct token) * client->tokens.capacity);
+  if (!client->tokens.buf) {
+    client->tokens.capacity = 0;
+    rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
+    goto finish;
+  }
+  iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
+
+finish:
+  return rc;
+}
+
+static bool _client_write_data(struct client *client) {
+  struct iwn_poller_adapter *pa = client->pa;
+  struct stream *stream = &client->stream;
+  ssize_t bytes = pa->write(pa,
+                            (uint8_t*) stream->buf + stream->bytes_total,
+                            stream->length - stream->bytes_total);
+  if (bytes > 0) {
+    stream->bytes_total += bytes;
+  }
+  return errno == EPIPE ? false : true;
+}
+
+static void _client_write(struct client *client) {
+  iwrc rc = 0;
+  struct stream *stream = &client->stream;
+  if (!_client_write_data(client)) {
+    client->flags |= HTTP_END_SESSION;
+    return;
+  }
+  if (stream->bytes_total != stream->length) {
+    // All bytes of the body were not written and we need to wait until the
+    // socket is writable again to complete the write
+    RCC(rc, finish, iwn_poller_arm_events(client->server->spec.poller, client->server->fd, IWN_POLLOUT));
+    client->state = HTTP_SESSION_WRITE;
+  } else if (client->flags & HTTP_CHUNKED_RESPONSE) {
+    // All bytes of the chunk were written and we need to get the next chunk
+    // from the application.
+    client->state = HTTP_SESSION_WRITE;
+    _stream_reset_buffer(client);
+    if (client->chunk_cb) {
+      client->chunk_cb((void*) client, client->chunk_cb_user_data);
+    }
+  } else {
+    if (client->flags & HTTP_KEEP_ALIVE) {
+      iwn_poller_set_timeout(client->server->spec.poller, client->fd,
+                             client->server->spec.request_timeout_keepalive_sec);
+      _client_reset(client);
+    } else {
+      client->flags |= HTTP_END_SESSION;
+    }
+  }
+
+finish:
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    client->flags |= HTTP_END_SESSION;
+  }
+}
+
+static bool _client_read_data(struct client *client) {
+  struct iwn_poller_adapter *pa = client->pa;
+  struct stream *stream = &client->stream;
+  struct server *server = client->server;
+  if (stream->index < stream->length) {
+    return true;
+  }
+  if (!stream->buf) {
+    stream->buf = calloc(1, server->spec.request_buf_size);
+    if (!stream->buf) {
+      return false;
+    }
+    stream->capacity = server->spec.request_buf_size;
+    server->memused += stream->capacity;
+  }
+  ssize_t bytes;
+  do {
+    bytes = pa->read(pa, (uint8_t*) stream->buf + stream->length, stream->capacity - stream->length);
+    if (bytes > 0) {
+      stream->length += bytes;
+      stream->bytes_total += bytes;
+    }
+    if (stream->length == stream->capacity && stream->capacity != server->spec.request_buf_max_size) {
+      server->memused -= stream->capacity;
+      ssize_t ncap = stream->capacity * 2;
+      if (ncap > server->spec.request_buf_max_size) {
+        ncap = server->spec.request_buf_max_size;
+      }
+      char *nbuf = realloc(stream->buf, ncap);
+      if (!nbuf) {
+        bytes = 0;
+        break;
+      }
+      stream->capacity = ncap;
+      stream->buf = nbuf;
+      server->memused += stream->capacity;
+    }
+  } while (bytes > 0 && stream->capacity < server->spec.request_buf_max_size);
+  return bytes ? true : false;
+}
+
+IW_INLINE void _meta_trigger(struct parser *parser, int event) {
+  int8_t to = _meta_transitions[parser->meta * HS_META_TYPE_LEN + event];
+  parser->meta = to;
+}
+
+struct token _meta_emit_token(struct parser *parser) {
+  struct token token = { 0 };
+  switch (parser->meta) {
+    case M_SEN:
+      token.type = HS_TOK_CHUNK_BODY;
+      _meta_trigger(parser, HS_META_NEXT);
+      break;
+    case M_END:
+      token.type = HS_TOK_REQ_END;
+      memset(parser, 0, sizeof(*parser));
+      break;
+  }
+  return token;
 }
 
 struct token _transition(struct client *client, char c, int8_t from, int8_t to) {
@@ -713,7 +768,7 @@ static void _client_read(struct client *client) {
       case HS_TOK_BODY:
       case HS_TOK_BODY_STREAM:
         if (token.type == HS_TOK_BODY_STREAM) {
-          client->flags |= HTTP_STEAMED;
+          client->flags |= HTTP_STREAMED;
         }
         client->state = HTTP_SESSION_NOP;
         client->server->spec.request_handler((void*) client);
@@ -765,23 +820,6 @@ finish:
   return resp;
 }
 
-static void _client_destroy(struct client *client) {
-  if (!client) {
-    return;
-  }
-  if (client->fd > -1) {
-    close(client->fd);
-  }
-  if (client->stream.buf) {
-    client->server->memused -= client->stream.capacity;
-    free(client->stream.buf);
-  }
-  if (client->server) {
-    _server_unref(client->server);
-  }
-  iwpool_destroy(client->pool);
-}
-
 static void _client_on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
   struct client *client = user_data;
   _client_destroy(client);
@@ -831,6 +869,13 @@ static iwrc _client_accept(struct server *server, int fd) {
           server->spec.request_timeout_sec));
   }
 
+  if (client->server->spec.on_connection) {
+    client->server->spec.on_connection(&(struct iwn_http_server_connection) {
+      .server = (void*) server,
+      .fd = fd
+    });
+  }
+
 finish:
   if (rc) {
     if (client) {
@@ -845,7 +890,7 @@ finish:
 
 bool iwn_http_is_streamed(struct iwn_http_request *req) {
   struct client *client = (void*) req;
-  return (client->flags & HTTP_STEAMED);
+  return (client->flags & HTTP_STREAMED);
 }
 
 void iwn_http_stream_read_next(
@@ -865,6 +910,9 @@ void iwn_http_stream_read_next(
 static void _server_destroy(struct server *server) {
   if (!server) {
     return;
+  }
+  if (server->spec.on_server_dispose) {
+    server->spec.on_server_dispose((void*) server);
   }
   if (server->fd > -1) {
     close(server->fd);
@@ -919,7 +967,7 @@ static void _server_on_dispose(const struct iwn_poller_task *t) {
   _server_unref(server);
 }
 
-iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_server_fd_t *out_fd) {
+iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_fd) {
   iwrc rc = 0;
   *out_fd = 0;
   int optval;
@@ -945,7 +993,9 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
     iwlog_ecode_error2(rc, "No poller specified");
     goto finish;
   }
-
+  if (spec->http_socket_queue_size < 1) {
+    spec->http_socket_queue_size = 64;
+  }
   if (spec->request_buf_size < 1024) {
     spec->request_buf_size = 1024;
   }
@@ -985,8 +1035,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   if (!spec->listen) {
     spec->listen = "localhost";
   }
-
   RCA(spec->listen = iwpool_strdup2(pool, spec->listen), finish);
+
 
   struct iwn_poller_task task = {
     .user_data  = server,
@@ -1040,7 +1090,12 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, iwn_http_s
   }
   RCN(finish, optval = fcntl(task.fd, F_GETFL, 0));
   RCN(finish, fcntl(task.fd, F_SETFL, optval | O_NONBLOCK));
-  RCN(finish, listen(task.fd, 64)); // TODO: Make configurable
+  RCN(finish, listen(task.fd, spec->http_socket_queue_size));
+
+  server->server.listen = spec->listen;
+  server->server.fd = task.fd;
+  server->server.port = spec->port;
+  server->server.user_data = spec->user_data;
 
   rc = iwn_poller_add(&task);
 
@@ -1057,8 +1112,3 @@ finish:
   return rc;
 }
 
-iwrc iwn_http_server_request_dispose(iwn_http_server_fd_t h) {
-  iwrc rc = 0;
-
-  return rc;
-}
