@@ -3,7 +3,7 @@
 
 struct iwn_http_chunk {
   const char *buf;
-  int len;
+  size_t len;
 };
 
 struct iwn_http_server {
@@ -16,12 +16,6 @@ struct iwn_http_server {
 struct iwn_http_server_connection {
   const struct iwn_http_server *server;
   int fd;
-};
-
-struct iwn_http_header {
-  const char *key;
-  const char *value;
-  struct iwn_http_header *next;
 };
 
 struct iwn_http_request {
@@ -38,7 +32,7 @@ typedef void (*iwn_http_server_on_connection_close)(const struct iwn_http_server
 struct iwn_http_server_spec {
   /// Required request handler function.
   /// Returns `false` if client connection shold be removed from poller (terminated).
-  bool (*request_handler) (struct iwn_http_request*);
+  bool (*request_handler)(struct iwn_http_request*);
   struct iwn_poller *poller; ///< Required poller reference.
   const char *listen;
   void       *user_data;
@@ -49,7 +43,6 @@ struct iwn_http_server_spec {
   size_t      certs_data_len;
   const char *private_key;
   size_t      private_key_len;
-  long http_max_total_mem_usage;
   int  port;
   int  http_socket_queue_size;
   int  request_buf_max_size;
@@ -58,15 +51,34 @@ struct iwn_http_server_spec {
   int  request_timeout_sec;
   int  request_token_max_len;
   int  request_max_header_count;
-  int  response_buf_size;
   bool certs_data_in_buffer;      ///< true if `certs_data` specified as data buffer rather a file name.
   bool private_key_in_buffer;     ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
-iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec, int *out_fd);
+iwrc iwn_http_server_create(
+  const struct iwn_http_server_spec*,
+  int *out_fd);
 
-void iwn_http_stream_read_next(struct iwn_http_request *req, void (*chunk_cb) (struct iwn_http_request*, void*), void*);
+void iwn_http_stream_read_next(struct iwn_http_request*, void (*chunk_cb)(struct iwn_http_request*, void*), void*);
 
-bool iwn_http_is_streamed(struct iwn_http_request *req);
+bool iwn_http_is_streamed(struct iwn_http_request*);
 
-struct iwn_http_chunk iwn_http_stream_chunk(struct iwn_http_request *req);
+struct iwn_http_chunk iwn_http_request_header_get(struct iwn_http_request*, const char *header_name);
+
+void iwn_http_response_code_set(struct iwn_http_request*, int code);
+
+int iwn_http_response_code_get(struct iwn_http_request*);
+
+iwrc iwn_http_response_header_set(struct iwn_http_request*, const char *header_name, const char *header_value);
+
+struct iwn_http_chunk iwn_http_response_header_get(struct iwn_http_request*, const char *header_name);
+
+void iwn_http_response_body_clear(struct iwn_http_request*);
+
+iwrc iwn_http_response_body_push(struct iwn_http_request*, const char *body, ssize_t body_len);
+
+iwrc iwn_http_response_write(struct iwn_http_request*);
+
+iwrc iwn_http_response_write_simple(
+  struct iwn_http_request*,
+  int status_code, const char *content_type, const char *body, ssize_t body_len);

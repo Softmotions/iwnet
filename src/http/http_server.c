@@ -8,11 +8,12 @@
 #include "ssl/brssl_poller_adapter.h"
 
 #include <iowow/iwlog.h>
+#include <iowow/iwutils.h>
 #include <iowow/iwpool.h>
+#include <iowow/iwxstr.h>
 
 #include <assert.h>
 #include <arpa/inet.h>
-#include <stdatomic.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <errno.h>
@@ -23,6 +24,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <ctype.h>
 
 struct server {
   struct iwn_http_server      server;
@@ -31,8 +33,7 @@ struct server {
   int refs;
   pthread_mutex_t mtx;
   IWPOOL *pool;
-  atomic_int_fast64_t memused;
-  bool https;
+  bool    https;
 };
 
 struct token {
@@ -67,6 +68,20 @@ struct parser {
   int8_t  meta;
 };
 
+
+struct header {
+  char *name;
+  char *value;
+  struct header *next;
+};
+
+struct response {
+  struct header *headers;
+  IWXSTR *body;
+  IWPOOL *pool;
+  int     code;
+};
+
 struct client {
   struct iwn_http_request request;
   void    (*chunk_cb)(struct iwn_http_request*, void*);
@@ -77,7 +92,7 @@ struct client {
   struct tokens_buf tokens;
   struct stream     stream;
   struct parser     parser;
-  // TODO: response data struct  
+  struct response   response;
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
@@ -331,7 +346,6 @@ static void _stream_reset_buffer(struct client *client) {
   struct stream *stream = &client->stream;
   if (stream->buf) {
     free(stream->buf);
-    client->server->memused -= stream->capacity;
     stream->buf = 0;
   }
 }
@@ -410,6 +424,25 @@ static ssize_t _stream_jumpall(struct stream *stream) {
 ///////////////////////////////////////////////////////////////////////////
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
+
+IW_INLINE void _response_reset(struct response *response) {
+  if (response->pool) {
+    iwpool_destroy(response->pool);
+    response->pool = 0;
+  }
+  if (response->body) {
+    iwxstr_destroy(response->body);
+    response->body = 0;
+  }
+  response->headers = 0;
+  response->code = 200;
+}
+
+static iwrc _response_headers_flush(struct client *client) {
+  iwrc rc = 0;
+
+  return rc;
+}
 
 static void _client_response_error(struct client *client, int code, const char *response) {
   // TODO:
@@ -525,7 +558,6 @@ static bool _client_read_data(struct client *client) {
       return false;
     }
     stream->capacity = server->spec.request_buf_size;
-    server->memused += stream->capacity;
   }
   ssize_t bytes;
   do {
@@ -535,7 +567,6 @@ static bool _client_read_data(struct client *client) {
       stream->bytes_total += bytes;
     }
     if (stream->length == stream->capacity && stream->capacity != server->spec.request_buf_max_size) {
-      server->memused -= stream->capacity;
       ssize_t ncap = stream->capacity * 2;
       if (ncap > server->spec.request_buf_max_size) {
         ncap = server->spec.request_buf_max_size;
@@ -547,7 +578,6 @@ static bool _client_read_data(struct client *client) {
       }
       stream->capacity = ncap;
       stream->buf = nbuf;
-      server->memused += stream->capacity;
     }
   } while (bytes > 0 && stream->capacity < server->spec.request_buf_max_size);
   return bytes ? true : false;
@@ -795,10 +825,6 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
     case HTTP_SESSION_INIT:
       RCC(rc, finish, _client_init(client));
       client->state = HTTP_SESSION_READ;
-      if (client->server->memused > client->server->spec.http_max_total_mem_usage) {
-        _client_response_error(client, 503, "Service Unavailable");
-        return -1;
-      }
     //NOTE: Fallthrough
     case HTTP_SESSION_READ:
       _client_read(client);
@@ -888,19 +914,174 @@ finish:
   return rc;
 }
 
-bool iwn_http_is_streamed(struct iwn_http_request *req) {
-  struct client *client = (void*) req;
+///////////////////////////////////////////////////////////////////////////
+//								      Client Public API                                //
+///////////////////////////////////////////////////////////////////////////
+
+bool iwn_http_is_streamed(struct iwn_http_request *request) {
+  struct client *client = (void*) request;
   return (client->flags & HTTP_STREAMED);
 }
 
 void iwn_http_stream_read_next(
-  struct iwn_http_request *req,
-  void (*chunk_cb) (struct iwn_http_request*, void*),
+  struct iwn_http_request *request,
+  void (*chunk_cb)(struct iwn_http_request*, void*),
   void *user_data) {
-  struct client *client = (void*) req;
+  struct client *client = (void*) request;
   client->chunk_cb = chunk_cb;
   client->chunk_cb_user_data = user_data;
   _client_read(client);
+}
+
+struct iwn_http_chunk iwn_http_request_header_get(struct iwn_http_request *request, const char *header_name) {
+  struct client *client = (void*) request;
+  size_t len = strlen(header_name);
+  for (int i = 0; i < client->tokens.size; ++i) {
+    struct token token = client->tokens.buf[i];
+    if (token.type == HS_TOK_HEADER_KEY && token.len == len) {
+      token = client->tokens.buf[i + 1];
+      return (struct iwn_http_chunk) {
+               .buf = &client->stream.buf[token.index],
+               .len = token.len
+      };
+    }
+  }
+  return (struct iwn_http_chunk) {};
+}
+
+int iwn_http_response_code_get(struct iwn_http_request *request) {
+  return ((struct client*) request)->response.code;
+}
+
+void iwn_http_response_code_set(struct iwn_http_request *request, int code) {
+  struct client *client = (void*) request;
+  client->response.code = code;
+}
+
+struct iwn_http_chunk iwn_http_response_header_get(struct iwn_http_request *request, const char *header_name) {
+  struct client *client = (void*) request;
+  for (struct header *h = client->response.headers; h; h = h->next) {
+    if (strcasecmp(h->name, header_name) == 0) {
+      return (struct iwn_http_chunk) {
+               .buf = h->value,
+               .len = strlen(h->value)
+      };
+    }
+  }
+  return (struct iwn_http_chunk) {};
+}
+
+iwrc iwn_http_response_header_set(struct iwn_http_request *request, const char *header_name, const char *header_value) {
+  iwrc rc = 0;
+  struct client *client = (void*) request;
+  struct response *response = &client->response;
+  struct header *header = 0;
+
+  if (!response->pool) {
+    RCA(response->pool = iwpool_create_empty(), finish);
+  }
+  for (struct header *h = response->headers; h; h = h->next) {
+    if (strcasecmp(h->name, header_name) == 0) {
+      header = h;
+      break;
+    }
+  }
+  if (IW_LIKELY(header == 0)) {
+    RCA(header = iwpool_alloc(sizeof(*header), response->pool), finish);
+    RCA(header->name = iwpool_strdup2(response->pool, header_name), finish);
+    for (char *p = header->name; *p != '\0'; ++p) {
+      *p = (char) tolower((unsigned char) *p);
+    }
+    header->next = response->headers;
+    response->headers = header;
+  } else {
+    RCA(header->value = iwpool_strdup2(response->pool, header_value), finish);
+  }
+
+finish:
+  return rc;
+}
+
+void iwn_http_response_body_clear(struct iwn_http_request *request) {
+  struct client *client = (void*) request;
+  iwxstr_destroy(client->response.body);
+  client->response.body = 0;
+}
+
+iwrc iwn_http_response_body_push(struct iwn_http_request *request, const char *body, ssize_t body_len) {
+  if (body_len < 1 && !body) {
+    return 0;
+  }
+  if (!body) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  struct client *client = (void*) request;
+  if (body_len < 0) {
+    body_len = strlen(body);
+  }
+  if (!client->response.body) {
+    client->response.body = iwxstr_new2(body_len);
+    if (!client->response.body) {
+      return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+    }
+  }
+  return iwxstr_cat(client->response.body, body, body_len);
+}
+
+static iwrc _response_headers_write(struct client *client, IWXSTR *xstr) {
+  iwrc rc = 0;
+  for (struct header *h = client->response.headers; h; h = h->next) {
+    RCC(rc, finish, iwxstr_printf(xstr, "%s: %s\r\n", h->name, h->value));
+  }
+  if (client->response.body && !(client->flags & HTTP_CHUNKED_RESPONSE)) {
+    RCC(rc, finish, iwxstr_printf(xstr, "content-length: %d\r\n", (int) iwxstr_size(client->response.body)));
+  }
+  rc = iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1);
+finish:
+  return rc;
+}
+
+static void _client_autodetect_keep_alive(struct client *client) {
+  // TODO:
+}
+
+static iwrc _response_headers_write_all(struct client *client, IWXSTR *xstr) {
+  iwrc rc = 0;
+  if (client->flags & HTTP_AUTOMATIC) {
+    // TODO:
+  }
+  return rc;
+}
+
+iwrc iwn_http_response_write(struct iwn_http_request *request) {
+  iwrc rc = 0;
+  struct client *client = (void*) request;
+  IWXSTR *buf = iwxstr_new();
+  if (!buf) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+
+  return rc;
+}
+
+iwrc iwn_http_response_write_simple(
+  struct iwn_http_request *request,
+  int                      status_code,
+  const char              *content_type,
+  const char              *body,
+  ssize_t                  body_len) {
+
+  iwrc rc = 0;
+  iwn_http_response_code_set(request, status_code);
+  if (!content_type) {
+    content_type = "text/plain";
+  }
+  RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type));
+  RCC(rc, finish, iwn_http_response_body_push(request, body, body_len));
+  rc = iwn_http_response_write(request);
+
+finish:
+  return rc;
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -999,9 +1180,6 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   if (spec->request_buf_size < 1024) {
     spec->request_buf_size = 1024;
   }
-  if (spec->response_buf_size < 1024) {
-    spec->response_buf_size = 1024;
-  }
   if (spec->request_timeout_sec < 1) {
     spec->request_timeout_sec = 20;
   }
@@ -1010,9 +1188,6 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   }
   if (spec->request_token_max_len < 8192) {
     spec->request_token_max_len = 8192;
-  }
-  if (spec->http_max_total_mem_usage < 1024 * 1024 * 10) {    // 10M
-    spec->http_max_total_mem_usage = 4L * 1024 * 1024 * 1024; // 4Gb
   }
   if (spec->request_max_header_count < 1) {
     spec->request_max_header_count = 127;
@@ -1111,4 +1286,3 @@ finish:
   }
   return rc;
 }
-
