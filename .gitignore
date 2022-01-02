@@ -1,3 +1,4 @@
+src/httpserver.h
 /build
 
 ### CMake ###

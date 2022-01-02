@@ -12,23 +12,26 @@
 #include <iowow/iwpool.h>
 #include <iowow/iwxstr.h>
 
-#include <assert.h>
 #include <arpa/inet.h>
+#include <assert.h>
+#include <ctype.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
-#include <errno.h>
+#include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
-#include <pthread.h>
-#include <ctype.h>
 
 struct server {
   struct iwn_http_server      server;
   struct iwn_http_server_spec spec;
+  atomic_long stime;  ///< Server time second since epoch.
   int fd;
   int refs;
   pthread_mutex_t mtx;
@@ -341,6 +344,16 @@ static char const *_status_text[] = {
 
 static struct server* _server_ref(struct server *server);
 static void _server_unref(struct server *server);
+
+static void _server_time(struct server *server, char out_buf[32]) {
+  time_t rawtime;
+  time(&rawtime);
+  if (server->stime != rawtime) {
+    server->stime = rawtime;
+    struct tm *timeinfo = gmtime(&rawtime);
+    strftime(out_buf, 32, "%a, %d %b %Y %T GMT", timeinfo);
+  }
+}
 
 static void _stream_reset_buffer(struct client *client) {
   struct stream *stream = &client->stream;
@@ -768,6 +781,22 @@ struct token _token_parse(struct client *client) {
   return token;
 }
 
+static struct iwn_http_chunk _token_get_string(struct client *client, int token_type) {
+  struct iwn_http_chunk ret = { 0 };
+  if (client->tokens.buf == 0) {
+    return ret;
+  }
+  for (int i = 0; i < client->tokens.size; ++i) {
+    struct token token = client->tokens.buf[i];
+    if (token.type == token_type) {
+      ret.buf = &client->stream.buf[token.index];
+      ret.len = token.len;
+      return ret;
+    }
+  }
+  return ret;
+}
+
 static void _client_read(struct client *client) {
   struct token token;
   client->state = HTTP_SESSION_READ;
@@ -1028,6 +1057,21 @@ iwrc iwn_http_response_body_push(struct iwn_http_request *request, const char *b
   return iwxstr_cat(client->response.body, body, body_len);
 }
 
+static void _client_autodetect_keep_alive(struct client *client) {
+  struct iwn_http_chunk chk = _token_get_string(client, HS_TOK_VERSION);
+  if (chk.buf == 0) {
+    return;
+  }
+  bool version = chk.buf[chk.len - 1] == '1';
+  chk = iwn_http_request_header_get(&client->request, "connection");
+  if (  (chk.len == 5 && strncasecmp(chk.buf, "close", 5) == 0)
+     || (chk.len == 0 && version == HTTP_1_0)) {
+    client->flags &= ~HTTP_KEEP_ALIVE;
+  } else {
+    client->flags |= HTTP_KEEP_ALIVE;
+  }
+}
+
 static iwrc _response_headers_write(struct client *client, IWXSTR *xstr) {
   iwrc rc = 0;
   for (struct header *h = client->response.headers; h; h = h->next) {
@@ -1037,19 +1081,31 @@ static iwrc _response_headers_write(struct client *client, IWXSTR *xstr) {
     RCC(rc, finish, iwxstr_printf(xstr, "content-length: %d\r\n", (int) iwxstr_size(client->response.body)));
   }
   rc = iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1);
+
 finish:
   return rc;
-}
-
-static void _client_autodetect_keep_alive(struct client *client) {
-  // TODO:
 }
 
 static iwrc _response_headers_write_all(struct client *client, IWXSTR *xstr) {
   iwrc rc = 0;
   if (client->flags & HTTP_AUTOMATIC) {
-    // TODO:
+    _client_autodetect_keep_alive(client);
   }
+  if (client->flags & HTTP_KEEP_ALIVE) {
+    iwn_http_response_header_set(&client->request, "connection", "keep-alive");
+  } else {
+    iwn_http_response_header_set(&client->request, "connection", "close");
+  }
+  char dbuf[32];
+  _server_time(client->server, dbuf);
+  RCC(rc, finish, iwxstr_printf(xstr, "HTTP/1.1 %d %s\r\nDate: %s\r\n",
+                                client->response.code,
+                                _status_text[client->response.code],
+                                dbuf));
+
+  rc = _response_headers_write(client, xstr);
+
+finish:
   return rc;
 }
 
