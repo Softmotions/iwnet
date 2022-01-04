@@ -3,7 +3,7 @@
 
 struct iwn_http_chunk {
   const char *buf;
-  size_t len;
+  size_t      len;
 };
 
 struct iwn_http_server {
@@ -75,10 +75,10 @@ struct iwn_http_chunk iwn_http_response_header_get(struct iwn_http_request*, con
 
 void iwn_http_response_body_clear(struct iwn_http_request*);
 
-iwrc iwn_http_response_body_push(struct iwn_http_request*, const char *body, ssize_t body_len);
+void iwn_http_response_body_set(struct iwn_http_request*, char *body, ssize_t body_len, void (*body_free)(void*));
 
 iwrc iwn_http_response_write(struct iwn_http_request*);
 
 iwrc iwn_http_response_write_simple(
   struct iwn_http_request*,
-  int status_code, const char *content_type, const char *body, ssize_t body_len);
+  int status_code, const char *content_type, char *body, ssize_t body_len, void (*body_free)(void*));

@@ -16,7 +16,7 @@ if !exists('g:build_dir')
   let g:build_dir = g:root_dir.'/build'
 endif
 
-let &l:makeprg = 'cd '.g:build_dir.' && make -j1'
+let &g:makeprg = 'cd '.g:build_dir.' && make -j1'
 
 packadd termdebug
 let g:termdebug_wide = 1

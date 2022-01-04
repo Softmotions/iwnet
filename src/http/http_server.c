@@ -80,8 +80,10 @@ struct header {
 
 struct response {
   struct header *headers;
-  IWXSTR *body;
   IWPOOL *pool;
+  char   *body;
+  void    (*body_free)(void*);
+  size_t  body_len;
   int     code;
 };
 
@@ -444,7 +446,10 @@ IW_INLINE void _response_reset(struct response *response) {
     response->pool = 0;
   }
   if (response->body) {
-    iwxstr_destroy(response->body);
+    if (response->body_free) {
+      response->body_free(response->body);
+      response->body_free = 0;
+    }
     response->body = 0;
   }
   response->headers = 0;
@@ -1033,28 +1038,27 @@ finish:
 
 void iwn_http_response_body_clear(struct iwn_http_request *request) {
   struct client *client = (void*) request;
-  iwxstr_destroy(client->response.body);
-  client->response.body = 0;
+  if (client->response.body) {
+    if (client->response.body_free) {
+      client->response.body_free(client->response.body);
+      client->response.body_free = 0;
+    }
+    client->response.body = 0;
+  }
 }
 
-iwrc iwn_http_response_body_push(struct iwn_http_request *request, const char *body, ssize_t body_len) {
-  if (body_len < 1 && !body) {
-    return 0;
-  }
-  if (!body) {
-    return IW_ERROR_INVALID_ARGS;
+void iwn_http_response_body_set(struct iwn_http_request *request, char *body, ssize_t body_len, void (*body_free)(void*)) {
+  if (body_len < 1 || !body) {
+    return;
   }
   struct client *client = (void*) request;
   if (body_len < 0) {
     body_len = strlen(body);
   }
-  if (!client->response.body) {
-    client->response.body = iwxstr_new2(body_len);
-    if (!client->response.body) {
-      return iwrc_set_errno(IW_ERROR_ALLOC, errno);
-    }
-  }
-  return iwxstr_cat(client->response.body, body, body_len);
+  iwn_http_response_body_clear(request);
+  client->response.body = body;
+  client->response.body_len = body_len;
+  client->response.body_free = body_free;  
 }
 
 static void _client_autodetect_keep_alive(struct client *client) {
@@ -1078,7 +1082,7 @@ static iwrc _response_headers_write(struct client *client, IWXSTR *xstr) {
     RCC(rc, finish, iwxstr_printf(xstr, "%s: %s\r\n", h->name, h->value));
   }
   if (client->response.body && !(client->flags & HTTP_CHUNKED_RESPONSE)) {
-    RCC(rc, finish, iwxstr_printf(xstr, "content-length: %d\r\n", (int) iwxstr_size(client->response.body)));
+    RCC(rc, finish, iwxstr_printf(xstr, "content-length: %d\r\n", (int) client->response.body_len));
   }
   rc = iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1);
 
@@ -1112,11 +1116,13 @@ finish:
 iwrc iwn_http_response_write(struct iwn_http_request *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  IWXSTR *buf = iwxstr_new();
-  if (!buf) {
+  IWXSTR *xstr = iwxstr_new();
+  if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
+  RCC(rc, finish, _response_headers_write_all(client, xstr));
 
+finish:
   return rc;
 }
 
@@ -1124,8 +1130,9 @@ iwrc iwn_http_response_write_simple(
   struct iwn_http_request *request,
   int                      status_code,
   const char              *content_type,
-  const char              *body,
-  ssize_t                  body_len) {
+  char              *body,
+  ssize_t                  body_len,
+  void (*body_free)(void*)) {
 
   iwrc rc = 0;
   iwn_http_response_code_set(request, status_code);
@@ -1133,7 +1140,7 @@ iwrc iwn_http_response_write_simple(
     content_type = "text/plain";
   }
   RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type));
-  RCC(rc, finish, iwn_http_response_body_push(request, body, body_len));
+  iwn_http_response_body_set(request, body, body_len, body_free);
   rc = iwn_http_response_write(request);
 
 finish:
