@@ -2,6 +2,8 @@
 
 #include "poller.h"
 
+IW_EXTERN_C_START
+
 typedef enum {
   _WS_ERROR_START = (IW_ERROR_START + 203000UL),
   WS_ERROR_INVALID_URL,          ///< Invalid URL (WS_ERROR_INVALID_URL)
@@ -32,13 +34,15 @@ struct iwn_ws_spec {
   void (*on_connected)(const struct iwn_ws_ctx *ctx);
 
   void   *user_data;
-  long    timeout_sec;         ///< Comm inactivity timeout
-  uint8_t flags; ///< `IWN_WS_VERIFY_*` flags
+  long    timeout_sec; ///< Comm inactivity timeout
+  uint8_t flags;       ///< `IWN_WS_VERIFY_*` flags
 };
 
-iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws);
+IW_EXPORT iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws);
 
 /// Notify poller to close websocket. `on_dispose` handler will be called afterward.
-void iwn_ws_close(struct iwn_ws *ws);
+IW_EXPORT void iwn_ws_close(struct iwn_ws *ws);
 
-iwrc iwn_ws_write_text(struct iwn_ws *ws, const void *buf, size_t buf_len);
+IW_EXPORT iwrc iwn_ws_write_text(struct iwn_ws *ws, const void *buf, size_t buf_len);
+
+IW_EXTERN_C_END

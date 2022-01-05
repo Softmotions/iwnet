@@ -1,6 +1,8 @@
 #pragma once
 #include "poller.h"
 
+IW_EXTERN_C_START
+
 struct iwn_http_chunk {
   const char *buf;
   size_t      len;
@@ -45,6 +47,7 @@ struct iwn_http_server_spec {
   size_t      private_key_len;
   int  port;
   int  http_socket_queue_size;
+  int  response_buf_size;
   int  request_buf_max_size;
   int  request_buf_size;
   int  request_timeout_keepalive_sec;
@@ -55,30 +58,54 @@ struct iwn_http_server_spec {
   bool private_key_in_buffer;     ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
-iwrc iwn_http_server_create(
+IW_EXPORT iwrc iwn_http_server_create(
   const struct iwn_http_server_spec*,
   int *out_fd);
 
-void iwn_http_stream_read_next(struct iwn_http_request*, void (*chunk_cb)(struct iwn_http_request*, void*), void*);
-
-bool iwn_http_is_streamed(struct iwn_http_request*);
-
-struct iwn_http_chunk iwn_http_request_header_get(struct iwn_http_request*, const char *header_name);
-
-void iwn_http_response_code_set(struct iwn_http_request*, int code);
-
-int iwn_http_response_code_get(struct iwn_http_request*);
-
-iwrc iwn_http_response_header_set(struct iwn_http_request*, const char *header_name, const char *header_value);
-
-struct iwn_http_chunk iwn_http_response_header_get(struct iwn_http_request*, const char *header_name);
-
-void iwn_http_response_body_clear(struct iwn_http_request*);
-
-void iwn_http_response_body_set(struct iwn_http_request*, char *body, ssize_t body_len, void (*body_free)(void*));
-
-iwrc iwn_http_response_write(struct iwn_http_request*);
-
-iwrc iwn_http_response_write_simple(
+IW_EXPORT void iwn_http_stream_read_next(
   struct iwn_http_request*,
-  int status_code, const char *content_type, char *body, ssize_t body_len, void (*body_free)(void*));
+  void (*chunk_cb)(struct iwn_http_request*, void*),
+  void*);
+
+IW_EXPORT bool iwn_http_is_streamed(struct iwn_http_request*);
+
+IW_EXPORT struct iwn_http_chunk iwn_http_request_header_get(struct iwn_http_request*, const char *header_name);
+
+IW_EXPORT void iwn_http_response_code_set(struct iwn_http_request*, int code);
+
+IW_EXPORT int iwn_http_response_code_get(struct iwn_http_request*);
+
+IW_EXPORT iwrc iwn_http_response_header_set(
+  struct iwn_http_request*,
+  const char *header_name,
+  const char *header_value);
+
+IW_EXPORT struct iwn_http_chunk iwn_http_response_header_get(struct iwn_http_request*, const char *header_name);
+
+IW_EXPORT void iwn_http_response_body_clear(struct iwn_http_request*);
+
+IW_EXPORT void iwn_http_response_body_set(
+  struct iwn_http_request*,
+  char   *body,
+  ssize_t body_len,
+  void ( *body_free )(void*));
+
+IW_EXPORT iwrc iwn_http_response_write(struct iwn_http_request*);
+
+IW_EXPORT iwrc iwn_http_response_write_simple(
+  struct iwn_http_request*,
+  int         status_code,
+  const char *content_type,
+  char       *body,
+  ssize_t     body_len,
+  void (     *body_free )(void*));
+
+IW_EXPORT iwrc iwn_http_response_write_chunk(
+  struct iwn_http_request*,
+  char *body,
+  ssize_t body_len,
+  void (*body_free)(void*),
+  void (*chunk_cb)(struct iwn_http_request*, void*),
+  void*);
+
+IW_EXTERN_C_END

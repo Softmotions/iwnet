@@ -4,6 +4,8 @@
 
 #include <stdint.h>
 
+IW_EXTERN_C_START
+
 #if defined(__FreeBSD__) || defined(__APPLE__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define IWN_KQUEUE
 #endif
@@ -32,24 +34,26 @@ struct iwn_poller_task {                                         // !!! Sync fie
   struct iwn_poller *poller;                                     ///< Poller
 };
 
-iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iwn_poller **out_poller);
+IW_EXPORT iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iwn_poller **out_poller);
 
-iwrc iwn_poller_add(const struct iwn_poller_task *task);
+IW_EXPORT iwrc iwn_poller_add(const struct iwn_poller_task *task);
 
-iwrc iwn_poller_arm_events(struct iwn_poller *poller, int fd, uint32_t events);
+IW_EXPORT iwrc iwn_poller_arm_events(struct iwn_poller *poller, int fd, uint32_t events);
 
-void iwn_poller_set_timeout(struct iwn_poller *poller, int fd, long timeout_sec);
+IW_EXPORT void iwn_poller_set_timeout(struct iwn_poller *poller, int fd, long timeout_sec);
 
-void iwn_poller_remove(struct iwn_poller *poller, int fd);
+IW_EXPORT void iwn_poller_remove(struct iwn_poller *poller, int fd);
 
-void iwn_poller_shutdown_request(struct iwn_poller *p);
+IW_EXPORT void iwn_poller_shutdown_request(struct iwn_poller *p);
 
-void iwn_poller_shutdown_wait(struct iwn_poller *p);
+IW_EXPORT void iwn_poller_shutdown_wait(struct iwn_poller *p);
 
-void iwn_poller_destroy(struct iwn_poller **pp);
+IW_EXPORT void iwn_poller_destroy(struct iwn_poller **pp);
 
-iwrc iwn_poller_task(struct iwn_poller *p, void (*task) (void*), void *arg);
+IW_EXPORT iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg);
 
-void iwn_poller_poll(struct iwn_poller *p);
+IW_EXPORT void iwn_poller_poll(struct iwn_poller *p);
 
-bool iwn_poller_alive(struct iwn_poller *p);
+IW_EXPORT bool iwn_poller_alive(struct iwn_poller *p);
+
+IW_EXTERN_C_END

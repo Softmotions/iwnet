@@ -1,7 +1,5 @@
 #pragma once
 
-#include <stddef.h>
-
 /* Base64 routines adapted from https://www.libsodium.org */
 /*
  * ISC License
@@ -22,6 +20,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <stddef.h>
+#include <iowow/basedefs.h>
+
+IW_EXTERN_C_START
+
 #define base64_VARIANT_ORIGINAL            1
 #define base64_VARIANT_ORIGINAL_NO_PADDING 3
 #define base64_VARIANT_URLSAFE             5
@@ -38,7 +41,7 @@
 
 size_t iwn_base64_encoded_len(const size_t bin_len, const int variant);
 
-char *iwn_base64_encode(
+char* iwn_base64_encode(
   char* const                b64,
   const size_t               b64_maxlen,
   size_t                    *out_b64_len,
@@ -58,4 +61,6 @@ int iwn_base64_decode(
   const int            variant)
 __attribute__((nonnull(1)));
 
-char *iwn_base64_encode_url(const void *buf, size_t buf_len, size_t *out_len);
+IW_EXPORT char* iwn_base64_encode_url(const void *buf, size_t buf_len, size_t *out_len);
+
+IW_EXTERN_C_END

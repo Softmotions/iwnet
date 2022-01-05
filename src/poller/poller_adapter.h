@@ -2,6 +2,8 @@
 
 #include "poller.h"
 
+IW_EXTERN_C_START
+
 struct iwn_poller_adapter;
 
 typedef int64_t (*iwn_on_poller_adapter_event)(struct iwn_poller_adapter *pa, void *user_data, uint32_t events);
@@ -14,3 +16,5 @@ struct iwn_poller_adapter {
   ssize_t (*write)(struct iwn_poller_adapter *a, const uint8_t *buf, size_t len);
   int     fd;
 };
+
+IW_EXTERN_C_END

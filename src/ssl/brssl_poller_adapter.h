@@ -2,6 +2,8 @@
 
 #include "poller_adapter.h"
 
+IW_EXTERN_C_START
+
 typedef enum {
   _BRS_ERROR_START = (IW_ERROR_START + 204000UL),
   BRS_ERROR_INVALID_CASCERT_DATA, ///< Invalid CA cetificates (BRS_ERROR_INVALID_CASCERT_DATA)
@@ -26,7 +28,7 @@ struct iwn_brssl_client_poller_adapter_spec {
   bool     verify_host;
 };
 
-iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapter_spec *spec);
+IW_EXPORT iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapter_spec *spec);
 
 struct iwn_brssl_server_poller_adapter_spec {
   struct iwn_poller *poller;
@@ -45,4 +47,6 @@ struct iwn_brssl_server_poller_adapter_spec {
   bool     private_key_in_buffer; ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
-iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapter_spec *spec);
+IW_EXPORT iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapter_spec *spec);
+
+IW_EXTERN_C_END

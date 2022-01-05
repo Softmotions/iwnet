@@ -2,6 +2,8 @@
 
 #include "poller.h"
 
+IW_EXTERN_C_START
+
 struct iwn_proc_ctx {
 
   /// Child pid.
@@ -45,16 +47,18 @@ struct iwn_proc_spec {
   bool write_stdin;
 };
 
-iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid);
+IW_EXPORT iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid);
 
-iwrc iwn_proc_wait(int pid);
+IW_EXPORT iwrc iwn_proc_wait(int pid);
 
-iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close);
+IW_EXPORT iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close);
 
-iwrc iwn_proc_stdin_close(int pid);
+IW_EXPORT iwrc iwn_proc_stdin_close(int pid);
 
-void iwn_proc_kill(int pid, int signum);
+IW_EXPORT void iwn_proc_kill(int pid, int signum);
 
-void iwn_proc_kill_all(int signum);
+IW_EXPORT void iwn_proc_kill_all(int signum);
 
-void iwn_proc_dispose(void);
+IW_EXPORT void iwn_proc_dispose(void);
+
+IW_EXTERN_C_END

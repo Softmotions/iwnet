@@ -3,6 +3,8 @@
 #include "poller.h"
 #include <iowow/iwtp.h>
 
+IW_EXTERN_C_START
+
 typedef void (*iwn_scheduler_task_f)(void *arg);
 
 struct iwn_scheduler_spec {
@@ -14,4 +16,6 @@ struct iwn_scheduler_spec {
   IWTP thread_pool;          ///< Thread pool used for `task_fn()` execution. Optional.
 };
 
-iwrc iwn_schedule(const struct iwn_scheduler_spec *spec);
+IW_EXPORT iwrc iwn_schedule(const struct iwn_scheduler_spec *spec);
+
+IW_EXTERN_C_END
