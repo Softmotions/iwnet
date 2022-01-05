@@ -848,7 +848,6 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
   if (client->pa != pa) {
     client->pa = pa;
   }
-
   switch (client->state) {
     case HTTP_SESSION_INIT:
       RCC(rc, finish, _client_init(client));
@@ -861,7 +860,6 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
       _client_write(client);
       break;
   }
-
   if (client->flags & HTTP_END_SESSION) {
     resp = -1;
   }
@@ -959,6 +957,22 @@ void iwn_http_stream_read_next(
   client->chunk_cb = chunk_cb;
   client->chunk_cb_user_data = user_data;
   _client_read(client);
+}
+
+void iwn_http_connection_set_automatic(struct iwn_http_request *request) {
+  struct client *client = (void*) request;
+  client->flags |= HTTP_AUTOMATIC;
+  client->flags &= ~HTTP_KEEP_ALIVE;
+}
+
+void iwn_http_connection_set_keep_alive(struct iwn_http_request *request, bool keep_alive) {
+  struct client *client = (void*) request;
+  client->flags &= ~HTTP_AUTOMATIC;
+  if (keep_alive) {
+    client->flags |= HTTP_KEEP_ALIVE;
+  } else {
+    client->flags &= ~HTTP_KEEP_ALIVE;
+  }
 }
 
 struct iwn_http_chunk iwn_http_request_header_get(struct iwn_http_request *request, const char *header_name) {
@@ -1089,7 +1103,7 @@ finish:
   return rc;
 }
 
-static iwrc _client_response_headers_write_all(struct client *client, IWXSTR *xstr) {
+static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *xstr) {
   iwrc rc = 0;
   if (client->flags & HTTP_AUTOMATIC) {
     _client_autodetect_keep_alive(client);
@@ -1132,7 +1146,7 @@ iwrc iwn_http_response_write(struct iwn_http_request *request) {
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
-  RCC(rc, finish, _client_response_headers_write_all(client, xstr));
+  RCC(rc, finish, _client_response_headers_write_http(client, xstr));
   if (response->body) {
     RCC(rc, finish, iwxstr_cat(xstr, response->body, response->body_len));
   }
@@ -1146,7 +1160,7 @@ finish:
   return rc;
 }
 
-iwrc iwn_http_response_write_chunk(
+iwrc iwn_http_response_chunk_write(
   struct iwn_http_request *request,
   char *body,
   ssize_t body_len,
@@ -1163,13 +1177,33 @@ iwrc iwn_http_response_write_chunk(
   }
   if (!(client->flags & HTTP_CHUNKED_RESPONSE)) {
     iwn_http_response_header_set(request, "transfer-encoding", "chunked");
-    RCC(rc, finish, _client_response_headers_write_all(client, xstr));
+    RCC(rc, finish, _client_response_headers_write_http(client, xstr));
   }
   iwn_http_response_body_set(request, body, body_len, body_free);
   client->chunk_cb = chunk_cb;
   client->chunk_cb_user_data = chunk_cb_user_data;
   RCC(rc, finish, iwxstr_printf(xstr, "%X\r\n", response->body_len));
   RCC(rc, finish, iwxstr_cat(xstr, response->body, response->body_len));
+  RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
+
+  _client_response_write(client, xstr);
+
+finish:
+  if (rc) {
+    iwxstr_destroy(xstr);
+  }
+  return rc;
+}
+
+iwrc iwn_http_response_chunk_end(struct iwn_http_request *request) {
+  iwrc rc = 0;
+  struct client *client = (void*) request;
+  IWXSTR *xstr = iwxstr_new2(client->server->spec.response_buf_size);
+  if (!xstr) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  RCC(rc, finish, iwxstr_cat(xstr, "0\r\n", sizeof("0\r\n") - 1));
+  RCC(rc, finish, _client_response_headers_write(client, xstr));
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
 
   _client_response_write(client, xstr);
