@@ -8,7 +8,7 @@
 static struct iwn_poller *poller;
 
 static void _on_signal(int signo) {
-  fprintf(stderr, "Closing on SIGTERM\n");
+  fprintf(stderr, "\nClosing on signal: %d\n", signo);
   if (poller) {
     iwn_poller_shutdown_request(poller);
   }
@@ -42,16 +42,22 @@ int main(int argc, char *argv[]) {
   if (signal(SIGTERM, _on_signal) == SIG_ERR) {
     return EXIT_FAILURE;
   }
+  if (signal(SIGINT, _on_signal) == SIG_ERR) {
+    return EXIT_FAILURE;
+  }
 
   RCC(rc, finish, iwn_poller_create(1, 1, &poller));
   RCC(rc, finish, iwn_http_server_create(&(struct iwn_http_server_spec) {
     .listen = "localhost",
     .port = 9292,
+    .poller = poller,
     .user_data = poller,
     .request_handler = _request_handler,
     .on_connection = _on_connection,
     .on_connection_close = _on_connection_close,
   }, 0));
+
+  iwn_poller_poll(poller);
 
 finish:
   IWN_ASSERT(rc == 0);

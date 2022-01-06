@@ -786,8 +786,8 @@ struct token _token_parse(struct client *client) {
   return token;
 }
 
-static struct iwn_http_chunk _token_get_string(struct client *client, int token_type) {
-  struct iwn_http_chunk ret = { 0 };
+static struct iwn_http_val _token_get_string(struct client *client, int token_type) {
+  struct iwn_http_val ret = { 0 };
   if (client->tokens.buf == 0) {
     return ret;
   }
@@ -899,7 +899,7 @@ static iwrc _client_accept(struct server *server, int fd) {
   client->pool = pool;
   client->fd = fd;
   RCC(rc, finish, _server_ref(server, &client->server));
-  client->request.user_data = client->server->spec.user_data;
+  client->request.server_user_data = client->server->spec.user_data;
 
   int flags = fcntl(fd, F_GETFL, 0);
   RCN(finish, flags);
@@ -961,6 +961,24 @@ bool iwn_http_is_streamed(struct iwn_http_request *request) {
   return (client->flags & HTTP_STREAMED);
 }
 
+void iwn_http_request_free(struct iwn_http_request *request) {
+  struct client *client = (void*) request;
+  _stream_free_buffer(client);
+  _tokens_free_buffer(client);
+}
+
+struct iwn_http_val iwn_http_request_target(struct iwn_http_request *request) {
+  return _token_get_string((void*) request, HS_TOK_TARGET);
+}
+
+struct iwn_http_val iwn_http_request_method(struct iwn_http_request *request) {
+  return _token_get_string((void*) request, HS_TOK_METHOD);
+}
+
+struct iwn_http_val iwn_http_request_body(struct iwn_http_request *request) {
+  return _token_get_string((void*) request, HS_TOK_BODY);
+}
+
 void iwn_http_stream_read_next(
   struct iwn_http_request *request,
   void (*chunk_cb)(struct iwn_http_request*, void*),
@@ -987,20 +1005,64 @@ void iwn_http_connection_set_keep_alive(struct iwn_http_request *request, bool k
   }
 }
 
-struct iwn_http_chunk iwn_http_request_header_get(struct iwn_http_request *request, const char *header_name) {
+struct iwn_http_val iwn_http_request_header_get(struct iwn_http_request *request, const char *header_name) {
   struct client *client = (void*) request;
   size_t len = strlen(header_name);
   for (int i = 0; i < client->tokens.size; ++i) {
     struct token token = client->tokens.buf[i];
     if (token.type == HS_TOK_HEADER_KEY && token.len == len) {
       token = client->tokens.buf[i + 1];
-      return (struct iwn_http_chunk) {
+      return (struct iwn_http_val) {
                .buf = &client->stream.buf[token.index],
                .len = token.len
       };
     }
   }
-  return (struct iwn_http_chunk) {};
+  return (struct iwn_http_val) {};
+}
+
+static bool _iteration_headers_assign(
+  struct client       *client,
+  struct iwn_http_val *key,
+  struct iwn_http_val *val,
+  int                 *iter) {
+
+  struct token token = client->tokens.buf[*iter];
+  if (client->tokens.buf[*iter].type == HS_TOK_BODY) {
+    return false;
+  }
+  *key = (struct iwn_http_val) {
+    .buf = &client->stream.buf[token.index],
+    .len = token.len
+  };
+  (*iter)++;
+  token = client->tokens.buf[*iter];
+  *val = (struct iwn_http_val) {
+    .buf = &client->stream.buf[token.index],
+    .len = token.len
+  };
+  return true;
+}
+
+bool iwn_http_request_headers_iterate(
+  struct iwn_http_request *request,
+  struct iwn_http_val     *key,
+  struct iwn_http_val     *val,
+  int                     *iter) {
+
+  struct client *client = (void*) request;
+  if (*iter == 0) {
+    for ( ; *iter < client->tokens.size; (*iter)++) {
+      struct token token = client->tokens.buf[*iter];
+      if (token.type == HS_TOK_HEADER_KEY) {
+        return _iteration_headers_assign(client, key, val, iter);
+      }
+    }
+    return false;
+  } else {
+    (*iter)++;
+    return _iteration_headers_assign(client, key, val, iter);
+  }
 }
 
 int iwn_http_response_code_get(struct iwn_http_request *request) {
@@ -1012,17 +1074,17 @@ void iwn_http_response_code_set(struct iwn_http_request *request, int code) {
   client->response.code = code;
 }
 
-struct iwn_http_chunk iwn_http_response_header_get(struct iwn_http_request *request, const char *header_name) {
+struct iwn_http_val iwn_http_response_header_get(struct iwn_http_request *request, const char *header_name) {
   struct client *client = (void*) request;
   for (struct header *h = client->response.headers; h; h = h->next) {
     if (strcasecmp(h->name, header_name) == 0) {
-      return (struct iwn_http_chunk) {
+      return (struct iwn_http_val) {
                .buf = h->value,
                .len = strlen(h->value)
       };
     }
   }
-  return (struct iwn_http_chunk) {};
+  return (struct iwn_http_val) {};
 }
 
 iwrc iwn_http_response_header_set(struct iwn_http_request *request, const char *header_name, const char *header_value) {
@@ -1087,7 +1149,7 @@ void iwn_http_response_body_set(
 }
 
 static void _client_autodetect_keep_alive(struct client *client) {
-  struct iwn_http_chunk chk = _token_get_string(client, HS_TOK_VERSION);
+  struct iwn_http_val chk = _token_get_string(client, HS_TOK_VERSION);
   if (chk.buf == 0) {
     return;
   }

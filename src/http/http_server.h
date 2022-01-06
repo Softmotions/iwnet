@@ -3,7 +3,7 @@
 
 IW_EXTERN_C_START
 
-struct iwn_http_chunk {
+struct iwn_http_val {
   const char *buf;
   size_t      len;
 };
@@ -21,8 +21,8 @@ struct iwn_http_server_connection {
 };
 
 struct iwn_http_request {
-  void *user_data; ///< User data specified in `iwn_http_server_spec`
-  // TODO:
+  void *request_user_data; ///< Request specific user data.
+  void *server_user_data;  ///< User data specified in `iwn_http_server_spec`
 };
 
 typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
@@ -69,7 +69,21 @@ IW_EXPORT void iwn_http_stream_read_next(
 
 IW_EXPORT bool iwn_http_is_streamed(struct iwn_http_request*);
 
-IW_EXPORT struct iwn_http_chunk iwn_http_request_header_get(struct iwn_http_request*, const char *header_name);
+IW_EXPORT void iwn_http_request_free(struct iwn_http_request*);
+
+IW_EXPORT struct iwn_http_val iwn_http_request_target(struct iwn_http_request*);
+
+IW_EXPORT struct iwn_http_val iwn_http_request_method(struct iwn_http_request*);
+
+IW_EXPORT struct iwn_http_val iwn_http_request_body(struct iwn_http_request*);
+
+IW_EXPORT struct iwn_http_val iwn_http_request_header_get(struct iwn_http_request*, const char *header_name);
+
+IW_EXPORT bool iwn_http_request_headers_iterate(
+  struct iwn_http_request*,
+  struct iwn_http_val *key,
+  struct iwn_http_val *val,
+  int                 *iter);
 
 IW_EXPORT void iwn_http_connection_set_automatic(struct iwn_http_request *request);
 
@@ -84,7 +98,7 @@ IW_EXPORT iwrc iwn_http_response_header_set(
   const char *header_name,
   const char *header_value);
 
-IW_EXPORT struct iwn_http_chunk iwn_http_response_header_get(struct iwn_http_request*, const char *header_name);
+IW_EXPORT struct iwn_http_val iwn_http_response_header_get(struct iwn_http_request*, const char *header_name);
 
 IW_EXPORT void iwn_http_response_body_clear(struct iwn_http_request*);
 
