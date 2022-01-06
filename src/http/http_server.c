@@ -71,7 +71,6 @@ struct parser {
   int8_t  meta;
 };
 
-
 struct header {
   char *name;
   char *value;
