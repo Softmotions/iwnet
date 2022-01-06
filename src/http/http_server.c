@@ -1068,9 +1068,16 @@ int iwn_http_response_code_get(struct iwn_http_request *request) {
   return ((struct client*) request)->response.code;
 }
 
-void iwn_http_response_code_set(struct iwn_http_request *request, int code) {
-  struct client *client = (void*) request;
+iwrc iwn_http_response_code_set(struct iwn_http_request *request, int code) {
+  if (code < 0 || code > 599) {
+    return IW_ERROR_INVALID_ARGS; 
+  }
+  if (code == 0) {
+    code = 200;
+  }
+  struct client *client = (void*) request;  
   client->response.code = code;
+  return 0;
 }
 
 struct iwn_http_val iwn_http_response_header_get(struct iwn_http_request *request, const char *header_name) {
@@ -1297,7 +1304,7 @@ iwrc iwn_http_response_write_simple(
   void (                  *body_free )(void*)) {
 
   iwrc rc = 0;
-  iwn_http_response_code_set(request, status_code);
+  RCC(rc, finish, iwn_http_response_code_set(request, status_code));
   if (!content_type) {
     content_type = "text/plain";
   }

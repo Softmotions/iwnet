@@ -89,7 +89,7 @@ IW_EXPORT void iwn_http_connection_set_automatic(struct iwn_http_request *reques
 
 IW_EXPORT void iwn_http_connection_set_keep_alive(struct iwn_http_request*, bool keep_alive);
 
-IW_EXPORT void iwn_http_response_code_set(struct iwn_http_request*, int code);
+IW_EXPORT iwrc iwn_http_response_code_set(struct iwn_http_request*, int code);
 
 IW_EXPORT int iwn_http_response_code_get(struct iwn_http_request*);
 
