@@ -1,5 +1,5 @@
-cd ./build/src/ws/tests/ws_client_test3
-file ./ws_client_test3
+cd ./build/src/http/tests
+file ./server1
 #set args -c
 
 set follow-fork-mode parent

@@ -58,7 +58,7 @@ struct iwn_http_server_spec {
   bool private_key_in_buffer;     ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
-IW_EXPORT iwrc iwn_http_server_create(
+IW_EXPORT WUR iwrc iwn_http_server_create(
   const struct iwn_http_server_spec*,
   int *out_fd);
 
