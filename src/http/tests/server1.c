@@ -59,7 +59,7 @@ static void _chunk_resp_cb(struct iwn_http_request *req, void *data) {
       break;
     case 2:
       cdata = "\n097a5dd6-8df3-4d43-b3f1-0a01ea1d9943";
-      break;    
+      break;
   }
   if (cdata) {
     iwrc rc = iwn_http_response_chunk_write(req, cdata, -1, 0, _chunk_resp_cb, (void*) (intptr_t) chunk_count);
