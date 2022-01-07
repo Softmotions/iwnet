@@ -55,11 +55,11 @@ static void _chunk_resp_cb(struct iwn_http_request *req, void *data) {
   char *cdata = 0;
   switch (chunk_count) {
     case 1:
-      cdata = "e6276e6e-573c-4edb-b840-ae00680a5578";
+      cdata = "\ne6276e6e-573c-4edb-b840-ae00680a5578";
       break;
     case 2:
-      cdata = "097a5dd6-8df3-4d43-b3f1-0a01ea1d9943";
-      break;
+      cdata = "\n097a5dd6-8df3-4d43-b3f1-0a01ea1d9943";
+      break;    
   }
   if (cdata) {
     iwrc rc = iwn_http_response_chunk_write(req, cdata, -1, 0, _chunk_resp_cb, (void*) (intptr_t) chunk_count);
@@ -90,8 +90,8 @@ static bool _request_handler(struct iwn_http_request *req) {
     goto finish;
   } else if (iwn_http_request_target_is(req, "/chunked", -1)) {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
-    RCC(rc, finish,
-        iwn_http_response_chunk_write(req, "4cd009fb-dceb-4907-a6be-dd05c3f052b3", -1, 0, _chunk_resp_cb, 0));
+    RCC(rc, finish, iwn_http_response_chunk_write(req, "4cd009fb-dceb-4907-a6be-dd05c3f052b3",
+                                                  -1, 0, _chunk_resp_cb, 0));
     goto finish;
   } else {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));

@@ -1284,6 +1284,7 @@ iwrc iwn_http_response_chunk_write(
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   if (!(client->flags & HTTP_CHUNKED_RESPONSE)) {
+    client->flags |= HTTP_CHUNKED_RESPONSE;
     iwn_http_response_header_set(request, "transfer-encoding", "chunked");
     RCC(rc, finish, _client_response_headers_write_http(client, xstr));
   }
