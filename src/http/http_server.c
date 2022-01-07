@@ -1306,14 +1306,14 @@ finish:
 iwrc iwn_http_response_chunk_end(struct iwn_http_request *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  IWXSTR *xstr = iwxstr_new2(client->server->spec.response_buf_size);
+  IWXSTR *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   RCC(rc, finish, iwxstr_cat(xstr, "0\r\n", sizeof("0\r\n") - 1));
   RCC(rc, finish, _client_response_headers_write(client, xstr));
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
-
+  client->flags &= ~HTTP_CHUNKED_RESPONSE;
   _client_response_write(client, xstr);
 
 finish:

@@ -386,7 +386,9 @@ void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
     s->timeout_limit = INT_MAX;
   }
   pthread_mutex_unlock(&p->mtx);
-  _timer_check((void*) s, s->timeout_limit);
+  if (timeout_sec > 0) {
+    _timer_check((void*) s, s->timeout_limit);
+  }
 }
 
 void iwn_poller_shutdown_request(struct iwn_poller *p) {
