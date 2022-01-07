@@ -31,11 +31,12 @@
 struct server {
   struct iwn_http_server      server;
   struct iwn_http_server_spec spec;
-  atomic_long stime;  ///< Server time second since epoch.
-  int fd;
-  int refs;
+  long stime;  ///< Server time second since epoch.
+  int  fd;
+  int  refs;
   pthread_mutex_t mtx;
   IWPOOL *pool;
+  char    stime_text[32]; ///< Formatted as: `%a, %d %b %Y %T GMT`
   bool    https;
 };
 
@@ -345,13 +346,17 @@ static iwrc _server_ref(struct server *server, struct server **out);
 static void _server_unref(struct server *server);
 
 static void _server_time(struct server *server, char out_buf[32]) {
+  static_assert(sizeof(server->stime_text) == 32, "sizeof(server->stime) == 32");
   time_t rawtime;
   time(&rawtime);
+  pthread_mutex_lock(&server->mtx);
   if (server->stime != rawtime) {
     server->stime = rawtime;
     struct tm *timeinfo = gmtime(&rawtime);
-    strftime(out_buf, 32, "%a, %d %b %Y %T GMT", timeinfo);
+    strftime(server->stime_text, sizeof(server->stime_text), "%a, %d %b %Y %T GMT", timeinfo);
   }
+  memcpy(out_buf, server->stime_text, sizeof(server->stime_text));
+  pthread_mutex_unlock(&server->mtx);
 }
 
 IW_INLINE void _stream_free_buffer(struct client *client) {
@@ -1028,17 +1033,25 @@ void iwn_http_connection_set_keep_alive(struct iwn_http_request *request, bool k
   }
 }
 
-struct iwn_http_val iwn_http_request_header_get(struct iwn_http_request *request, const char *header_name) {
+struct iwn_http_val iwn_http_request_header_get(
+  struct iwn_http_request *request,
+  const char              *header_name,
+  ssize_t                  header_name_len) {
+
   struct client *client = (void*) request;
-  size_t len = strlen(header_name);
+  if (header_name_len < 0) {
+    header_name_len = strlen(header_name);
+  }
   for (int i = 0; i < client->tokens.size; ++i) {
     struct token token = client->tokens.buf[i];
-    if (token.type == HS_TOK_HEADER_KEY && token.len == len) {
-      token = client->tokens.buf[i + 1];
-      return (struct iwn_http_val) {
-               .buf = &client->stream.buf[token.index],
-               .len = token.len
-      };
+    if (token.type == HS_TOK_HEADER_KEY && token.len == header_name_len) {
+      if (strncasecmp(&client->stream.buf[token.index], header_name, header_name_len) == 0) {
+        token = client->tokens.buf[i + 1];
+        return (struct iwn_http_val) {
+                 .buf = &client->stream.buf[token.index],
+                 .len = token.len
+        };
+      }
     }
   }
   return (struct iwn_http_val) {};
@@ -1185,7 +1198,7 @@ static void _client_autodetect_keep_alive(struct client *client) {
     return;
   }
   int version = val.buf[val.len - 1] == '1';
-  val = iwn_http_request_header_get(&client->request, "connection");
+  val = iwn_http_request_header_get(&client->request, "connection", sizeof("connection") - 1);
   if (  (val.len == 5 && strncasecmp(val.buf, "close", 5) == 0)
      || (val.len == 0 && version == HTTP_1_0)) {
     client->flags &= ~HTTP_KEEP_ALIVE;

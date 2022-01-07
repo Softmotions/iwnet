@@ -81,7 +81,7 @@ IW_EXPORT struct iwn_http_val iwn_http_request_method(struct iwn_http_request*);
 
 IW_EXPORT struct iwn_http_val iwn_http_request_body(struct iwn_http_request*);
 
-IW_EXPORT struct iwn_http_val iwn_http_request_header_get(struct iwn_http_request*, const char *header_name);
+IW_EXPORT struct iwn_http_val iwn_http_request_header_get(struct iwn_http_request*, const char *header_name, ssize_t header_name_len);
 
 IW_EXPORT bool iwn_http_request_headers_iterate(
   struct iwn_http_request*,

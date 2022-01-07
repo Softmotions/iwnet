@@ -80,7 +80,7 @@ static bool _request_handler(struct iwn_http_request *req) {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/host", -1)) {
-    struct iwn_http_val val = iwn_http_request_header_get(req, "Host");
+    struct iwn_http_val val = iwn_http_request_header_get(req, "Host", -1);
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/large", -1)) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
@@ -90,7 +90,7 @@ static bool _request_handler(struct iwn_http_request *req) {
     goto finish;
   } else if (iwn_http_request_target_is(req, "/chunked", -1)) {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
-    RCC(rc, finish, iwn_http_response_chunk_write(req, "4cd009fb-dceb-4907-a6be-dd05c3f052b3",
+    RCC(rc, finish, iwn_http_response_chunk_write(req, "\n4cd009fb-dceb-4907-a6be-dd05c3f052b3",
                                                   -1, 0, _chunk_resp_cb, 0));
     goto finish;
   } else {
