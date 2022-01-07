@@ -4,6 +4,8 @@
 
 #include <pthread.h>
 #include <signal.h>
+#include <string.h>
+#include <stdint.h>
 
 static struct iwn_poller *poller;
 
@@ -12,6 +14,12 @@ static void _on_signal(int signo) {
   if (poller) {
     iwn_poller_shutdown_request(poller);
   }
+}
+
+static bool request_target_is(struct iwn_http_request *request, const char* target) {
+  struct iwn_http_val val = iwn_http_request_target(request);
+  size_t tlen = strlen(target);
+  return val.len == tlen && memcmp(val.buf, target, tlen) == 0;
 }
 
 static void _server_on_dispose(const struct iwn_http_server *srv) {
@@ -27,6 +35,19 @@ static void _on_connection_close(const struct iwn_http_server_connection *conn) 
 }
 
 static bool _request_handler(struct iwn_http_request *req) {
+  iwrc rc = 0;
+
+  fprintf(stderr, "request handler called !!!\n");
+    
+  RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
+  iwn_http_response_body_set(req, "Hello!", -1, 0);
+
+  rc = iwn_http_response_end(req);
+
+finish:  
+  if (rc) {
+    iwlog_ecode_error3(rc);
+  }
   return true;
 }
 
@@ -55,6 +76,9 @@ int main(int argc, char *argv[]) {
     .request_handler = _request_handler,
     .on_connection = _on_connection,
     .on_connection_close = _on_connection_close,
+    .on_server_dispose = _server_on_dispose,
+    .request_timeout_sec = INT32_MAX,
+    .request_timeout_keepalive_sec = INT32_MAX
   }, 0));
 
   iwn_poller_poll(poller);

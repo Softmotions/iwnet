@@ -354,18 +354,18 @@ static void _server_time(struct server *server, char out_buf[32]) {
   }
 }
 
-static void _stream_free_buffer(struct client *client) {
+IW_INLINE void _stream_free_buffer(struct client *client) {
   if (client->stream.buf) {
     free(client->stream.buf);
-    client->stream.buf = 0;
   }
+  memset(&client->stream, 0, sizeof(client->stream));
 }
 
-static void _tokens_free_buffer(struct client *client) {
+IW_INLINE void _tokens_free_buffer(struct client *client) {
   if (client->tokens.buf) {
     free(client->tokens.buf);
-    memset(&client->tokens, 0, sizeof(client->tokens));
   }
+  memset(&client->tokens, 0, sizeof(client->tokens));
 }
 
 static bool _stream_next(struct stream *stream, char *c) {
@@ -465,9 +465,10 @@ static iwrc _client_response_error(struct client *client, int code, char *respon
 static void _client_reset(struct client *client) {
   client->state = HTTP_SESSION_INIT;
   _stream_free_buffer(client);
+  _tokens_free_buffer(client);
 }
 
-static void _client_destroy(struct client *client) {
+static void _client_destroy(struct client *client) {  
   if (!client) {
     return;
   }
@@ -489,11 +490,9 @@ static void _client_destroy(struct client *client) {
 static iwrc _client_init(struct client *client) {
   iwrc rc = 0;
   client->flags = HTTP_AUTOMATIC;
+  _stream_free_buffer(client);
+  _tokens_free_buffer(client);
   memset(&client->parser, 0, sizeof(client->parser));
-  memset(&client->stream, 0, sizeof(client->stream));
-  if (client->tokens.buf) {
-    free(client->tokens.buf);
-  }
   client->tokens.capacity = 32;
   client->tokens.size = 0;
   client->tokens.buf = malloc(sizeof(client->tokens.buf[0]) * client->tokens.capacity);
@@ -598,7 +597,7 @@ static bool _client_read_bytes(struct client *client) {
     }
   } while (bytes > 0);
 
-  return bytes > 0;
+  return bytes != 0;
 }
 
 IW_INLINE void _meta_trigger(struct parser *parser, int event) {
@@ -889,8 +888,7 @@ static iwrc _client_accept(struct server *server, int fd) {
     close(fd);
     return rc;
   }
-  struct client *client;
-  client = iwpool_alloc(sizeof(*client), pool);
+  struct client *client = iwpool_calloc(sizeof(*client), pool);
   if (!client) {
     rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
     goto finish;
@@ -955,7 +953,7 @@ finish:
 //								      Client Public API                                //
 ///////////////////////////////////////////////////////////////////////////
 
-bool iwn_http_is_streamed(struct iwn_http_request *request) {
+bool iwn_http_request_is_streamed(struct iwn_http_request *request) {
   struct client *client = (void*) request;
   return (client->flags & HTTP_STREAMED);
 }
@@ -978,7 +976,7 @@ struct iwn_http_val iwn_http_request_body(struct iwn_http_request *request) {
   return _token_get_string((void*) request, HS_TOK_BODY);
 }
 
-void iwn_http_stream_read_next(
+void iwn_http_request_chunk_next(
   struct iwn_http_request *request,
   void (*chunk_cb)(struct iwn_http_request*, void*),
   void *user_data) {
@@ -986,6 +984,15 @@ void iwn_http_stream_read_next(
   client->chunk_cb = chunk_cb;
   client->chunk_cb_user_data = user_data;
   _client_read(client);
+}
+
+struct iwn_http_val iwn_http_request_chunk_get(struct iwn_http_request *request) {
+  struct client *client = (void*) request;
+  struct token *token = &client->tokens.buf[client->tokens.size - 1];
+  return (struct iwn_http_val) {
+           .buf = &client->stream.buf[token->index],
+           .len = token->len
+  };
 }
 
 void iwn_http_connection_set_automatic(struct iwn_http_request *request) {
@@ -1070,12 +1077,12 @@ int iwn_http_response_code_get(struct iwn_http_request *request) {
 
 iwrc iwn_http_response_code_set(struct iwn_http_request *request, int code) {
   if (code < 0 || code > 599) {
-    return IW_ERROR_INVALID_ARGS; 
+    return IW_ERROR_INVALID_ARGS;
   }
   if (code == 0) {
     code = 200;
   }
-  struct client *client = (void*) request;  
+  struct client *client = (void*) request;
   client->response.code = code;
   return 0;
 }
@@ -1114,6 +1121,7 @@ iwrc iwn_http_response_header_set(struct iwn_http_request *request, const char *
     for (char *p = header->name; *p != '\0'; ++p) {
       *p = (char) tolower((unsigned char) *p);
     }
+    RCA(header->value = iwpool_strdup2(response->pool, header_value), finish);
     header->next = response->headers;
     response->headers = header;
   } else {
@@ -1141,7 +1149,7 @@ void iwn_http_response_body_set(
   ssize_t                  body_len,
   void (                  *body_free )(void*)) {
 
-  if (body_len < 1 || !body) {
+  if (!body || body_len == 0) {
     return;
   }
   struct client *client = (void*) request;
@@ -1155,14 +1163,14 @@ void iwn_http_response_body_set(
 }
 
 static void _client_autodetect_keep_alive(struct client *client) {
-  struct iwn_http_val chk = _token_get_string(client, HS_TOK_VERSION);
-  if (chk.buf == 0) {
+  struct iwn_http_val val = _token_get_string(client, HS_TOK_VERSION);
+  if (val.buf == 0) {
     return;
   }
-  bool version = chk.buf[chk.len - 1] == '1';
-  chk = iwn_http_request_header_get(&client->request, "connection");
-  if (  (chk.len == 5 && strncasecmp(chk.buf, "close", 5) == 0)
-     || (chk.len == 0 && version == HTTP_1_0)) {
+  int version = val.buf[val.len - 1] == '1';
+  val = iwn_http_request_header_get(&client->request, "connection");
+  if (  (val.len == 5 && strncasecmp(val.buf, "close", 5) == 0)
+     || (val.len == 0 && version == HTTP_1_0)) {
     client->flags &= ~HTTP_KEEP_ALIVE;
   } else {
     client->flags |= HTTP_KEEP_ALIVE;
@@ -1193,6 +1201,9 @@ static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *x
   } else {
     iwn_http_response_header_set(&client->request, "connection", "close");
   }
+  if (client->response.code == 0) {
+    client->response.code = 200;
+  }
   char dbuf[32];
   _server_time(client->server, dbuf);
   RCC(rc, finish, iwxstr_printf(xstr, "HTTP/1.1 %d %s\r\nDate: %s\r\n",
@@ -1207,6 +1218,7 @@ finish:
 }
 
 static void _client_response_write(struct client *client, IWXSTR *xstr) {
+  _stream_free_buffer(client);
   struct stream *s = &client->stream;
   s->length = iwxstr_size(xstr);
   s->capacity = iwxstr_asize(xstr);
@@ -1218,7 +1230,7 @@ static void _client_response_write(struct client *client, IWXSTR *xstr) {
   _client_write(client);
 }
 
-iwrc iwn_http_response_write(struct iwn_http_request *request) {
+iwrc iwn_http_response_end(struct iwn_http_request *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -1310,7 +1322,7 @@ iwrc iwn_http_response_write_simple(
   }
   RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type));
   iwn_http_response_body_set(request, body, body_len, body_free);
-  rc = iwn_http_response_write(request);
+  rc = iwn_http_response_end(request);
 
 finish:
   return rc;

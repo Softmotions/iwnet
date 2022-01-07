@@ -1,5 +1,6 @@
 src/httpserver.h
 /build
+.breakpoints
 
 ### CMake ###
 CMakeLists.txt.user
