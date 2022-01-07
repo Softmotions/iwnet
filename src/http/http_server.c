@@ -79,11 +79,11 @@ struct header {
 
 struct response {
   struct header *headers;
-  IWPOOL *pool;
-  char   *body;
-  void    (*body_free)(void*);
-  size_t  body_len;
-  int     code;
+  IWPOOL     *pool;
+  const char *body;
+  void   (*body_free)(void*);
+  size_t body_len;
+  int    code;
 };
 
 struct client {
@@ -449,7 +449,7 @@ IW_INLINE void _response_data_reset(struct response *response) {
   }
   if (response->body) {
     if (response->body_free) {
-      response->body_free(response->body);
+      response->body_free((void*) response->body);
       response->body_free = 0;
     }
     response->body = 0;
@@ -468,7 +468,7 @@ static void _client_reset(struct client *client) {
   _tokens_free_buffer(client);
 }
 
-static void _client_destroy(struct client *client) {  
+static void _client_destroy(struct client *client) {
   if (!client) {
     return;
   }
@@ -968,6 +968,14 @@ struct iwn_http_val iwn_http_request_target(struct iwn_http_request *request) {
   return _token_get_string((void*) request, HS_TOK_TARGET);
 }
 
+bool iwn_http_request_target_is(struct iwn_http_request *request, const char *target, ssize_t target_len) {
+  struct iwn_http_val val = iwn_http_request_target(request);
+  if (target_len < 0) {
+    target_len = strlen(target);
+  }
+  return val.len == target_len && memcmp(val.buf, target, target_len) == 0;
+}
+
 struct iwn_http_val iwn_http_request_method(struct iwn_http_request *request) {
   return _token_get_string((void*) request, HS_TOK_METHOD);
 }
@@ -1136,7 +1144,7 @@ void iwn_http_response_body_clear(struct iwn_http_request *request) {
   struct client *client = (void*) request;
   if (client->response.body) {
     if (client->response.body_free) {
-      client->response.body_free(client->response.body);
+      client->response.body_free((void*) client->response.body);
       client->response.body_free = 0;
     }
     client->response.body = 0;
@@ -1145,7 +1153,7 @@ void iwn_http_response_body_clear(struct iwn_http_request *request) {
 
 void iwn_http_response_body_set(
   struct iwn_http_request *request,
-  char                    *body,
+  const char              *body,
   ssize_t                  body_len,
   void (                  *body_free )(void*)) {
 
@@ -1182,7 +1190,7 @@ static iwrc _client_response_headers_write(struct client *client, IWXSTR *xstr) 
   for (struct header *h = client->response.headers; h; h = h->next) {
     RCC(rc, finish, iwxstr_printf(xstr, "%s: %s\r\n", h->name, h->value));
   }
-  if (client->response.body && !(client->flags & HTTP_CHUNKED_RESPONSE)) {
+  if (!(client->flags & HTTP_CHUNKED_RESPONSE)) {
     RCC(rc, finish, iwxstr_printf(xstr, "content-length: %d\r\n", (int) client->response.body_len));
   }
   rc = iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1);

@@ -75,6 +75,8 @@ IW_EXPORT void iwn_http_request_free(struct iwn_http_request*);
 
 IW_EXPORT struct iwn_http_val iwn_http_request_target(struct iwn_http_request*);
 
+IW_EXPORT bool iwn_http_request_target_is(struct iwn_http_request*, const char *target, ssize_t target_len);
+
 IW_EXPORT struct iwn_http_val iwn_http_request_method(struct iwn_http_request*);
 
 IW_EXPORT struct iwn_http_val iwn_http_request_body(struct iwn_http_request*);
@@ -106,9 +108,9 @@ IW_EXPORT void iwn_http_response_body_clear(struct iwn_http_request*);
 
 IW_EXPORT void iwn_http_response_body_set(
   struct iwn_http_request*,
-  char   *body,
-  ssize_t body_len,
-  void ( *body_free )(void*));
+  const char *body,
+  ssize_t     body_len,
+  void (     *body_free )(void*));
 
 IW_EXPORT iwrc iwn_http_response_end(struct iwn_http_request*);
 
