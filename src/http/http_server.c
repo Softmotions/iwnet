@@ -447,7 +447,7 @@ static ssize_t _stream_jumpall(struct stream *stream) {
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
 
-IW_INLINE void _response_data_reset(struct response *response) {
+IW_INLINE void _response_free(struct response *response) {
   if (response->pool) {
     iwpool_destroy(response->pool);
     response->pool = 0;
@@ -489,6 +489,7 @@ static void _client_destroy(struct client *client) {
   }
   _stream_free_buffer(client);
   _tokens_free_buffer(client);
+  _response_free(&client->response);
   iwpool_destroy(client->pool);
 }
 
@@ -1256,7 +1257,7 @@ static void _client_response_write(struct client *client, IWXSTR *xstr) {
   s->bytes_total = 0;
   client->state = HTTP_SESSION_WRITE;
   iwxstr_destroy_keep_ptr(xstr);
-  _response_data_reset(&client->response);
+  _response_free(&client->response);
   _client_write(client);
 }
 
