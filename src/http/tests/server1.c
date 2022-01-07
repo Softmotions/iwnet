@@ -28,16 +28,23 @@ static void _on_connection_close(const struct iwn_http_server_connection *conn) 
   fprintf(stderr, "On connection close: %d\n", conn->fd);
 }
 
+
+
 static bool _request_handler(struct iwn_http_request *req) {
   iwrc rc = 0;
-  
+
   if (iwn_http_request_target_is(req, "/empty", -1)) {
     ; // No body
   } else if (iwn_http_request_target_is(req, "/echo", -1)) {
     struct iwn_http_val val = iwn_http_request_body(req);
-    IWN_ASSERT_FATAL(val.len > 0 && val.buf);
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
     iwn_http_response_body_set(req, val.buf, val.len, 0);
+  } else if (iwn_http_request_target_is(req, "/host", -1)) {
+    struct iwn_http_val val = iwn_http_request_header_get(req, "Host");
+    iwn_http_response_body_set(req, val.buf, val.len, 0);
+  } else if (iwn_http_request_target_is(req, "/large", -1)) {
+    IWN_ASSERT(iwn_http_request_is_streamed(req));
+    // TODO:
   } else {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
     iwn_http_response_body_set(req, "Hello!", -1, 0);
