@@ -36,7 +36,7 @@ struct iwn_poller {
   int fds_count;              ///< Numbver of active file descriptors
   int max_poll_events;        ///< Max wait epoll_wait fd events at once
 
-  long timeout_next;             ///< Next timeout check
+  atomic_long timeout_next;      ///< Next timeout check
   atomic_long timeout_checktime; ///< Last time of timeout check
 
   khash_t(SLOTS) * slots;
@@ -300,7 +300,8 @@ IW_INLINE int64_t _timer_ready(const struct iwn_poller_task *t, uint32_t events)
 }
 
 IW_INLINE void _timer_check(const struct iwn_poller_task *t, time_t time_limit) {
-  if (time_limit < t->poller->timeout_next) {
+  long timeout_next = t->poller->timeout_next;
+  if (time_limit < timeout_next || timeout_next == 0) {
     _timer_ready(t, 0);
   }
 }
@@ -356,7 +357,12 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
     goto finish;
   }
 
-  _timer_check((void*) s, s->timeout_limit);
+  if (s->timeout_sec > 0) {
+    s->timeout_limit = _time_sec() + s->timeout_sec;
+    _timer_check((void*) s, s->timeout_limit);
+  } else {
+    s->timeout_limit = INT_MAX;
+  }
 
 finish:
   if (rc) {
@@ -372,9 +378,15 @@ void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
     pthread_mutex_unlock(&p->mtx);
     return;
   }
-  s->timeout_sec = timeout_sec;
+  if (timeout_sec > 0) {
+    s->timeout_sec = timeout_sec;
+    s->timeout_limit = _time_sec() + s->timeout_sec;
+  } else {
+    s->timeout_sec = 0;
+    s->timeout_limit = INT_MAX;
+  }
   pthread_mutex_unlock(&p->mtx);
-  _timer_check((void*) s, 0);
+  _timer_check((void*) s, s->timeout_limit);
 }
 
 void iwn_poller_shutdown_request(struct iwn_poller *p) {
@@ -525,7 +537,7 @@ bool iwn_poller_alive(struct iwn_poller *p) {
   return p && !p->stop && p->fds_count > 0;
 }
 
-iwrc iwn_poller_task(struct iwn_poller *p, void (*task) (void*), void *arg) {
+iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
   return iwtp_schedule(p->tp, task, arg);
 }
 

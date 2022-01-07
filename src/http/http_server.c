@@ -493,6 +493,8 @@ static iwrc _client_init(struct client *client) {
   _stream_free_buffer(client);
   _tokens_free_buffer(client);
   memset(&client->parser, 0, sizeof(client->parser));
+  client->chunk_cb = 0;
+  client->chunk_cb_user_data = 0;
   client->tokens.capacity = 32;
   client->tokens.size = 0;
   client->tokens.buf = malloc(sizeof(client->tokens.buf[0]) * client->tokens.capacity);
@@ -501,7 +503,7 @@ static iwrc _client_init(struct client *client) {
     rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
     goto finish;
   }
-  if (client->server->spec.request_timeout_sec) {
+  if (client->server->spec.request_timeout_sec > 0) {
     iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
   }
 
@@ -534,14 +536,18 @@ static void _client_write(struct client *client) {
   } else if (client->flags & HTTP_CHUNKED_RESPONSE) {
     client->state = HTTP_SESSION_WRITE;
     _stream_free_buffer(client);
-    iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
+    if (client->server->spec.request_timeout_sec > 0) {
+      iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
+    }
     if (client->chunk_cb) {
       client->chunk_cb((void*) client, client->chunk_cb_user_data);
     }
   } else {
     if (client->flags & HTTP_KEEP_ALIVE) {
-      iwn_poller_set_timeout(client->server->spec.poller, client->fd,
-                             client->server->spec.request_timeout_keepalive_sec);
+      if (client->server->spec.request_timeout_keepalive_sec > 0) {
+        iwn_poller_set_timeout(client->server->spec.poller, client->fd,
+                               client->server->spec.request_timeout_keepalive_sec);
+      }
       _client_reset(client);
     } else {
       client->flags |= HTTP_END_SESSION;
@@ -803,6 +809,9 @@ static struct iwn_http_val _token_get_string(struct client *client, int token_ty
 static void _client_read(struct client *client) {
   struct token token;
   client->state = HTTP_SESSION_READ;
+  if (client->server->spec.request_timeout_sec > 0) {
+    iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
+  }
   if (!_client_read_bytes(client)) {
     client->flags |= HTTP_END_SESSION;
     return;
@@ -1250,7 +1259,6 @@ iwrc iwn_http_response_end(struct iwn_http_request *request) {
   if (response->body) {
     RCC(rc, finish, iwxstr_cat(xstr, response->body, response->body_len));
   }
-
   _client_response_write(client, xstr);
 
 finish:
@@ -1439,10 +1447,10 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   if (spec->request_buf_size < 1024) {
     spec->request_buf_size = 1024;
   }
-  if (spec->request_timeout_sec < 1) {
+  if (spec->request_timeout_sec == 0) {
     spec->request_timeout_sec = 20;
   }
-  if (spec->request_timeout_keepalive_sec < 1) {
+  if (spec->request_timeout_keepalive_sec == 0) {
     spec->request_timeout_keepalive_sec = 120;
   }
   if (spec->request_token_max_len < 8192) {

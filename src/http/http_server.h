@@ -50,8 +50,8 @@ struct iwn_http_server_spec {
   int  response_buf_size;
   int  request_buf_max_size;
   int  request_buf_size;
-  int  request_timeout_keepalive_sec;
-  int  request_timeout_sec;
+  int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 - Use default timeout.
+  int  request_timeout_sec;           ///< -1 - Disable timeout, 0 - Use default timeout.
   int  request_token_max_len;
   int  request_max_header_count;
   bool certs_data_in_buffer;      ///< true if `certs_data` specified as data buffer rather a file name.

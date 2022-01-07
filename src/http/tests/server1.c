@@ -2,10 +2,13 @@
 #include "utils/tests.h"
 #include "http_server.h"
 
+#include <iowow/iwxstr.h>
+
 #include <pthread.h>
 #include <signal.h>
 #include <string.h>
-#include <stdint.h>
+#include <limits.h>
+#include <errno.h>
 
 static struct iwn_poller *poller;
 
@@ -28,7 +31,23 @@ static void _on_connection_close(const struct iwn_http_server_connection *conn) 
   fprintf(stderr, "On connection close: %d\n", conn->fd);
 }
 
-
+static void _chunk_req_cb(struct iwn_http_request *req, void *data) {
+  IWXSTR *xstr = data;
+  IWN_ASSERT_FATAL(xstr);
+  struct iwn_http_val val = iwn_http_request_chunk_get(req);
+  if (val.len > 0) {
+    iwrc rc = iwxstr_cat(xstr, val.buf, val.len);
+    IWN_ASSERT_FATAL(rc == 0);    
+    iwn_http_request_chunk_next(req, _chunk_req_cb, xstr);
+  } else {
+    char *body = iwxstr_ptr(xstr);
+    size_t body_len = iwxstr_size(xstr);
+    iwxstr_destroy_keep_ptr(xstr);
+    iwn_http_response_body_set(req, body, body_len, free);
+    iwrc rc = iwn_http_response_end(req);
+    IWN_ASSERT(rc == 0);
+  }
+}
 
 static bool _request_handler(struct iwn_http_request *req) {
   iwrc rc = 0;
@@ -44,7 +63,10 @@ static bool _request_handler(struct iwn_http_request *req) {
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/large", -1)) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
-    // TODO:
+    IWXSTR *xstr;
+    RCA(xstr = iwxstr_new(), finish);
+    iwn_http_request_chunk_next(req, _chunk_req_cb, xstr);
+    goto finish;
   } else {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
     iwn_http_response_body_set(req, "Hello!", -1, 0);
@@ -85,8 +107,8 @@ int main(int argc, char *argv[]) {
     .on_connection = _on_connection,
     .on_connection_close = _on_connection_close,
     .on_server_dispose = _server_on_dispose,
-    .request_timeout_sec = INT32_MAX,
-    .request_timeout_keepalive_sec = INT32_MAX
+    .request_timeout_sec = -1,
+    .request_timeout_keepalive_sec = -1
   }, 0));
 
   iwn_poller_poll(poller);
