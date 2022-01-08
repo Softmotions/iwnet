@@ -7,6 +7,7 @@ file(
   COPY .
   DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
   FILES_MATCHING
+  PATTERN "*.sh"
   PATTERN "*.js"
   PATTERN "*.pem"
   PATTERN "*.lock"

@@ -12,23 +12,30 @@
 
 static struct iwn_poller *poller;
 
+#define STATE_SERVER_DISPOSED  0x01U
+#define STATE_CLOSED_ON_SIGNAL 0x02U
+
+static uint32_t state;
+static int64_t opened_fds_sum;
+static int64_t closed_fds_sum;
+
 static void _on_signal(int signo) {
-  fprintf(stderr, "\nClosing on signal: %d\n", signo);
+  state |= STATE_CLOSED_ON_SIGNAL;
   if (poller) {
     iwn_poller_shutdown_request(poller);
   }
 }
 
 static void _server_on_dispose(const struct iwn_http_server *srv) {
-  fprintf(stderr, "On server dispose\n");
+  state |= STATE_SERVER_DISPOSED;
 }
 
 static void _on_connection(const struct iwn_http_server_connection *conn) {
-  fprintf(stderr, "On connection: %d\n", conn->fd);
+  opened_fds_sum += conn->fd;
 }
 
 static void _on_connection_close(const struct iwn_http_server_connection *conn) {
-  fprintf(stderr, "On connection close: %d\n", conn->fd);
+  closed_fds_sum += conn->fd;
 }
 
 static void _chunk_req_cb(struct iwn_http_request *req) {
@@ -151,6 +158,9 @@ int main(int argc, char *argv[]) {
 
 finish:
   IWN_ASSERT(rc == 0);
+  IWN_ASSERT(state & STATE_SERVER_DISPOSED);
+  IWN_ASSERT(state & STATE_CLOSED_ON_SIGNAL);
+  IWN_ASSERT(opened_fds_sum == closed_fds_sum);
   iwn_poller_destroy(&poller);
   return iwn_asserts_failed > 0 ? 1 : 0;
 }
