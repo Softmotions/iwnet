@@ -406,7 +406,8 @@ static void _stream_shift(struct stream *stream) {
   if (stream->token.len > 0) {
     char *dst = stream->buf + stream->anchor;
     char *src = stream->buf + stream->token.index;
-    memcpy(dst, src, stream->length - stream->token.index);
+    ssize_t bytes = stream->length - stream->token.index;
+    memcpy(dst, src, bytes);
   }
   stream->token.index = stream->anchor;
   stream->index = stream->anchor + stream->token.len;
@@ -437,8 +438,9 @@ static bool _stream_jump(struct stream *stream, int offset) {
   if (stream->index + offset > stream->length) {
     return false;
   }
+  stream->index += offset;
   int nlen = stream->token.len + offset;
-  stream->token.len = stream->token.type ? nlen : 0;
+  stream->token.len = stream->token.type == 0 ? 0 : nlen;
   return true;
 }
 
@@ -446,7 +448,8 @@ static ssize_t _stream_jumpall(struct stream *stream) {
   stream->flags |= HS_SF_CONSUMED;
   ssize_t offset = stream->length - stream->index;
   stream->index += offset;
-  stream->token.len = stream->token.type ? (int) (stream->token.len + offset) : 0;
+  int nlen = (int) (stream->token.len + offset);
+  stream->token.len = stream->token.type == 0 ? 0 : nlen;
   return offset;
 }
 
@@ -656,7 +659,8 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       _meta_trigger(parser, HS_META_END_CHK_SIZE);
     }
     if (to == HK) {
-      if (++parser->header_count > server->spec.request_max_header_count) {
+      ++parser->header_count;
+      if (parser->header_count > server->spec.request_max_header_count) {
         emitted.type = HS_TOK_ERROR;
       }
     } else if (to == HS) {
