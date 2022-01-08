@@ -89,8 +89,7 @@ struct response {
 
 struct client {
   struct iwn_http_request request;
-  void    (*chunk_cb)(struct iwn_http_request*, void*);
-  void   *chunk_cb_user_data;
+  void    (*chunk_cb)(struct iwn_http_request*);
   IWPOOL *pool;
   struct iwn_poller_adapter *pa;
   struct server    *server;
@@ -373,6 +372,14 @@ IW_INLINE void _tokens_free_buffer(struct client *client) {
   memset(&client->tokens, 0, sizeof(client->tokens));
 }
 
+IW_INLINE void _request_data_free(struct client *client) {
+  if (client->request.on_request_destroy) {
+    client->request.on_request_destroy(&client->request);
+    client->request.on_request_destroy = 0;
+  }
+  client->request.request_user_data = 0;
+}
+
 static bool _stream_next(struct stream *stream, char *c) {
   stream->flags &= ~HS_SF_CONSUMED;
   if (stream->index >= stream->length) {
@@ -447,7 +454,8 @@ static ssize_t _stream_jumpall(struct stream *stream) {
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
 
-IW_INLINE void _response_free(struct response *response) {
+IW_INLINE void _response_free(struct client *client) {
+  struct response *response = &client->response;
   if (response->pool) {
     iwpool_destroy(response->pool);
     response->pool = 0;
@@ -469,38 +477,36 @@ static iwrc _client_response_error(struct client *client, int code, char *respon
 
 static void _client_reset(struct client *client) {
   client->state = HTTP_SESSION_INIT;
+  _request_data_free(client);
   _stream_free_buffer(client);
   _tokens_free_buffer(client);
+  _response_free(client);
 }
 
 static void _client_destroy(struct client *client) {
   if (!client) {
     return;
   }
+  if (client->server && client->server->spec.on_connection_close) {
+    client->server->spec.on_connection_close(
+      &(struct iwn_http_server_connection) {
+      .server = (void*) client->server,
+      .fd = client->fd
+    });
+  }
+  _client_reset(client);
   if (client->server) {
-    if (client->server->spec.on_connection_close) {
-      client->server->spec.on_connection_close(
-        &(struct iwn_http_server_connection) {
-        .server = (void*) client->server,
-        .fd = client->fd
-      });
-    }
     _server_unref(client->server);
   }
-  _stream_free_buffer(client);
-  _tokens_free_buffer(client);
-  _response_free(&client->response);
   iwpool_destroy(client->pool);
 }
 
 static iwrc _client_init(struct client *client) {
   iwrc rc = 0;
+  _client_reset(client);
   client->flags = HTTP_AUTOMATIC;
-  _stream_free_buffer(client);
-  _tokens_free_buffer(client);
   memset(&client->parser, 0, sizeof(client->parser));
   client->chunk_cb = 0;
-  client->chunk_cb_user_data = 0;
   client->tokens.capacity = 32;
   client->tokens.size = 0;
   client->tokens.buf = malloc(sizeof(client->tokens.buf[0]) * client->tokens.capacity);
@@ -546,7 +552,7 @@ static void _client_write(struct client *client) {
       iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
     }
     if (client->chunk_cb) {
-      client->chunk_cb((void*) client, client->chunk_cb_user_data);
+      client->chunk_cb((void*) client);
     }
   } else {
     if (client->flags & HTTP_KEEP_ALIVE) {
@@ -852,7 +858,7 @@ static void _client_read(struct client *client) {
       case HS_TOK_CHUNK_BODY:
         client->state = HTTP_SESSION_NOP;
         if (client->chunk_cb) {
-          client->chunk_cb(&client->request, client->chunk_cb_user_data);
+          client->chunk_cb(&client->request);
         }
         break;
     }
@@ -975,6 +981,7 @@ bool iwn_http_request_is_streamed(struct iwn_http_request *request) {
 
 void iwn_http_request_free(struct iwn_http_request *request) {
   struct client *client = (void*) request;
+  _request_data_free(client);
   _stream_free_buffer(client);
   _tokens_free_buffer(client);
 }
@@ -999,13 +1006,9 @@ struct iwn_http_val iwn_http_request_body(struct iwn_http_request *request) {
   return _token_get_string((void*) request, HS_TOK_BODY);
 }
 
-void iwn_http_request_chunk_next(
-  struct iwn_http_request *request,
-  void (*chunk_cb)(struct iwn_http_request*, void*),
-  void *user_data) {
+void iwn_http_request_chunk_next(struct iwn_http_request *request, void (*chunk_cb)(struct iwn_http_request*)) {
   struct client *client = (void*) request;
   client->chunk_cb = chunk_cb;
-  client->chunk_cb_user_data = user_data;
   _client_read(client);
 }
 
@@ -1257,7 +1260,7 @@ static void _client_response_write(struct client *client, IWXSTR *xstr) {
   s->bytes_total = 0;
   client->state = HTTP_SESSION_WRITE;
   iwxstr_destroy_keep_ptr(xstr);
-  _response_free(&client->response);
+  _response_free(client);
   _client_write(client);
 }
 
@@ -1284,11 +1287,10 @@ finish:
 
 iwrc iwn_http_response_chunk_write(
   struct iwn_http_request *request,
-  char *body,
-  ssize_t body_len,
-  void (*body_free)(void*),
-  void (*chunk_cb)(struct iwn_http_request*, void*),
-  void *chunk_cb_user_data) {
+  char                    *body,
+  ssize_t                  body_len,
+  void (                  *body_free )(void*),
+  void (                  *chunk_cb )(struct iwn_http_request*)) {
 
   iwrc rc = 0;
   struct client *client = (void*) request;
@@ -1304,7 +1306,6 @@ iwrc iwn_http_response_chunk_write(
   }
   iwn_http_response_body_set(request, body, body_len, body_free);
   client->chunk_cb = chunk_cb;
-  client->chunk_cb_user_data = chunk_cb_user_data;
   RCC(rc, finish, iwxstr_printf(xstr, "%X\r\n", response->body_len));
   RCC(rc, finish, iwxstr_cat(xstr, response->body, response->body_len));
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));

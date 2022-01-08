@@ -31,27 +31,28 @@ static void _on_connection_close(const struct iwn_http_server_connection *conn) 
   fprintf(stderr, "On connection close: %d\n", conn->fd);
 }
 
-static void _chunk_req_cb(struct iwn_http_request *req, void *data) {
-  IWXSTR *xstr = data;
+static void _chunk_req_cb(struct iwn_http_request *req) {
+  IWXSTR *xstr = req->request_user_data;
   IWN_ASSERT_FATAL(xstr);
   struct iwn_http_val val = iwn_http_request_chunk_get(req);
   if (val.len > 0) {
     iwrc rc = iwxstr_cat(xstr, val.buf, val.len);
     IWN_ASSERT_FATAL(rc == 0);
-    iwn_http_request_chunk_next(req, _chunk_req_cb, xstr);
+    iwn_http_request_chunk_next(req, _chunk_req_cb);
   } else {
     char *body = iwxstr_ptr(xstr);
     size_t body_len = iwxstr_size(xstr);
-    iwxstr_destroy_keep_ptr(xstr);
-    iwn_http_response_body_set(req, body, body_len, free);
+    iwn_http_response_body_set(req, body, body_len, 0);
     iwrc rc = iwn_http_response_end(req);
     IWN_ASSERT(rc == 0);
   }
 }
 
-static void _chunk_resp_cb(struct iwn_http_request *req, void *data) {
-  int chunk_count = (int) (intptr_t) data;
+static void _chunk_resp_cb(struct iwn_http_request *req) {
+  int chunk_count = (int) (intptr_t) req->request_user_data;
   ++chunk_count;
+  req->request_user_data = (void*) (intptr_t) chunk_count;
+
   char *cdata = 0;
   switch (chunk_count) {
     case 1:
@@ -62,11 +63,18 @@ static void _chunk_resp_cb(struct iwn_http_request *req, void *data) {
       break;
   }
   if (cdata) {
-    iwrc rc = iwn_http_response_chunk_write(req, cdata, -1, 0, _chunk_resp_cb, (void*) (intptr_t) chunk_count);
+    iwrc rc = iwn_http_response_chunk_write(req, cdata, -1, 0, _chunk_resp_cb);
     IWN_ASSERT(rc == 0);
   } else {
     iwrc rc = iwn_http_response_chunk_end(req);
     IWN_ASSERT(rc == 0);
+  }
+}
+
+static void _on_chunk_req_destroy(struct iwn_http_request *req) {
+  IWXSTR *xstr = req->request_user_data;
+  if (xstr) {
+    iwxstr_destroy(xstr);
   }
 }
 
@@ -86,12 +94,14 @@ static bool _request_handler(struct iwn_http_request *req) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
     IWXSTR *xstr;
     RCA(xstr = iwxstr_new(), finish);
-    iwn_http_request_chunk_next(req, _chunk_req_cb, xstr);
+    req->request_user_data = xstr;
+    req->on_request_destroy = _on_chunk_req_destroy;
+    iwn_http_request_chunk_next(req, _chunk_req_cb);
     goto finish;
   } else if (iwn_http_request_target_is(req, "/chunked", -1)) {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
     RCC(rc, finish, iwn_http_response_chunk_write(req, "\n4cd009fb-dceb-4907-a6be-dd05c3f052b3",
-                                                  -1, 0, _chunk_resp_cb, 0));
+                                                  -1, 0, _chunk_resp_cb));
     goto finish;
   } else {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));

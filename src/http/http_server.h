@@ -23,6 +23,7 @@ struct iwn_http_server_connection {
 struct iwn_http_request {
   void *request_user_data; ///< Request specific user data.
   void *server_user_data;  ///< User data specified in `iwn_http_server_spec`
+  void  (*on_request_destroy)(struct iwn_http_request*);
 };
 
 typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
@@ -62,10 +63,7 @@ IW_EXPORT WUR iwrc iwn_http_server_create(
   const struct iwn_http_server_spec*,
   int *out_fd);
 
-IW_EXPORT void iwn_http_request_chunk_next(
-  struct iwn_http_request*,
-  void (*chunk_cb)(struct iwn_http_request*, void*),
-  void*);
+IW_EXPORT void iwn_http_request_chunk_next(struct iwn_http_request*, void (*chunk_cb)(struct iwn_http_request*));
 
 IW_EXPORT struct iwn_http_val iwn_http_request_chunk_get(struct iwn_http_request*);
 
@@ -81,7 +79,10 @@ IW_EXPORT struct iwn_http_val iwn_http_request_method(struct iwn_http_request*);
 
 IW_EXPORT struct iwn_http_val iwn_http_request_body(struct iwn_http_request*);
 
-IW_EXPORT struct iwn_http_val iwn_http_request_header_get(struct iwn_http_request*, const char *header_name, ssize_t header_name_len);
+IW_EXPORT struct iwn_http_val iwn_http_request_header_get(
+  struct iwn_http_request*,
+  const char *header_name,
+  ssize_t     header_name_len);
 
 IW_EXPORT bool iwn_http_request_headers_iterate(
   struct iwn_http_request*,
@@ -124,11 +125,10 @@ IW_EXPORT iwrc iwn_http_response_write_simple(
 
 IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_request*,
-  char *body,
+  char   *body,
   ssize_t body_len,
-  void (*body_free)(void*),
-  void (*chunk_cb)(struct iwn_http_request*, void*),
-  void*);
+  void ( *body_free )(void*),
+  void ( *chunk_cb )(struct iwn_http_request*));
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_request*);
 
