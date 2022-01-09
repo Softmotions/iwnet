@@ -42,8 +42,8 @@ struct iwn_http_server_spec {
   iwn_http_server_on_connection       on_connection;
   iwn_http_server_on_connection_close on_connection_close;
   iwn_http_server_on_dispose on_server_dispose;
-  const char *certs_data;
-  size_t      certs_data_len;
+  const char *certs;
+  size_t      certs_len;
   const char *private_key;
   size_t      private_key_len;
   int  port;
@@ -55,8 +55,8 @@ struct iwn_http_server_spec {
   int  request_timeout_sec;           ///< -1 - Disable timeout, 0 - Use default timeout.
   int  request_token_max_len;
   int  request_max_header_count;
-  bool certs_data_in_buffer;      ///< true if `certs_data` specified as data buffer rather a file name.
-  bool private_key_in_buffer;     ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
+  bool certs_in_buffer;       ///< true if `certs_data` specified as data buffer rather a file name.
+  bool private_key_in_buffer; ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
 IW_EXPORT WUR iwrc iwn_http_server_create(

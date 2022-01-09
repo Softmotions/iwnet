@@ -324,15 +324,23 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     iwlog_ecode_error2(rc, "No on_event specified");
     return rc;
   }
-  if (!spec->certs_data || !spec->certs_data_len) {
+  if (!spec->certs) {
     rc = IW_ERROR_INVALID_ARGS;
     iwlog_ecode_error2(rc, "No certs_data specified");
     return rc;
   }
-  if (!spec->private_key || !spec->private_key_len) {
+  ssize_t certs_len = spec->certs_len;
+  if (certs_len < 0) {
+    certs_len = strlen(spec->certs);
+  }
+  if (!spec->private_key) {
     rc = IW_ERROR_INVALID_ARGS;
     iwlog_ecode_error2(rc, "No private_key specified");
     return rc;
+  }
+  ssize_t private_key_len = spec->private_key_len;
+  if (private_key_len < 0) {
+    private_key_len = strlen(spec->private_key);
   }
 
   _init();
@@ -349,43 +357,43 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   a->on_dispose = spec->on_dispose;
   a->user_data = spec->user_data;
 
-  if (spec->certs_data_in_buffer) {
-    a->server.certs = read_certificates_data(spec->certs_data, spec->certs_data_len, &a->server.certs_num);
+  if (spec->certs_in_buffer) {
+    a->server.certs = read_certificates_data(spec->certs, certs_len, &a->server.certs_num);
     if (!a->server.certs) {
       iwlog_error2("Error reading server certs data specified in buffer");
       rc = BRS_ERROR_INVALID_CASCERT_DATA;
       goto finish;
     }
   } else {
-    char *buf = malloc(spec->certs_data_len + 1);
+    char *buf = malloc(certs_len + 1);
     RCA(buf, finish);
-    memcpy(buf, spec->certs_data, spec->certs_data_len);
-    buf[spec->certs_data_len] = '\0';
+    memcpy(buf, spec->certs, certs_len);
+    buf[certs_len] = '\0';
     a->server.certs = read_certificates(buf, &a->server.certs_num);
     free(buf);
     if (!a->server.certs) {
-      iwlog_error("Error reading server certs file: %.*s", spec->certs_data_len, spec->certs_data);
+      iwlog_error("Error reading server certs file: %.*s", certs_len, spec->certs);
       rc = BRS_ERROR_INVALID_CASCERT_DATA;
       goto finish;
     }
   }
 
   if (spec->private_key_in_buffer) {
-    a->server.pk = read_private_key_data(spec->private_key, spec->private_key_len);
+    a->server.pk = read_private_key_data(spec->private_key, private_key_len);
     if (!a->server.pk) {
       iwlog_error2("Error reading server private key data specified in buffer");
       rc = BRS_ERROR_INVALID_PRIVKEY_DATA;
       goto finish;
     }
   } else {
-    char *buf = malloc(spec->private_key_len + 1);
+    char *buf = malloc(private_key_len + 1);
     RCA(buf, finish);
-    memcpy(buf, spec->private_key, spec->private_key_len);
-    buf[spec->private_key_len] = '\0';
+    memcpy(buf, spec->private_key, private_key_len);
+    buf[private_key_len] = '\0';
     a->server.pk = read_private_key(buf);
     free(buf);
     if (!a->server.certs) {
-      iwlog_error("Error reading server private key file: %.*s", spec->private_key_len, spec->private_key);
+      iwlog_error("Error reading server private key file: %.*s", private_key_len, spec->private_key);
       rc = BRS_ERROR_INVALID_PRIVKEY_DATA;
       goto finish;
     }

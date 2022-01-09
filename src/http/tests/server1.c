@@ -139,20 +139,36 @@ int main(int argc, char *argv[]) {
   if (signal(SIGINT, _on_signal) == SIG_ERR) {
     return EXIT_FAILURE;
   }
+  bool ssl = false;
+
+  for (int i = 0; i < argc; ++i) {
+    if (strcmp(argv[i], "--ssl") == 0) {
+      ssl = true;
+    }
+  }
+
+  struct iwn_http_server_spec spec = {
+    .listen                        = "localhost",
+    .port                          = 9292,
+    .poller                        = poller,
+    .user_data                     = poller,
+    .request_handler               = _request_handler,
+    .on_connection                 = _on_connection,
+    .on_connection_close           = _on_connection_close,
+    .on_server_dispose             = _server_on_dispose,
+    .request_timeout_sec           = -1,
+    .request_timeout_keepalive_sec = -1
+  };
+
+  if (ssl) {
+    spec.private_key = "./server-eckey.pem";
+    spec.private_key_len = -1;
+    spec.certs = "./server-ecdsacert.pem";
+    spec.certs_len = -1;
+  }
 
   RCC(rc, finish, iwn_poller_create(1, 1, &poller));
-  RCC(rc, finish, iwn_http_server_create(&(struct iwn_http_server_spec) {
-    .listen = "localhost",
-    .port = 9292,
-    .poller = poller,
-    .user_data = poller,
-    .request_handler = _request_handler,
-    .on_connection = _on_connection,
-    .on_connection_close = _on_connection_close,
-    .on_server_dispose = _server_on_dispose,
-    .request_timeout_sec = -1,
-    .request_timeout_keepalive_sec = -1
-  }, 0));
+  RCC(rc, finish, iwn_http_server_create(&spec, 0));
 
   iwn_poller_poll(poller);
 

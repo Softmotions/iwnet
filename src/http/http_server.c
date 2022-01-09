@@ -929,9 +929,9 @@ static iwrc _client_accept(struct server *server, int fd) {
 
   if (server->https) {
     RCC(rc, finish, iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
-      .certs_data = server->spec.certs_data,
-      .certs_data_in_buffer = server->spec.certs_data_in_buffer,
-      .certs_data_len = server->spec.certs_data_len,
+      .certs = server->spec.certs,
+      .certs_in_buffer = server->spec.certs_in_buffer,
+      .certs_len = server->spec.certs_len,
       .events = IWN_POLLIN,
       .events_mod = IWN_POLLET,
       .fd = fd,
@@ -1486,9 +1486,9 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     spec->response_buf_size = 1024;
   }
 
-  server->https = spec->certs_data && spec->certs_data_len && spec->private_key && spec->private_key_len;
+  server->https = spec->certs && spec->certs_len && spec->private_key && spec->private_key_len;
   if (server->https) {
-    spec->certs_data = iwpool_strndup(pool, spec->certs_data, spec->certs_data_len, &rc);
+    spec->certs = iwpool_strndup(pool, spec->certs, spec->certs_len, &rc);
     RCGO(rc, finish);
     spec->private_key = iwpool_strndup(pool, spec->private_key, spec->private_key_len, &rc);
     RCGO(rc, finish);

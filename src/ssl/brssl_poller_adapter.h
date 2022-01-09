@@ -34,16 +34,16 @@ struct iwn_brssl_server_poller_adapter_spec {
   struct iwn_poller *poller;
   iwn_on_poller_adapter_event   on_event;
   iwn_on_poller_adapter_dispose on_dispose;
-  const char *certs_data;
+  const char *certs;
   const char *private_key;
-  size_t      certs_data_len;
-  size_t      private_key_len;
+  ssize_t     certs_len;
+  ssize_t     private_key_len;
   void       *user_data;
   long     timeout_sec;
   uint32_t events;
   uint32_t events_mod;
   int      fd;
-  bool     certs_data_in_buffer;  ///< true if `certs_data` specified as data buffer rather a file name.
+  bool     certs_in_buffer;       ///< true if `certs_data` specified as data buffer rather a file name.
   bool     private_key_in_buffer; ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 

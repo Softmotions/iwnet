@@ -6,6 +6,7 @@ file(
   DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
   FILES_MATCHING
   PATTERN "*.sh"
+  PATTERN "*.pem"
   PATTERN "*.log")
 
 add_executable(server1 server1.c)
