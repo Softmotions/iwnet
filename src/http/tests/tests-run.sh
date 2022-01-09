@@ -1,6 +1,23 @@
 #!/usr/bin/env sh
 
 set -e
+SOPTS=""
+
+while [ $# -gt 0 ]; do
+  case $1 in
+    --valgrind)
+      VALGRIND=1
+      shift
+      ;;
+    --)      
+      shift
+      SOPTS=$@
+      break
+      ;;
+    *)
+      ;;
+  esac
+done
 
 run() {
 
@@ -43,9 +60,15 @@ run() {
   diff r2.dat test.dat
 }
 
-valgrind --leak-check=full --log-file=valgrind.log ./server1 &
-#./server1 &
+SERVER="./server1 ${SOPTS}"
+if [ -n "${VALGRIND}" ]; then
+  SERVER="valgrind --leak-check=full --log-file=valgrind.log ${SERVER}"
+fi
+
+echo "Command: ${SERVER}"
+${SERVER} &
 SPID="$!"
+
 echo "HTTP Server pid: $!"
 
 run 2>&1 | tee server1.log
@@ -54,9 +77,11 @@ kill -2 ${SPID}
 diff server1.log server1-success.log
 wait ${SPID}
 
-cat ./valgrind.log | cut -d = -f 5 | grep ERROR > valgrind-results.log 
-cat ./valgrind.log | cut -d = -f 5 | grep 'All heap blocks were freed' >> valgrind-results.log 
-diff valgrind-results.log valgrind-success.log
+if [ -n $VALGRIND ]; then
+  cat ./valgrind.log | cut -d = -f 5 | grep ERROR > valgrind-results.log 
+  cat ./valgrind.log | cut -d = -f 5 | grep 'All heap blocks were freed' >> valgrind-results.log 
+  diff valgrind-results.log valgrind-success.log
+fi  
 
 echo "Done!"
 

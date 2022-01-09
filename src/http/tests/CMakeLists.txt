@@ -15,3 +15,7 @@ add_test(
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./tests-run.sh)
 
+add_test(
+  NAME "http_server1_valgrind"
+  WORKING_DIRECTORY ${TEST_DATA_DIR}
+  COMMAND sh ./tests-run.sh --valgrind)
