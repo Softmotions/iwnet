@@ -326,12 +326,17 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   }
   if (!spec->certs) {
     rc = IW_ERROR_INVALID_ARGS;
-    iwlog_ecode_error2(rc, "No certs_data specified");
+    iwlog_ecode_error2(rc, "No certs specified");
     return rc;
   }
   ssize_t certs_len = spec->certs_len;
   if (certs_len < 0) {
     certs_len = strlen(spec->certs);
+  }
+  if (certs_len < 1) {
+    rc = IW_ERROR_INVALID_ARGS;
+    iwlog_ecode_error2(rc, "Certs data is empty");
+    return rc;
   }
   if (!spec->private_key) {
     rc = IW_ERROR_INVALID_ARGS;
@@ -341,6 +346,11 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   ssize_t private_key_len = spec->private_key_len;
   if (private_key_len < 0) {
     private_key_len = strlen(spec->private_key);
+  }
+  if (private_key_len < 1) {
+    rc = IW_ERROR_INVALID_ARGS;
+    iwlog_ecode_error2(rc, "Private_key data is empty");
+    return rc;
   }
 
   _init();
