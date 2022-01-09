@@ -1,0 +1,66 @@
+
+
+Small response body:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: text/plain
+content-length: 36
+
+4afb7857-6b21-4a25-ae47-0852ebc47014
+
+Empty response:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 0
+
+
+
+Echo body:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: text/plain
+content-length: 36
+
+b548f7fa-a786-4858-82cb-c3f42759c7a9
+
+Get header:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 14
+
+localhost:9292
+
+Request large body:
+
+
+Chunked response:
+HTTP/1.1 200 OK
+connection: keep-alive
+transfer-encoding: chunked
+content-type: text/plain
+
+
+4cd009fb-dceb-4907-a6be-dd05c3f052b3
+e6276e6e-573c-4edb-b840-ae00680a5578
+097a5dd6-8df3-4d43-b3f1-0a01ea1d9943
+
+Chunked response close:
+HTTP/1.1 200 OK
+connection: close
+transfer-encoding: chunked
+content-type: text/plain
+
+
+4cd009fb-dceb-4907-a6be-dd05c3f052b3
+e6276e6e-573c-4edb-b840-ae00680a5578
+097a5dd6-8df3-4d43-b3f1-0a01ea1d9943HTTP/1.1 200 OK
+connection: close
+transfer-encoding: chunked
+content-type: text/plain
+
+
+4cd009fb-dceb-4907-a6be-dd05c3f052b3
+e6276e6e-573c-4edb-b840-ae00680a5578
+097a5dd6-8df3-4d43-b3f1-0a01ea1d9943
+
+Chunked request:
