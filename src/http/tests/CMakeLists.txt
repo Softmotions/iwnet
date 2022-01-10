@@ -12,21 +12,21 @@ file(
 add_executable(server1 server1.c)
 
 add_test(
-  NAME "http_server1"
+  NAME "http_server1_test"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./tests-run.sh)
 
 add_test(
-  NAME "http_server1_valgrind"
+  NAME "http_server1_valgrind_test"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./tests-run.sh --valgrind)
 
 add_test(
-  NAME "https_server1"
+  NAME "https_server1_test"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./tests-run.sh -- --ssl)
 
 add_test(
-  NAME "https_server1_valgrind"
+  NAME "https_server1_valgrind_test"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./tests-run.sh --valgrind -- --ssl)
