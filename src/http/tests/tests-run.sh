@@ -1,7 +1,10 @@
 #!/usr/bin/env sh
 
 set -e
+
 SOPTS=""
+PORT=9292
+PROTO="http"
 
 while [ $# -gt 0 ]; do
   case $1 in
@@ -9,9 +12,15 @@ while [ $# -gt 0 ]; do
       VALGRIND=1
       shift
       ;;
+    --port)
+      shift
+      PORT="$1"
+      SOPTS="${SOPTS} --port ${PORT}"
+      shift
+      ;;
     --)      
       shift
-      SOPTS=$@
+      SOPTS="${SOPTS} $@"
       break
       ;;
     *)
@@ -20,8 +29,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+if [ -z "${PORT}" ]; then
+  echo "Invalid --port specified"
+  exit 1
+fi
 
-PROTO="http"
 if echo "${SOPTS}" | grep '\-\-ssl'; then
   PROTO="https"
 fi
@@ -30,7 +42,6 @@ run() {
 
   sleep 1
 
-  PORT=9292
   BASE="${PROTO}://localhost:${PORT}"
   FILTER='sed -r /(date|user-agent|trying|tcp)|^\*/Id'
 
@@ -44,7 +55,7 @@ run() {
   curl -isk -XPOST ${BASE}/echo -d'b548f7fa-a786-4858-82cb-c3f42759c7a9' | ${FILTER}
 
   echo "\n\nGet header:"
-  curl -isk ${BASE}/host | ${FILTER}
+  curl -isk -H'X-Foo:Bar' ${BASE}/header | ${FILTER}
 
   echo "\n\nRequest large body:"
   dd if=/dev/urandom of=test.dat bs=25165824 count=1 2> /dev/null

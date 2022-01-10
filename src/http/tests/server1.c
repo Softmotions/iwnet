@@ -3,6 +3,7 @@
 #include "http_server.h"
 
 #include <iowow/iwxstr.h>
+#include <iowow/iwconv.h>
 
 #include <pthread.h>
 #include <signal.h>
@@ -94,8 +95,8 @@ static bool _request_handler(struct iwn_http_request *req) {
     struct iwn_http_val val = iwn_http_request_body(req);
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
     iwn_http_response_body_set(req, val.buf, val.len, 0);
-  } else if (iwn_http_request_target_is(req, "/host", -1)) {
-    struct iwn_http_val val = iwn_http_request_header_get(req, "Host", -1);
+  } else if (iwn_http_request_target_is(req, "/header", -1)) {
+    struct iwn_http_val val = iwn_http_request_header_get(req, "X-Foo", -1);
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/large", -1)) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
@@ -140,10 +141,13 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
   bool ssl = false;
+  int port = 9292;
 
   for (int i = 0; i < argc; ++i) {
     if (strcmp(argv[i], "--ssl") == 0) {
       ssl = true;
+    } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
+      port = iwatoi(argv[i + 1]);
     }
   }
 
@@ -151,7 +155,7 @@ int main(int argc, char *argv[]) {
 
   struct iwn_http_server_spec spec = {
     .listen                        = "localhost",
-    .port                          = 9292,
+    .port                          = port,
     .poller                        = poller,
     .user_data                     = poller,
     .request_handler               = _request_handler,

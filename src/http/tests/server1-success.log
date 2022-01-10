@@ -26,9 +26,9 @@ b548f7fa-a786-4858-82cb-c3f42759c7a9
 Get header:
 HTTP/1.1 200 OK
 connection: keep-alive
-content-length: 14
+content-length: 3
 
-localhost:9292
+Bar
 
 Request large body:
 
