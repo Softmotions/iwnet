@@ -402,7 +402,7 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     buf[private_key_len] = '\0';
     a->server.pk = read_private_key(buf);
     free(buf);
-    if (!a->server.certs) {
+    if (!a->server.pk) {
       iwlog_error("Error reading server private key file: %.*s", private_key_len, spec->private_key);
       rc = BRS_ERROR_INVALID_PRIVKEY_DATA;
       goto finish;

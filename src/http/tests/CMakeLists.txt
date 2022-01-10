@@ -20,3 +20,13 @@ add_test(
   NAME "http_server1_valgrind"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./tests-run.sh --valgrind)
+
+add_test(
+  NAME "https_server1"
+  WORKING_DIRECTORY ${TEST_DATA_DIR}
+  COMMAND sh ./tests-run.sh -- --ssl)
+
+add_test(
+  NAME "https_server1_valgrind"
+  WORKING_DIRECTORY ${TEST_DATA_DIR}
+  COMMAND sh ./tests-run.sh --valgrind -- --ssl)
