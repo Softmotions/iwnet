@@ -438,8 +438,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
   *out_pid = -1;
 
   bool bv;
-  struct _proc *proc = 0;
-  struct iwn_poller *poller = spec->poller;
+  struct _proc *proc = 0;  
   int fds[6] = { -1, -1, -1, -1, -1, -1 };
 
   RCB(finish, proc = _proc_create(spec));

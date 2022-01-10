@@ -215,7 +215,7 @@ static iwrc _handshake_output_fill(struct iwn_ws *ws) {
         ws->path, (ws->query ? "?" : ""), (ws->query ? ws->query : ""),
         ws->host, ws->port,
         ws->client_key));
-  return 0;
+  return rc;
 }
 
 static bool _handshake_validate_accept_key(struct iwn_ws *ws, const char *accept_key, size_t accept_key_len) {
@@ -324,7 +324,6 @@ finish:
 static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   struct iwn_ws *ws = user_data;
   int64_t ret = -1;
-  int rci = 0;
 
   pthread_mutex_lock(&ws->mtx);
   ws->poller_adapter = pa;
@@ -485,7 +484,6 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
     return IW_ERROR_INVALID_ARGS;
   }
 
-  int rci = 0;
   iwrc rc = 0;
   char *ptr;
 
