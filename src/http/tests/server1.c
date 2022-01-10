@@ -147,6 +147,8 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  RCC(rc, finish, iwn_poller_create(1, 1, &poller));
+
   struct iwn_http_server_spec spec = {
     .listen                        = "localhost",
     .port                          = 9292,
@@ -167,7 +169,6 @@ int main(int argc, char *argv[]) {
     spec.certs_len = -1;
   }
 
-  RCC(rc, finish, iwn_poller_create(1, 1, &poller));
   RCC(rc, finish, iwn_http_server_create(&spec, 0));
 
   iwn_poller_poll(poller);

@@ -1,6 +1,6 @@
 cd ./build/src/http/tests
 file ./server1
-#set args -c
+set args --ssl
 
 set follow-fork-mode parent
 set detach-on-fork on

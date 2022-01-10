@@ -43,9 +43,9 @@ struct iwn_http_server_spec {
   iwn_http_server_on_connection_close on_connection_close;
   iwn_http_server_on_dispose on_server_dispose;
   const char *certs;
-  size_t      certs_len;
+  ssize_t     certs_len;
   const char *private_key;
-  size_t      private_key_len;
+  ssize_t     private_key_len;
   int  port;
   int  http_socket_queue_size;
   int  response_buf_size;
