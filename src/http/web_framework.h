@@ -23,7 +23,7 @@ struct iwn_wfm_request {
   void       *request_user_data;
   void       *app_user_data;
   const char *target; ///< Raw request path with query data.
-  const char *path;   ///< Request path stripped from query.
+  const char *path;   ///< Request path stripped from query data.
   uint8_t     method; ///< Request method.
 };
 
@@ -38,6 +38,7 @@ IW_EXPORT WUR iwrc iwn_wfm_context_create(const struct iwn_http_server_spec *spe
 
 IW_EXPORT WUR iwrc iwn_wfm_context_route(
   struct iwn_wfm_context *ctx,
+  const char             *pattern_base,
   const char             *pattern,
   uint32_t                methods,
   iwn_wfm_handler         handler,
@@ -45,6 +46,20 @@ IW_EXPORT WUR iwrc iwn_wfm_context_route(
   const char             *tag);
 
 IW_EXPORT WUR iwrc iwn_wfm_start(struct iwn_wfm_context *ctx);
+
+IW_EXPORT const char* iwn_wfm_request_param_get(struct iwn_wfm_request*, const char *name, const char *defval);
+
+IW_EXPORT const char* iwn_wfm_request_post_param_get(struct iwn_wfm_request*, const char *name, const char *defval);
+
+IW_EXPORT const char* iwn_wfm_request_file_get(struct iwn_wfm_request*, const char *name);
+
+IW_EXPORT const char* iwn_wfm_request_header_get(struct iwn_wfm_request*, const char *name);
+
+IW_EXPORT const char* iwn_wfm_request_session_get(struct iwn_wfm_request*, const char *name);
+
+IW_EXPORT iwrc iwn_wfm_session_put(struct iwn_wfm_request*, const char *name, const char *data);
+
+IW_EXPORT void iwn_wfm_session_remove(struct iwn_wfm_request*, const char *name);
 
 IW_EXPORT void iwn_wfm_destroy(struct iwn_wfm_context *ctx);
 
