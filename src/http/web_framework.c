@@ -29,18 +29,11 @@ static bool _request_handler(struct iwn_http_request *req) {
   return true;
 }
 
-static void _ctx_destroy(struct ctx *ctx) {
-  if (!ctx) {
-    return;
-  }
-  // TODO:
-  iwpool_destroy(ctx->pool);
-}
 
 static void _on_server_dispose(const struct iwn_http_server *server) {
   struct ctx *ctx = server->user_data;
   if (ctx) {
-    _ctx_destroy(ctx);
+    
   }
 }
 
@@ -117,11 +110,7 @@ iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx
 
 finish:
   if (rc) {
-    if (ctx) {
-      _ctx_destroy(ctx);
-    } else {
-      iwpool_destroy(pool);
-    }
+    iwpool_destroy(pool);
   }
   return rc;
 }
