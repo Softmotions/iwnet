@@ -3,21 +3,21 @@
 
 IW_EXTERN_C_START
 
-#define  IWN_WFM_RES_NOT_PROCESSED   0
-#define  IWN_WFM_RES_PROCESSED       1
-#define  IWN_WFM_RES_ABORT           -1
-#define  IWN_WFM_RES_INTERNAL_ERROR  500
-#define  IWN_WFM_RES_NOT_IMPLEMENTED 501
-#define  IWN_WFM_RES_FORBIDDEN       403
-#define  IWN_WFM_RES_BAD_REQUEST     400
+#define  IWN_fr_RES_NOT_PROCESSED   0
+#define  IWN_fr_RES_PROCESSED       1
+#define  IWN_fr_RES_ABORT           -1
+#define  IWN_fr_RES_INTERNAL_ERROR  500
+#define  IWN_fr_RES_NOT_IMPLEMENTED 501
+#define  IWN_fr_RES_FORBIDDEN       403
+#define  IWN_fr_RES_BAD_REQUEST     400
 
-#define IWN_WFM_GET    0x01U
-#define IWN_WFM_PUT    0x02U
-#define IWN_WFM_POST   0x04U
-#define IWN_WFM_DELETE 0x08U
-#define IWN_WFM_HEAD   0x10U
+#define IWN_fr_GET    0x01U
+#define IWN_fr_PUT    0x02U
+#define IWN_fr_POST   0x04U
+#define IWN_fr_DELETE 0x08U
+#define IWN_fr_HEAD   0x10U
 
-struct iwn_wfm_request {
+struct iwn_fr_req {
   struct iwn_http_request *http;
   void       *handler_user_data;
   void       *request_user_data;
@@ -27,40 +27,42 @@ struct iwn_wfm_request {
   uint8_t     method; ///< Request method.
 };
 
-struct iwn_wfm_context {
+struct iwn_fr_ctx {
   struct iwn_http_server_spec http;
   void *app_user_data;
 };
 
-typedef int (*iwn_wfm_handler)(struct iwn_wfm_request*);
+typedef void*iwn_fr_route_t;
+typedef int (*iwn_fr_handler)(struct iwn_fr_req*);
 
-IW_EXPORT WUR iwrc iwn_wfm_context_create(const struct iwn_http_server_spec *spec, struct iwn_wfm_context **out_ctx);
+IW_EXPORT WUR iwrc iwn_fr_context_create(const struct iwn_http_server_spec *spec, struct iwn_fr_ctx **out_ctx);
 
-IW_EXPORT WUR iwrc iwn_wfm_context_route(
-  struct iwn_wfm_context *ctx,
-  const char             *pattern_base,
-  const char             *pattern,
-  uint32_t                methods,
-  iwn_wfm_handler         handler,
-  void                   *handler_data,
-  const char             *tag);
+IW_EXPORT WUR iwrc iwn_fr_context_route(
+  struct iwn_fr_ctx *ctx,
+  iwn_fr_route_t    *parent,
+  const char        *pattern,
+  uint32_t           methods,
+  iwn_fr_handler     handler,
+  void              *handler_data,
+  iwn_fr_route_t    *out_route,
+  const char        *tag);
 
-IW_EXPORT WUR iwrc iwn_wfm_start(struct iwn_wfm_context *ctx);
+IW_EXPORT WUR iwrc iwn_fr_start(struct iwn_fr_ctx *ctx);
 
-IW_EXPORT const char* iwn_wfm_request_param_get(struct iwn_wfm_request*, const char *name, const char *defval);
+IW_EXPORT const char* iwn_fr_request_header_get(struct iwn_fr_req*, const char *name);
 
-IW_EXPORT const char* iwn_wfm_request_post_param_get(struct iwn_wfm_request*, const char *name, const char *defval);
+IW_EXPORT const char* iwn_fr_request_param_get(struct iwn_fr_req*, const char *name, const char *defval);
 
-IW_EXPORT const char* iwn_wfm_request_file_get(struct iwn_wfm_request*, const char *name);
+IW_EXPORT const char* iwn_fr_request_post_param_get(struct iwn_fr_req*, const char *name, const char *defval);
 
-IW_EXPORT const char* iwn_wfm_request_header_get(struct iwn_wfm_request*, const char *name);
+IW_EXPORT const char* iwn_fr_request_file_get(struct iwn_fr_req*, const char *name);
 
-IW_EXPORT const char* iwn_wfm_request_session_get(struct iwn_wfm_request*, const char *name);
+IW_EXPORT const char* iwn_fr_request_session_get(struct iwn_fr_req*, const char *name);
 
-IW_EXPORT iwrc iwn_wfm_session_put(struct iwn_wfm_request*, const char *name, const char *data);
+IW_EXPORT iwrc iwn_fr_session_put(struct iwn_fr_req*, const char *name, const char *data);
 
-IW_EXPORT void iwn_wfm_session_remove(struct iwn_wfm_request*, const char *name);
+IW_EXPORT void iwn_fr_session_remove(struct iwn_fr_req*, const char *name);
 
-IW_EXPORT void iwn_wfm_destroy(struct iwn_wfm_context *ctx);
+IW_EXPORT void iwn_fr_destroy(struct iwn_fr_ctx *ctx);
 
 IW_EXTERN_C_END

@@ -1485,7 +1485,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   if (spec->response_buf_size < 1) {
     spec->response_buf_size = 1024;
   }
-  
+
   server->https = spec->certs && spec->certs_len && spec->private_key && spec->private_key_len;
   if (server->https) {
     if (spec->certs_len < 0) {
