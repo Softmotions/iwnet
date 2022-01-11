@@ -27,6 +27,10 @@ typedef enum {
 #define IWN_WF_HEAD   0x10U
 
 struct iwn_wf_ctx;
+struct iwn_wf_req;
+
+typedef int (*iwn_wf_handler)(struct iwn_wf_req*);
+typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx *ctx, void *handler_data);
 
 struct iwn_wf_req {
   struct iwn_wf_ctx       *ctx;
@@ -39,35 +43,29 @@ struct iwn_wf_req {
   uint8_t     method; ///< Request method.
 };
 
-// TODO: Add explicit route type
-
-struct iwn_wf_ctx {
-  const struct iwn_http_server_spec http;
-  void *user_data;
+struct iwn_wf_route {
+  struct iwn_wf_route *parent;
+  const char    *pattern;
+  uint32_t       flags;
+  iwn_wf_handler handler;
+  iwn_wf_handler_dispose handler_dispose;
+  void       *handler_data;
+  const char *tag;
+  // Implementation specific
+  struct iwn_wf_ctx   *ctx;
+  struct iwn_wf_route *child;
+  struct iwn_wf_route *next;
 };
 
-typedef void*iwn_wf_route_t;
-typedef int (*iwn_wf_handler)(struct iwn_wf_req*);
-typedef void (*iwn_wf_handler_dispose)(void *handler_data);
-typedef void (*iwn_wf_on_ctx_dispose)(struct iwn_wf_ctx*);
+struct iwn_wf_ctx {
+  const struct iwn_wf_route *root_route;
+};
 
-IW_EXPORT WUR iwrc iwn_wf_create(
-  const struct iwn_http_server_spec *http,
-  iwn_wf_on_ctx_dispose              on_ctx_dispose,
-  struct iwn_wf_ctx                **out_ctx);
+IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root_route, struct iwn_wf_ctx **out_ctx);
 
-IW_EXPORT WUR iwrc iwn_wf_route(
-  struct iwn_wf_ctx     *ctx,
-  iwn_wf_route_t         parent,
-  const char            *pattern,
-  uint32_t               flags,
-  iwn_wf_handler         handler,
-  iwn_wf_handler_dispose handler_dispose,
-  void                  *handler_data,
-  iwn_wf_route_t        *out_route,
-  const char            *tag);
+IW_EXPORT WUR iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route);
 
-IW_EXPORT WUR iwrc iwn_wf_start(struct iwn_wf_ctx *ctx);
+IW_EXPORT WUR iwrc iwn_wf_start(const struct iwn_http_server_spec *http, struct iwn_wf_ctx *ctx);
 
 IW_EXPORT const char* iwn_wf_request_header_get(struct iwn_wf_req*, const char *name);
 

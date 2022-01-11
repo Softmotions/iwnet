@@ -4,41 +4,20 @@
 #include <iowow/iwpool.h>
 #include <iowow/iwre.h>
 
-
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
 
-struct route;
-
 struct ctx {
-  // iwn_wf_ctx fields
-  struct iwn_http_server_spec http;
-  void *user_data;
-  // EOF iwn_wf_ctx fields
-  IWPOOL       *pool;
-  struct route *root;
-  iwn_wf_on_ctx_dispose on_ctx_dispose;
-};
-
-struct route {
-  struct ctx    *ctx;
-  struct route  *parent;
-  struct route  *child;
-  struct route  *next;
-  const char    *pattern;
-  const char    *tag;
-  iwn_wf_handler handler;
-  iwn_wf_handler_dispose handler_dispose;
-  void    *handler_data;
-  uint32_t flags;
+  struct iwn_wf_ctx    base;
+  struct iwn_wf_route *root;
+  IWPOOL *pool;
 };
 
 static const char* _ecodefn(locale_t, uint32_t);
 
 IW_INLINE iwrc _init(void) {
   static bool _initialized;
-
   if (__sync_bool_compare_and_swap(&_initialized, false, true)) {
     RCR(iwlog_register_ecodefn(_ecodefn));
   }
@@ -54,15 +33,12 @@ static void _ctx_destroy(struct ctx *ctx) {
   if (!ctx) {
     return;
   }
-  if (ctx->on_ctx_dispose) {
-    ctx->on_ctx_dispose((void*) ctx);
-  }
+  // TODO:
   iwpool_destroy(ctx->pool);
 }
 
 static void _on_server_dispose(const struct iwn_http_server *server) {
   struct ctx *ctx = server->user_data;
-
   if (ctx) {
     _ctx_destroy(ctx);
   }
@@ -76,86 +52,68 @@ static iwrc _route_pattern_check(const char *pattern) {
   return 0;
 }
 
-//static void _route_add()
+static void _route_add(struct iwn_wf_route *parent, struct iwn_wf_route *route) {
+  route->next = route->child = 0;
+  route->parent = parent;
+  struct iwn_wf_route *r = parent->child;
+  if (r) {
+    do {
+      if (!r->next) {
+        r->next = route;
+        break;
+      }
+    } while ((r = r->next));
+  } else {
+    parent->child = route;
+  }
+}
 
-iwrc iwn_wf_route(
-  struct iwn_wf_ctx     *ctx_,
-  iwn_wf_route_t         parent_,
-  const char            *pattern,
-  uint32_t               flags,
-  iwn_wf_handler         handler,
-  iwn_wf_handler_dispose handler_dispose,
-  void                  *handler_data,
-  iwn_wf_route_t        *out_route,
-  const char            *tag
-  ) {
-  if (out_route) {
-    *out_route = 0;
-  }
-  if (!ctx_) {
-    return IW_ERROR_INVALID_ARGS;
-  }
-  if (parent_ && ((struct route*) parent_)->ctx != (void*) ctx_) {
+static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, struct iwn_wf_route **out) {
+  *out = 0;
+  iwrc rc = 0;
+  struct iwn_wf_route *route;
+  IWPOOL *pool = ctx->pool;
+
+  if (spec->parent && spec->parent->ctx != &ctx->base) {
     return WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT;
   }
 
-  iwrc rc = 0;
-  struct ctx *ctx = (void*) ctx_;
-  IWPOOL *pool = ctx->pool;
-  struct route *route = 0, *parent = parent_;
-
-  if (!ctx->root) {
-    RCA(ctx->root = iwpool_calloc(sizeof(*ctx->root), pool), finish);
-    ctx->root->ctx = ctx;
-    ctx->root->tag = "root";
+  RCR(_route_pattern_check(spec->pattern));
+  RCA(route = iwpool_alloc(sizeof(*route), pool), finish);
+  memcpy(route, spec, sizeof(*route));
+  if (spec->pattern) {
+    RCA(route->pattern = iwpool_strdup2(pool, spec->pattern), finish);
   }
-  if (!parent) {
-    parent = ctx->root;
+  if (spec->tag) {
+    RCA(route->tag = iwpool_strdup2(pool, spec->tag), finish);
   }
-
-  RCA(route = iwpool_calloc(sizeof(*route), pool), finish);
-  if (pattern) {
-    RCA(route->pattern = iwpool_strdup2(pool, pattern), finish);
+  if (route->parent) {
+    _route_add(route->parent, route);
   }
-  if (tag) {
-    RCA(route->tag = iwpool_strdup2(pool, tag), finish);
-  }
-  route->ctx = ctx;
-  route->flags = flags;
-  route->handler = handler;
-  route->handler_dispose = handler_dispose;
-  route->handler_data = handler_data;
 
 finish:
-  if (!rc) {
-    if (out_route) {
-      *out_route = route;
-    }
-  }
   return rc;
 }
 
-iwrc iwn_wf_create(
-  const struct iwn_http_server_spec *http_,
-  iwn_wf_on_ctx_dispose              on_ctx_dispose,
-  struct iwn_wf_ctx                **out_ctx
-  ) {
+iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx) {
+  if (!out_ctx) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  *out_ctx = 0;
+  if (!root_route_spec) {
+    return IW_ERROR_INVALID_ARGS;
+  }
   RCR(_init());
-  iwrc rc = 0;
-  struct ctx *ctx = 0;
-  struct iwn_http_server_spec http = { 0 };
   IWPOOL *pool = iwpool_create_empty();
-
   if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
-  RCA(ctx = iwpool_calloc(sizeof(*ctx), pool), finish);
-  ctx->user_data = http_->user_data;
-  ctx->on_ctx_dispose = on_ctx_dispose;
 
-  memcpy(&http, http_, sizeof(http));
-  http.user_data = ctx;
-  http.request_handler = _request_handler;
+  iwrc rc = 0;
+  struct ctx *ctx = 0;
+  RCA(ctx = iwpool_calloc(sizeof(*ctx), pool), finish);
+  RCC(rc, finish, _route_import(root_route_spec, ctx, &ctx->root));
+  ctx->base.root_route = ctx->root;
 
 finish:
   if (rc) {
