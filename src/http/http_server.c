@@ -1044,8 +1044,8 @@ void iwn_http_connection_set_keep_alive(struct iwn_http_request *request, bool k
 struct iwn_http_val iwn_http_request_header_get(
   struct iwn_http_request *request,
   const char              *header_name,
-  ssize_t                  header_name_len) {
-
+  ssize_t                  header_name_len
+  ) {
   struct client *client = (void*) request;
   if (header_name_len < 0) {
     header_name_len = strlen(header_name);
@@ -1069,8 +1069,8 @@ static bool _iteration_headers_assign(
   struct client       *client,
   struct iwn_http_val *key,
   struct iwn_http_val *val,
-  int                 *iter) {
-
+  int                 *iter
+  ) {
   struct token token = client->tokens.buf[*iter];
   if (client->tokens.buf[*iter].type == HS_TOK_BODY) {
     return false;
@@ -1092,8 +1092,8 @@ bool iwn_http_request_headers_iterate(
   struct iwn_http_request *request,
   struct iwn_http_val     *key,
   struct iwn_http_val     *val,
-  int                     *iter) {
-
+  int                     *iter
+  ) {
   struct client *client = (void*) request;
   if (*iter == 0) {
     for ( ; *iter < client->tokens.size; (*iter)++) {
@@ -1185,8 +1185,8 @@ void iwn_http_response_body_set(
   struct iwn_http_request *request,
   const char              *body,
   ssize_t                  body_len,
-  void (                  *body_free )(void*)) {
-
+  void (                  *body_free )(void*)
+  ) {
   if (!body || body_len == 0) {
     return;
   }
@@ -1294,8 +1294,8 @@ iwrc iwn_http_response_chunk_write(
   char                    *body,
   ssize_t                  body_len,
   void (                  *body_free )(void*),
-  void (                  *chunk_cb )(struct iwn_http_request*)) {
-
+  void (                  *chunk_cb )(struct iwn_http_request*)
+  ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -1349,8 +1349,8 @@ iwrc iwn_http_response_write_simple(
   const char              *content_type,
   char                    *body,
   ssize_t                  body_len,
-  void (                  *body_free )(void*)) {
-
+  void (                  *body_free )(void*)
+  ) {
   iwrc rc = 0;
   RCC(rc, finish, iwn_http_response_code_set(request, status_code));
   if (!content_type) {

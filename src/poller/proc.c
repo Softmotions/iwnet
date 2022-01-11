@@ -243,15 +243,15 @@ finish:
 
 static int64_t _on_ready(
   const struct iwn_poller_task *t,
-  uint32_t                  flags,
-  int                       fdi) {
-
+  uint32_t                      flags,
+  int                           fdi
+  ) {
   iwrc rc = 0;
   int64_t ret = 0;
   int fd = t->fd;
   pid_t pid = (pid_t) (intptr_t) t->user_data;
-
   struct _proc *proc = _proc_ref(pid);
+
   if (!proc) {
     return -1;
   }
@@ -438,7 +438,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
   *out_pid = -1;
 
   bool bv;
-  struct _proc *proc = 0;  
+  struct _proc *proc = 0;
   int fds[6] = { -1, -1, -1, -1, -1, -1 };
 
   RCB(finish, proc = _proc_create(spec));

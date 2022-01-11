@@ -32,10 +32,12 @@ typedef void (*iwn_http_server_on_connection)(const struct iwn_http_server_conne
 
 typedef void (*iwn_http_server_on_connection_close)(const struct iwn_http_server_connection*);
 
+/// Request handler.
+/// Returns `false` if client connection shold be removed from poller (terminated).
+typedef bool (*iwn_http_server_request_handler)(struct iwn_http_request*);
+
 struct iwn_http_server_spec {
-  /// Required request handler function.
-  /// Returns `false` if client connection shold be removed from poller (terminated).
-  bool (*request_handler)(struct iwn_http_request*);
+  iwn_http_server_request_handler request_handler; ///< Required request handler.
   struct iwn_poller *poller; ///< Required poller reference.
   const char *listen;
   void       *user_data;
