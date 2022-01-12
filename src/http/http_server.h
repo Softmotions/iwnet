@@ -35,6 +35,7 @@ typedef void (*iwn_http_server_on_connection_close)(const struct iwn_http_server
 /// Request handler.
 /// Returns `false` if client connection shold be removed from poller (terminated).
 typedef bool (*iwn_http_server_request_handler)(struct iwn_http_request*);
+typedef iwn_http_server_request_handler iwn_http_server_request_chunk_handler;
 
 struct iwn_http_server_spec {
   iwn_http_server_request_handler request_handler; ///< Required request handler.
@@ -49,7 +50,7 @@ struct iwn_http_server_spec {
   const char *private_key;
   ssize_t     private_key_len;
   int  port;                          ///< Default: 8080 http, 8443 https
-  int  http_socket_queue_size;        ///< Default: 64
+  int  socket_queue_size;             ///< Default: 64
   int  response_buf_size;             ///< Default: 1024
   int  request_buf_max_size;          ///< Default: 8Mb
   int  request_buf_size;              ///< Default: 1024
@@ -65,7 +66,7 @@ IW_EXPORT WUR iwrc iwn_http_server_create(
   const struct iwn_http_server_spec*,
   int *out_fd);
 
-IW_EXPORT void iwn_http_request_chunk_next(struct iwn_http_request*, void (*chunk_cb)(struct iwn_http_request*));
+IW_EXPORT void iwn_http_request_chunk_next(struct iwn_http_request*, iwn_http_server_request_chunk_handler);
 
 IW_EXPORT struct iwn_http_val iwn_http_request_chunk_get(struct iwn_http_request*);
 
@@ -127,10 +128,10 @@ IW_EXPORT iwrc iwn_http_response_write_simple(
 
 IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_request*,
-  char   *body,
+  char *body,
   ssize_t body_len,
-  void ( *body_free )(void*),
-  void ( *chunk_cb )(struct iwn_http_request*));
+  void (*body_free)(void*),
+  iwn_http_server_request_chunk_handler);
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_request*);
 

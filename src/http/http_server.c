@@ -89,7 +89,7 @@ struct response {
 
 struct client {
   struct iwn_http_request request;
-  void    (*chunk_cb)(struct iwn_http_request*);
+  iwn_http_server_request_chunk_handler chunk_cb;
   IWPOOL *pool;
   struct iwn_poller_adapter *pa;
   struct server    *server;
@@ -554,8 +554,8 @@ static void _client_write(struct client *client) {
     if (client->server->spec.request_timeout_sec > 0) {
       iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
     }
-    if (client->chunk_cb) {
-      client->chunk_cb((void*) client);
+    if (client->chunk_cb && !client->chunk_cb((void*) client)) {
+      client->flags |= HTTP_END_SESSION;
     }
   } else {
     if (client->flags & HTTP_KEEP_ALIVE) {
@@ -839,7 +839,7 @@ static void _client_read(struct client *client) {
         ssize_t ncap = client->tokens.capacity * 2;
         struct token *nbuf = realloc(client->tokens.buf, ncap * sizeof(client->tokens.buf[0]));
         if (!nbuf) {
-          client->flags = HTTP_END_SESSION;
+          client->flags |= HTTP_END_SESSION;
           return;
         }
         client->tokens.buf = nbuf;
@@ -857,12 +857,16 @@ static void _client_read(struct client *client) {
           client->flags |= HTTP_STREAMED;
         }
         client->state = HTTP_SESSION_NOP;
-        client->server->spec.request_handler(&client->request);
+        if (!client->server->spec.request_handler(&client->request)) {
+          client->flags |= HTTP_END_SESSION;
+          return;
+        }
         break;
       case HS_TOK_CHUNK_BODY:
         client->state = HTTP_SESSION_NOP;
-        if (client->chunk_cb) {
-          client->chunk_cb(&client->request);
+        if (client->chunk_cb && !client->chunk_cb(&client->request)) {
+          client->flags |= HTTP_END_SESSION;
+          return;
         }
         break;
     }
@@ -1010,7 +1014,7 @@ struct iwn_http_val iwn_http_request_body(struct iwn_http_request *request) {
   return _token_get_string((void*) request, HS_TOK_BODY);
 }
 
-void iwn_http_request_chunk_next(struct iwn_http_request *request, void (*chunk_cb)(struct iwn_http_request*)) {
+void iwn_http_request_chunk_next(struct iwn_http_request *request, iwn_http_server_request_chunk_handler chunk_cb) {
   struct client *client = (void*) request;
   client->chunk_cb = chunk_cb;
   _client_read(client);
@@ -1290,11 +1294,11 @@ finish:
 }
 
 iwrc iwn_http_response_chunk_write(
-  struct iwn_http_request *request,
-  char                    *body,
-  ssize_t                  body_len,
-  void (                  *body_free )(void*),
-  void (                  *chunk_cb )(struct iwn_http_request*)
+  struct iwn_http_request              *request,
+  char                                 *body,
+  ssize_t                               body_len,
+  void (                               *body_free )(void*),
+  iwn_http_server_request_chunk_handler chunk_cb
   ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
@@ -1461,8 +1465,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     iwlog_ecode_error2(rc, "No poller specified");
     goto finish;
   }
-  if (spec->http_socket_queue_size < 1) {
-    spec->http_socket_queue_size = 64;
+  if (spec->socket_queue_size < 1) {
+    spec->socket_queue_size = 64;
   }
   if (spec->request_buf_size < 1024) {
     spec->request_buf_size = 1024;
@@ -1560,7 +1564,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   }
   RCN(finish, optval = fcntl(task.fd, F_GETFL, 0));
   RCN(finish, fcntl(task.fd, F_SETFL, optval | O_NONBLOCK));
-  RCN(finish, listen(task.fd, spec->http_socket_queue_size));
+  RCN(finish, listen(task.fd, spec->socket_queue_size));
 
   server->server.listen = spec->listen;
   server->server.fd = task.fd;

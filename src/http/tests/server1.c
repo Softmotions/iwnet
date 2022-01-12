@@ -39,7 +39,7 @@ static void _on_connection_close(const struct iwn_http_server_connection *conn) 
   closed_fds_sum += conn->fd;
 }
 
-static void _chunk_req_cb(struct iwn_http_request *req) {
+static bool _chunk_req_cb(struct iwn_http_request *req) {
   IWXSTR *xstr = req->request_user_data;
   IWN_ASSERT_FATAL(xstr);
   struct iwn_http_val val = iwn_http_request_chunk_get(req);
@@ -54,9 +54,10 @@ static void _chunk_req_cb(struct iwn_http_request *req) {
     iwrc rc = iwn_http_response_end(req);
     IWN_ASSERT(rc == 0);
   }
+  return true;
 }
 
-static void _chunk_resp_cb(struct iwn_http_request *req) {
+static bool _chunk_resp_cb(struct iwn_http_request *req) {
   int chunk_count = (int) (intptr_t) req->request_user_data;
   ++chunk_count;
   req->request_user_data = (void*) (intptr_t) chunk_count;
@@ -77,6 +78,7 @@ static void _chunk_resp_cb(struct iwn_http_request *req) {
     iwrc rc = iwn_http_response_chunk_end(req);
     IWN_ASSERT(rc == 0);
   }
+  return true;
 }
 
 static void _on_chunk_req_destroy(struct iwn_http_request *req) {

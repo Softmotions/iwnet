@@ -22,6 +22,7 @@ typedef enum {
   WF_ERROR_REGEXP_ENGINE,
   /**< Illegal instruction in compiled regular expression (please report this
      bug) (WF_ERROR_REGEXP_ENGINE) */
+  WF_ERROR_UNSUPPORTED_HTTP_METHOD, /**< Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD) */
   _WF_ERROR_END,
 } iwn_wf_ecode_e;
 
@@ -33,26 +34,29 @@ typedef enum {
 #define  IWN_WF_RES_FORBIDDEN        403
 #define  IWN_WF_RES_BAD_REQUEST      400
 
-#define IWN_WF_GET    0x01U
-#define IWN_WF_PUT    0x02U
-#define IWN_WF_POST   0x04U
-#define IWN_WF_DELETE 0x08U
-#define IWN_WF_HEAD   0x10U
+#define IWN_WF_GET     0x01U
+#define IWN_WF_PUT     0x02U
+#define IWN_WF_POST    0x04U
+#define IWN_WF_DELETE  0x08U
+#define IWN_WF_HEAD    0x10U
+#define IWN_WF_OPTIONS 0x20U
+#define IWN_WF_PATCH   0x40U
 
 struct iwn_wf_ctx;
 struct iwn_wf_req;
 
 typedef int (*iwn_wf_handler)(struct iwn_wf_req*);
-typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx *ctx, void *handler_data);
+typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx *ctx, void *user_data);
+typedef void (*iwn_wf_request_dispose)(struct iwn_wf_req*);
 
 struct iwn_wf_req {
   struct iwn_wf_ctx       *ctx;
   struct iwn_http_request *http;
+  iwn_wf_request_dispose   request_dispose;
   void       *handler_user_data;
   void       *request_user_data;
-  void       *ctx_user_data;
   const char *target; ///< Raw request path with query data.
-  const char *path;   ///< Request path stripped wfom query data.
+  const char *path;   ///< Request path stripped path query data.
   uint8_t     method; ///< Request method.
 };
 
@@ -63,20 +67,36 @@ struct iwn_wf_route {
   uint32_t       flags;
   iwn_wf_handler handler;
   iwn_wf_handler_dispose handler_dispose;
-  void       *handler_data;
+  void       *user_data;
   const char *tag;
 };
 
 struct iwn_wf_server_spec {
-  struct iwn_http_server_spec http;
-  int request_file_max_size; ///< -1: To disable file uploading. Default:  50Mb (52428800)
+  struct iwn_poller *poller;                       ///< Required poller reference.
+  const char *listen;
+  const char *certs;
+  ssize_t     certs_len;
+  const char *private_key;
+  ssize_t     private_key_len;
+  int  port;                          ///< Default: 8080 http, 8443 https
+  int  socket_queue_size;             ///< Default: 64
+  int  request_buf_max_size;          ///< Default: 8Mb
+  int  request_buf_size;              ///< Default: 1024
+  int  request_file_max_size;         ///< -1: To disable file uploading. Default:  50Mb (52428800)
+  int  request_max_headers_count;     ///< Default:  127
+  int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 Use default timeout: 120sec
+  int  request_timeout_sec;           ///< -1 Disable timeout, 0 Use default timeout: 20sec
+  int  request_token_max_len;         ///< Default: 8192
+  int  response_buf_size;             ///< Default: 1024
+  bool certs_in_buffer;               ///< true if `certs_data` specified as data buffer rather a file name.
+  bool private_key_in_buffer;         ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
 struct iwn_wf_ctx {
-  const struct iwn_wf_route *root_route;
+  const struct iwn_wf_route *root;
 };
 
-IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root_route, struct iwn_wf_ctx **out_ctx);
+IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx);
 
 IW_EXPORT WUR iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route);
 

@@ -4,6 +4,8 @@
 #include <iowow/iwpool.h>
 #include <iowow/iwre.h>
 
+#include <assert.h>
+#include <stdlib.h>
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
@@ -31,6 +33,11 @@ struct route {
   char      *pattern;
   struct re *pattern_re;
   uint32_t   re_flags;
+};
+
+struct request {
+  struct iwn_wf_req base;
+  IWPOOL *pool;
 };
 
 static const char* _ecodefn(locale_t, uint32_t);
@@ -64,7 +71,7 @@ static void _route_destroy(struct route *route) {
   iwn_wf_handler_dispose handler_dispose = base->handler_dispose;
   if (handler_dispose) {
     base->handler_dispose = 0;
-    handler_dispose(base->ctx, base->handler_data);
+    handler_dispose(base->ctx, base->user_data);
   }
   route->pattern = 0;
   if (route->pattern_re) {
@@ -183,8 +190,107 @@ finish:
   return rc;
 }
 
-static bool _request_handler(struct iwn_http_request *req) {
+static void _request_destroy(struct request *req) {
+  if (req) {
+    if (req->base.request_dispose) {
+      req->base.request_dispose(&req->base);
+    }
+    if (req->pool) {
+      iwpool_destroy(req->pool);
+    }
+  }
+}
+
+static void _request_on_destroy(struct iwn_http_request *hreq) {
+  struct request *req = hreq->request_user_data;
+  if (req) {
+    hreq->request_user_data = 0;
+    _request_destroy(req);
+  }
+}
+
+static iwrc _request_create(struct iwn_http_request *hreq) {
+  iwrc rc = 0;
+  struct request *req = 0;
+  struct ctx *ctx = hreq->server_user_data;
+  assert(ctx);
+  IWPOOL *pool = iwpool_create_empty();
+  if (!pool) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  RCA(req = iwpool_calloc(sizeof(*req), pool), finish);
+  req->pool = pool;
+  req->base.ctx = &ctx->base;
+  req->base.http = hreq;
+
+  struct iwn_http_val val = iwn_http_request_target(hreq);
+  if (!val.len) {
+    rc = IW_ERROR_ASSERTION;
+    goto finish;
+  }
+  RCA(req->base.target = iwpool_strndup2(pool, val.buf, val.len), finish);
+  val = iwn_http_request_method(hreq);
+  if (!val.len) {
+    rc = IW_ERROR_ASSERTION;
+    goto finish;
+  }
+  
+  // TODO: Fill path
+
+  if (strncmp(val.buf, "GET", val.len) == 0) {
+    req->base.method = IWN_WF_GET;
+  } else if (strncmp(val.buf, "POST", val.len) == 0) {
+    req->base.method = IWN_WF_POST;
+  } else if (strncmp(val.buf, "PUT", val.len) == 0) {
+    req->base.method = IWN_WF_PUT;
+  } else if (strncmp(val.buf, "HEAD", val.len) == 0) {
+    req->base.method = IWN_WF_HEAD;
+  } else if (strncmp(val.buf, "DELETE", val.len) == 0) {
+    req->base.method = IWN_WF_DELETE;
+  } else if (strncmp(val.buf, "OPTIONS", val.len) == 0) {
+    req->base.method = IWN_WF_OPTIONS;
+  } else if (strncmp(val.buf, "PATCH", val.len) == 0) {
+    req->base.method = IWN_WF_PATCH;
+  } else {
+    rc = WF_ERROR_UNSUPPORTED_HTTP_METHOD;
+    goto finish;
+  }
+
+  // Attach to http request
+  hreq->request_user_data = req;
+  hreq->on_request_destroy = _request_on_destroy;
+
+finish:
+  if (rc) {
+    if (req) {
+      _request_destroy(req);
+    } else {
+      iwpool_destroy(pool);
+    }
+  }
+  return rc;
+}
+
+static bool _request_handler(struct iwn_http_request *hreq) {
+  iwrc rc = 0;
+  struct ctx *ctx = hreq->server_user_data;
+  assert(ctx);
+  struct req *req = hreq->request_user_data;
+  if (!req) {
+    RCC(rc, finish, _request_create(hreq));
+  }
+
+  if (iwn_http_request_is_streamed(hreq)) {
+    // TODO:
+    return false;
+  }
+
   // TODO:
+finish:
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    return false;
+  }
   return true;
 }
 
@@ -207,7 +313,7 @@ iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx
   RCA(ctx = iwpool_calloc(sizeof(*ctx), pool), finish);
   ctx->pool = pool;
   RCC(rc, finish, _route_import(root_route_spec, ctx, &ctx->root));
-  ctx->base.root_route = &ctx->root->base;
+  ctx->base.root = &ctx->root->base;
 
 finish:
   if (rc) {
@@ -229,18 +335,37 @@ struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx) {
 iwrc iwn_wf_server_create(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {
   struct ctx *ctx = (void*) ctx_;
   struct iwn_wf_server_spec spec;
+  struct iwn_http_server_spec http = { 0 };
 
   memcpy(&spec, spec_, sizeof(spec));
   if (spec.request_file_max_size == 0) {
     spec.request_file_max_size = 50 * 1024 * 1024;
   }
-  ctx->poller = spec.http.poller;
+  ctx->poller = spec.poller;
   ctx->request_file_max_size = spec.request_file_max_size;
-  spec.http.user_data = ctx;
-  spec.http.on_server_dispose = _on_server_dispose;
-  spec.http.request_handler = _request_handler;
+  http.on_server_dispose = _on_server_dispose;
+  http.request_handler = _request_handler;
 
-  return iwn_http_server_create(&spec.http, &ctx->server_fd);
+  http.user_data = ctx;
+  http.poller = spec.poller;
+  http.listen = spec.listen;
+  http.port = spec.port;
+  http.certs = spec.certs;
+  http.certs_in_buffer = spec.certs_in_buffer;
+  http.certs_len = spec.certs_len;
+  http.private_key = spec.private_key;
+  http.private_key_in_buffer = spec.private_key_in_buffer;
+  http.private_key_len = spec.private_key_len;
+  http.socket_queue_size = spec.socket_queue_size;
+  http.response_buf_size = spec.response_buf_size;
+  http.request_buf_max_size = spec.request_buf_max_size;
+  http.request_buf_size = spec.request_buf_size;
+  http.request_timeout_keepalive_sec = spec.request_timeout_keepalive_sec;
+  http.request_timeout_sec = spec.request_timeout_sec;
+  http.request_token_max_len = spec.request_token_max_len;
+  http.request_max_headers_count = spec.request_max_headers_count;
+
+  return iwn_http_server_create(&http, &ctx->server_fd);
 }
 
 void iwn_wf_destroy(struct iwn_wf_ctx *ctx_) {
@@ -271,6 +396,8 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
       return "Invalid regular expression: expected '}' at end of submatch (WF_ERROR_REGEXP_SUBMATCH)";
     case WF_ERROR_REGEXP_ENGINE:
       return "Illegal instruction in compiled regular expression (please report this bug) (WF_ERROR_REGEXP_ENGINE)";
+    case WF_ERROR_UNSUPPORTED_HTTP_METHOD:
+      return "Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD)";
   }
   return 0;
 }
