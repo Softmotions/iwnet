@@ -5,10 +5,23 @@ IW_EXTERN_C_START
 
 typedef enum {
   _WF_ERROR_START = (IW_ERROR_START + 205000UL),
-  WF_ERROR_INVALID_FORM_DATA,                   ///< Invalid (unparseable) form data (WF_ERROR_INVALID_FORM_DATA).
-  WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT, ///< Parent route from different context
-  // (WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT).
-  WF_ERROR_INVALID_ROUTE_PATTERN,               ///< Invalid route pattern (WF_ERROR_INVALID_ROUTE_PATTERN).
+  WF_ERROR_INVALID_FORM_DATA,                   /**< Invalid (unparseable) form data (WF_ERROR_INVALID_FORM_DATA).*/
+  WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT,
+  /**< Parent route from different context
+     (WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT). */
+  WF_ERROR_REGEXP_INVALID,                      /**< Invalid regular expression (WF_ERROR_REGEXP_INVALID) */
+  WF_ERROR_REGEXP_CHARSET,
+  /**< Invalid regular expression: expected ']' at end of character set
+     (WF_ERROR_REGEXP_CHARSET) */
+  WF_ERROR_REGEXP_SUBEXP,
+  /**< Invalid regular expression: expected ')' at end of subexpression
+     (WF_ERROR_REGEXP_SUBEXP) */
+  WF_ERROR_REGEXP_SUBMATCH,
+  /**< Invalid regular expression: expected '}' at end of submatch
+     (WF_ERROR_REGEXP_SUBMATCH) */
+  WF_ERROR_REGEXP_ENGINE,
+  /**< Illegal instruction in compiled regular expression (please report this
+     bug) (WF_ERROR_REGEXP_ENGINE) */
   _WF_ERROR_END,
 } iwn_wf_ecode_e;
 

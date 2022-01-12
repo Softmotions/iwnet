@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
+#include <pthread.h>
 
 struct route;
 
@@ -19,12 +20,17 @@ struct ctx {
   int     request_file_max_size;
 };
 
+#define ROUTE_FLG_RE_MATCH_END 0x01
+
 struct route {
   struct iwn_wf_route base;
   struct route       *parent;
   struct route       *child;
   struct route       *next;
+  pthread_mutex_t     mtx;
+  char      *pattern;
   struct re *pattern_re;
+  uint32_t   re_flags;
 };
 
 static const char* _ecodefn(locale_t, uint32_t);
@@ -37,6 +43,22 @@ IW_INLINE iwrc _init(void) {
   return 0;
 }
 
+IW_INLINE iwrc _iwre_code(int mret) {
+  switch (mret) {
+    case RE_ERROR_NOMEM:
+      return IW_ERROR_ALLOC;
+    case RE_ERROR_CHARSET:
+      return WF_ERROR_REGEXP_CHARSET;
+    case RE_ERROR_SUBEXP:
+      return WF_ERROR_REGEXP_SUBEXP;
+    case RE_ERROR_SUBMATCH:
+      return WF_ERROR_REGEXP_SUBMATCH;
+    case RE_ERROR_ENGINE:
+      return WF_ERROR_REGEXP_ENGINE;
+  }
+  return 0;
+}
+
 static void _route_destroy(struct route *route) {
   struct iwn_wf_route *base = &route->base;
   iwn_wf_handler_dispose handler_dispose = base->handler_dispose;
@@ -44,10 +66,12 @@ static void _route_destroy(struct route *route) {
     base->handler_dispose = 0;
     handler_dispose(base->ctx, base->handler_data);
   }
+  route->pattern = 0;
   if (route->pattern_re) {
     iwre_free(route->pattern_re);
     route->pattern_re = 0;
   }
+  pthread_mutex_destroy(&route->mtx);
 }
 
 static void _route_destroy_deep(struct route *route) {
@@ -75,19 +99,6 @@ static void _on_server_dispose(const struct iwn_http_server *server) {
   }
 }
 
-static bool _request_handler(struct iwn_http_request *req) {
-  // TODO:
-  return true;
-}
-
-static iwrc _route_init(struct route *route) {
-  struct iwn_wf_route *base = &route->base;
-  const char *pattern = base->pattern;
-  if (pattern) {
-  }
-  return 0;
-}
-
 static void _route_attach(struct route *parent, struct route *route) {
   route->next = route->child = 0;
   route->parent = parent;
@@ -104,6 +115,30 @@ static void _route_attach(struct route *parent, struct route *route) {
   }
 }
 
+static iwrc _route_init(struct route *route) {
+  iwrc rc = 0;
+  struct iwn_wf_route *base = &route->base;
+  char *pattern = route->pattern;
+  size_t len = pattern ? strlen(pattern) : 0;
+  if (len) {
+    if (*pattern == '^') { // We use regexp
+      if (pattern[len - 1] == '$') {
+        route->re_flags |= ROUTE_FLG_RE_MATCH_END;
+        pattern[len - 1] = '\0';
+      }
+      route->pattern++; // skip `^`
+      RCA(route->pattern_re = iwre_new(route->pattern), finish);
+      // Check pattern matching
+      rc = _iwre_code(iwre_match(route->pattern_re, ""));
+    }
+  } else {
+    route->pattern = 0;
+  }
+
+finish:
+  return rc;
+}
+
 static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, struct route **out) {
   *out = 0;
   iwrc rc = 0;
@@ -116,11 +151,13 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   }
 
   RCA(route = iwpool_calloc(sizeof(*route), pool), finish);
+  memcpy(&route->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(route->mtx));
   memcpy(&route->base, spec, sizeof(*route));
   base = &route->base;
 
   if (spec->pattern) {
     RCA(base->pattern = iwpool_strdup2(pool, spec->pattern), finish);
+    route->pattern = (char*) base->pattern; // Discarding `const` here
   }
   if (spec->tag) {
     RCA(base->tag = iwpool_strdup2(pool, spec->tag), finish);
@@ -138,7 +175,17 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   *out = route;
 
 finish:
+  if (rc) {
+    if (route) {
+      _route_destroy(route);
+    }
+  }
   return rc;
+}
+
+static bool _request_handler(struct iwn_http_request *req) {
+  // TODO:
+  return true;
 }
 
 iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx) {
@@ -211,11 +258,19 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
   }
   switch (ecode) {
     case WF_ERROR_INVALID_FORM_DATA:
-      return "Invalid (unparseable) form data (WF_ERROR_INVALID_FORM_DATA).";
+      return "Invalid (unparseable) form data (WF_ERROR_INVALID_FORM_DATA)";
     case WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT:
-      return "Parent router from different context (WF_ERROR_PARENT_ROUTER_FROM_DIFFERENT_CONTEXT).";
-    case WF_ERROR_INVALID_ROUTE_PATTERN:
-      return "Invalid route pattern (WF_ERROR_INVALID_ROUTE_PATTERN).";
+      return "Parent router from different context (WF_ERROR_PARENT_ROUTER_FROM_DIFFERENT_CONTEXT)";
+    case WF_ERROR_REGEXP_INVALID:
+      return "Invalid regular expression (WF_ERROR_REGEXP_INVALID)";
+    case WF_ERROR_REGEXP_CHARSET:
+      return "Invalid regular expression: expected ']' at end of character set (WF_ERROR_REGEXP_CHARSET)";
+    case WF_ERROR_REGEXP_SUBEXP:
+      return "Invalid regular expression: expected ')' at end of subexpression (WF_ERROR_REGEXP_SUBEXP)";
+    case WF_ERROR_REGEXP_SUBMATCH:
+      return "Invalid regular expression: expected '}' at end of submatch (WF_ERROR_REGEXP_SUBMATCH)";
+    case WF_ERROR_REGEXP_ENGINE:
+      return "Illegal instruction in compiled regular expression (please report this bug) (WF_ERROR_REGEXP_ENGINE)";
   }
   return 0;
 }
