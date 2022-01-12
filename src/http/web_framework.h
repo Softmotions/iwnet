@@ -44,6 +44,7 @@ struct iwn_wf_req {
 };
 
 struct iwn_wf_route {
+  struct iwn_wf_ctx   *ctx;
   struct iwn_wf_route *parent;
   const char    *pattern;
   uint32_t       flags;
@@ -51,10 +52,11 @@ struct iwn_wf_route {
   iwn_wf_handler_dispose handler_dispose;
   void       *handler_data;
   const char *tag;
-  // Implementation specific
-  struct iwn_wf_ctx   *ctx;
-  struct iwn_wf_route *child;
-  struct iwn_wf_route *next;
+};
+
+struct iwn_wf_server_spec {
+  struct iwn_http_server_spec http;
+  int request_file_max_size; ///< -1: To disable file uploading. Default:  50Mb (52428800)
 };
 
 struct iwn_wf_ctx {
@@ -65,7 +67,9 @@ IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root_route, struct i
 
 IW_EXPORT WUR iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route);
 
-IW_EXPORT WUR iwrc iwn_wf_start(const struct iwn_http_server_spec *http, struct iwn_wf_ctx *ctx);
+IW_EXPORT WUR iwrc iwn_wf_server_create(const struct iwn_wf_server_spec *spec, struct iwn_wf_ctx *ctx);
+
+IW_EXPORT struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx);
 
 IW_EXPORT const char* iwn_wf_request_header_get(struct iwn_wf_req*, const char *name);
 

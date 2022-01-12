@@ -8,10 +8,23 @@
 #include <string.h>
 #include <stdbool.h>
 
+struct route;
+
 struct ctx {
-  struct iwn_wf_ctx    base;
-  struct iwn_wf_route *root;
+  struct iwn_wf_ctx  base;
+  struct route      *root;
+  struct iwn_poller *poller;
   IWPOOL *pool;
+  int     server_fd;
+  int     request_file_max_size;
+};
+
+struct route {
+  struct iwn_wf_route base;
+  struct route       *parent;
+  struct route       *child;
+  struct route       *next;
+  struct re *pattern_re;
 };
 
 static const char* _ecodefn(locale_t, uint32_t);
@@ -24,31 +37,61 @@ IW_INLINE iwrc _init(void) {
   return 0;
 }
 
+static void _route_destroy(struct route *route) {
+  struct iwn_wf_route *base = &route->base;
+  iwn_wf_handler_dispose handler_dispose = base->handler_dispose;
+  if (handler_dispose) {
+    base->handler_dispose = 0;
+    handler_dispose(base->ctx, base->handler_data);
+  }
+  if (route->pattern_re) {
+    iwre_free(route->pattern_re);
+    route->pattern_re = 0;
+  }
+}
+
+static void _route_destroy_deep(struct route *route) {
+  for (struct route *r = route->child, *n = 0; r; r = n) {
+    n = r->next;
+    _route_destroy(r);
+  }
+  _route_destroy(route);
+}
+
+static void _ctx_destroy(struct ctx *ctx) {
+  if (!ctx) {
+    return;
+  }
+  if (ctx->root) {
+    _route_destroy_deep(ctx->root);
+  }
+  iwpool_destroy(ctx->pool);
+}
+
+static void _on_server_dispose(const struct iwn_http_server *server) {
+  struct ctx *ctx = server->user_data;
+  if (ctx) {
+    _ctx_destroy(ctx);
+  }
+}
+
 static bool _request_handler(struct iwn_http_request *req) {
   // TODO:
   return true;
 }
 
-
-static void _on_server_dispose(const struct iwn_http_server *server) {
-  struct ctx *ctx = server->user_data;
-  if (ctx) {
-    
+static iwrc _route_init(struct route *route) {
+  struct iwn_wf_route *base = &route->base;
+  const char *pattern = base->pattern;
+  if (pattern) {
   }
-}
-
-static iwrc _route_pattern_check(const char *pattern) {
-  if (!pattern) {
-    return 0;
-  }
-  // TODO:
   return 0;
 }
 
-static void _route_add(struct iwn_wf_route *parent, struct iwn_wf_route *route) {
+static void _route_attach(struct route *parent, struct route *route) {
   route->next = route->child = 0;
   route->parent = parent;
-  struct iwn_wf_route *r = parent->child;
+  struct route *r = parent->child;
   if (r) {
     do {
       if (!r->next) {
@@ -61,28 +104,38 @@ static void _route_add(struct iwn_wf_route *parent, struct iwn_wf_route *route) 
   }
 }
 
-static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, struct iwn_wf_route **out) {
+static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, struct route **out) {
   *out = 0;
   iwrc rc = 0;
-  struct iwn_wf_route *route;
+  struct route *route;
+  struct iwn_wf_route *base;
   IWPOOL *pool = ctx->pool;
 
   if (spec->parent && spec->parent->ctx != &ctx->base) {
     return WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT;
   }
 
-  RCR(_route_pattern_check(spec->pattern));
-  RCA(route = iwpool_alloc(sizeof(*route), pool), finish);
-  memcpy(route, spec, sizeof(*route));
+  RCA(route = iwpool_calloc(sizeof(*route), pool), finish);
+  memcpy(&route->base, spec, sizeof(*route));
+  base = &route->base;
+
   if (spec->pattern) {
-    RCA(route->pattern = iwpool_strdup2(pool, spec->pattern), finish);
+    RCA(base->pattern = iwpool_strdup2(pool, spec->pattern), finish);
   }
   if (spec->tag) {
-    RCA(route->tag = iwpool_strdup2(pool, spec->tag), finish);
+    RCA(base->tag = iwpool_strdup2(pool, spec->tag), finish);
+  }
+  RCR(_route_init(route));
+  if (!route->parent && ctx->root) {
+    base->parent = &ctx->root->base;
+    route->parent = ctx->root;
   }
   if (route->parent) {
-    _route_add(route->parent, route);
+    _route_attach(route->parent, route);
+  } else {
+    ctx->root = route;
   }
+  *out = route;
 
 finish:
   return rc;
@@ -105,18 +158,51 @@ iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx
   iwrc rc = 0;
   struct ctx *ctx = 0;
   RCA(ctx = iwpool_calloc(sizeof(*ctx), pool), finish);
+  ctx->pool = pool;
   RCC(rc, finish, _route_import(root_route_spec, ctx, &ctx->root));
-  ctx->base.root_route = ctx->root;
+  ctx->base.root_route = &ctx->root->base;
 
 finish:
   if (rc) {
-    iwpool_destroy(pool);
+    if (ctx) {
+      _ctx_destroy(ctx);
+    } else {
+      iwpool_destroy(pool);
+    }
+  } else {
+    *out_ctx = &ctx->base;
   }
   return rc;
 }
 
-void iwn_wf_destroy(struct iwn_wf_ctx *ctx) {
-  _ctx_destroy((void*) ctx);
+struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx) {
+  return ((struct ctx*) ctx)->poller;
+}
+
+iwrc iwn_wf_server_create(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {
+  struct ctx *ctx = (void*) ctx_;
+  struct iwn_wf_server_spec spec;
+
+  memcpy(&spec, spec_, sizeof(spec));
+  if (spec.request_file_max_size == 0) {
+    spec.request_file_max_size = 50 * 1024 * 1024;
+  }
+  ctx->poller = spec.http.poller;
+  ctx->request_file_max_size = spec.request_file_max_size;
+  spec.http.user_data = ctx;
+  spec.http.on_server_dispose = _on_server_dispose;
+  spec.http.request_handler = _request_handler;
+
+  return iwn_http_server_create(&spec.http, &ctx->server_fd);
+}
+
+void iwn_wf_destroy(struct iwn_wf_ctx *ctx_) {
+  struct ctx *ctx = (void*) ctx_;
+  if (ctx->poller && ctx->server_fd > -1) {
+    iwn_poller_remove(ctx->poller, ctx->server_fd);
+  } else {
+    _ctx_destroy(ctx);
+  }
 }
 
 static const char* _ecodefn(locale_t locale, uint32_t ecode) {

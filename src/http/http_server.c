@@ -660,7 +660,7 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
     }
     if (to == HK) {
       ++parser->header_count;
-      if (parser->header_count > server->spec.request_max_header_count) {
+      if (parser->header_count > server->spec.request_max_headers_count) {
         emitted.type = HS_TOK_ERROR;
       }
     } else if (to == HS) {
@@ -1476,8 +1476,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   if (spec->request_token_max_len < 8192) {
     spec->request_token_max_len = 8192;
   }
-  if (spec->request_max_header_count < 1) {
-    spec->request_max_header_count = 127;
+  if (spec->request_max_headers_count < 1) {
+    spec->request_max_headers_count = 127;
   }
   if (spec->request_buf_max_size < 1024 * 1024) {
     spec->request_buf_max_size = 8 * 1024 * 1024;
