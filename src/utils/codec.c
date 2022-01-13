@@ -4,6 +4,7 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <limits.h>
 
 IW_INLINE bool is_anum(char c) {
   return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
@@ -68,6 +69,9 @@ IW_ALLOC char* iwn_url_encode_new(const char *src, ssize_t src_len) {
 }
 
 void iwn_url_decode_inplace(char *str, ssize_t str_len) {
+  if (str_len < 0) {
+    str_len = SSIZE_MAX;
+  }
   char *rp = str;
   char *wp = str;
   char tmp[] = { 0, 0, 0 };

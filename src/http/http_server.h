@@ -118,11 +118,13 @@ IW_EXPORT void iwn_http_response_body_set(
 
 IW_EXPORT iwrc iwn_http_response_end(struct iwn_http_request*);
 
+IW_EXPORT iwrc iwn_http_response_write_code(struct iwn_http_request*, int code);
+
 IW_EXPORT iwrc iwn_http_response_write_simple(
   struct iwn_http_request*,
   int         status_code,
   const char *content_type,
-  char       *body,
+  const char *body,
   ssize_t     body_len,
   void (     *body_free )(void*));
 

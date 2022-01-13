@@ -23,6 +23,7 @@ typedef enum {
   /**< Illegal instruction in compiled regular expression (please report this
      bug) (WF_ERROR_REGEXP_ENGINE) */
   WF_ERROR_UNSUPPORTED_HTTP_METHOD, /**< Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD) */
+  WF_ERROR_MAX_NESTED_ROUTES, /**<  Exceeds max number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES) */
   _WF_ERROR_END,
 } iwn_wf_ecode_e;
 
@@ -55,9 +56,9 @@ struct iwn_wf_req {
   iwn_wf_request_dispose   request_dispose;
   void       *handler_user_data;
   void       *request_user_data;
-  const char *target; ///< Raw request path with query data.
-  const char *path;   ///< Request path stripped path query data.
-  uint8_t     method; ///< Request method.
+  const char *fullpath; ///< Full request path except query string
+  const char *path;     ///< Rest of path not consumed by previous router matcher.
+  uint8_t     method;   ///< Request method.
 };
 
 struct iwn_wf_route {
@@ -82,7 +83,7 @@ struct iwn_wf_server_spec {
   int  socket_queue_size;             ///< Default: 64
   int  request_buf_max_size;          ///< Default: 8Mb
   int  request_buf_size;              ///< Default: 1024
-  int  request_file_max_size;         ///< -1: To disable file uploading. Default:  50Mb (52428800)
+  int  request_file_max_size;         ///< -1: To disable chunked requests and files uploading. Default:  50Mb (52428800)
   int  request_max_headers_count;     ///< Default:  127
   int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 Use default timeout: 120sec
   int  request_timeout_sec;           ///< -1 Disable timeout, 0 Use default timeout: 20sec

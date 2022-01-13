@@ -1351,7 +1351,7 @@ iwrc iwn_http_response_write_simple(
   struct iwn_http_request *request,
   int                      status_code,
   const char              *content_type,
-  char                    *body,
+  const char              *body,
   ssize_t                  body_len,
   void (                  *body_free )(void*)
   ) {
@@ -1366,6 +1366,11 @@ iwrc iwn_http_response_write_simple(
 
 finish:
   return rc;
+}
+
+iwrc iwn_http_response_write_code(struct iwn_http_request *request, int code) {
+  const char *text = _status_text[code];
+  return iwn_http_response_write_simple(request, code, "text/plain", text, -1, 0);
 }
 
 ///////////////////////////////////////////////////////////////////////////

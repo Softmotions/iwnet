@@ -1,4 +1,5 @@
 #include "web_framework.h"
+#include "utils/codec.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwpool.h>
@@ -12,6 +13,19 @@
 #include <pthread.h>
 
 struct route;
+
+struct pair {
+  const char *key;
+  char       *val;
+  size_t      key_len;
+  size_t      val_len;
+  struct pair *next;
+};
+
+struct pairs {
+  struct pair *first;
+  struct pair *last;
+};
 
 struct ctx {
   struct iwn_wf_ctx  base;
@@ -32,12 +46,25 @@ struct route {
   pthread_mutex_t     mtx;
   char      *pattern;
   struct re *pattern_re;
-  uint32_t   re_flags;
+  uint32_t   flags;
 };
 
 struct request {
   struct iwn_wf_req base;
-  IWPOOL *pool;
+  struct pairs      query_params;
+  struct pairs      post_params;
+  //struct route     *first_matched_route; ///< First matched route
+  IWPOOL  *pool;
+  uint32_t flags;
+};
+
+#define ROUTE_MATCHING_STACK_SIZE 127
+
+struct route_iter {
+  struct request *req;
+  int spos; ///< Position of top element on stack
+  struct route *stack[ROUTE_MATCHING_STACK_SIZE];
+  int path_segments[ROUTE_MATCHING_STACK_SIZE];
 };
 
 static const char* _ecodefn(locale_t, uint32_t);
@@ -48,6 +75,53 @@ IW_INLINE iwrc _init(void) {
     RCR(iwlog_register_ecodefn(_ecodefn));
   }
   return 0;
+}
+
+IW_INLINE void _pair_add(struct pairs *pairs, struct pair *p) {
+  p->next = 0;
+  if (pairs->last) {
+    pairs->last->next = p;
+    pairs->last = p;
+  } else {
+    pairs->first = pairs->last = p;
+    return;
+  }
+}
+
+struct pair* _pair_find(struct pairs *pairs, const char *key, ssize_t key_len) {
+  if (key_len < 0) {
+    key_len = strlen(key);
+  }
+  for (struct pair *p = pairs->first; p; p = p->next) {
+    if (p->key_len == key_len && strncmp(p->key, key, key_len) == 0) {
+      return p;
+    }
+  }
+  return 0;
+}
+
+static void _pair_add2(
+  IWPOOL       *pool,
+  struct pairs *pairs,
+  const char   *key,
+  ssize_t       key_len,
+  char         *val,
+  ssize_t       val_len
+  ) {
+  struct pair *p = iwpool_alloc(sizeof(*p), pool);
+  if (p) {
+    if (key_len < 0) {
+      key_len = strlen(key);
+    }
+    if (val_len < 0) {
+      val_len = strlen(val);
+    }
+    p->key = key;
+    p->key_len = key_len;
+    p->val = val;
+    p->val_len = 0;
+    _pair_add(pairs, p);
+  }
 }
 
 IW_INLINE iwrc _iwre_code(int mret) {
@@ -130,7 +204,7 @@ static iwrc _route_init(struct route *route) {
   if (len) {
     if (*pattern == '^') { // We use regexp
       if (pattern[len - 1] == '$') {
-        route->re_flags |= ROUTE_FLG_RE_MATCH_END;
+        route->flags |= ROUTE_FLG_RE_MATCH_END;
         pattern[len - 1] = '\0';
       }
       route->pattern++; // skip `^`
@@ -149,9 +223,19 @@ finish:
 static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, struct route **out) {
   *out = 0;
   iwrc rc = 0;
+  int n = 0;
   struct route *route;
   struct iwn_wf_route *base;
   IWPOOL *pool = ctx->pool;
+
+  if (spec->parent) {
+    for (struct route *r = (void*) spec->parent; r; r = r->parent) {
+      ++n;
+    }
+    if (n >= ROUTE_MATCHING_STACK_SIZE - 1) {
+      return WF_ERROR_MAX_NESTED_ROUTES;
+    }
+  }
 
   if (spec->parent && spec->parent->ctx != &ctx->base) {
     return WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT;
@@ -209,6 +293,153 @@ static void _request_on_destroy(struct iwn_http_request *hreq) {
   }
 }
 
+static iwrc _request_parse_query(struct request *req, char *p) {
+  iwrc rc = 0;
+  IWPOOL *pool = req->pool;
+  char *key = 0, *val = 0;
+  int state = 0;
+
+  key = p;
+  while (*p) {
+    if (state == 0) {
+      if (*p == '=') {
+        *p = '\0';
+        val = p + 1;
+        state = 1;
+      } else if (*p == '&') {
+        *p = '\0';
+        iwn_url_decode_inplace(p, -1);
+        _pair_add2(pool, &req->query_params, key, -1, "", 0);
+        key = p + 1;
+        state = 0;
+      }
+    } else {
+      if (*p == '&') {
+        *p = '\0';
+        iwn_url_decode_inplace(key, -1);
+        iwn_url_decode_inplace(val, -1);
+        _pair_add2(pool, &req->query_params, key, -1, val, -1);
+        key = p + 1;
+        state = 0;
+      }
+    }
+    ++p;
+  }
+  if (state == 0) {
+    if (key[0] != '\0') {
+      iwn_url_decode_inplace(key, -1);
+      _pair_add2(pool, &req->query_params, key, -1, "", 0);
+    } else {
+      iwn_url_decode_inplace(key, -1);
+      iwn_url_decode_inplace(val, -1);
+      _pair_add2(pool, &req->query_params, key, -1, val, -1);
+    }
+  }
+
+  return rc;
+}
+
+static iwrc _request_parse_target(struct request *req) {
+  iwrc rc = 0;
+  char *p;
+  size_t i;
+  IWPOOL *pool = req->pool;
+
+  struct iwn_http_val val = iwn_http_request_target(req->base.http);
+  if (!val.len) {
+    rc = IW_ERROR_ASSERTION;
+    goto finish;
+  }
+  for (i = 0; i < val.len; ++i) {
+    if (val.buf[i] == '?') {
+      break;
+    }
+  }
+  RCA(p = iwpool_strndup2(pool, val.buf, i), finish);
+  iwn_url_decode_inplace(p, i);
+
+  req->base.fullpath = p;
+  req->base.path = req->base.fullpath;
+  if (++i < val.len) {
+    char *q;
+    RCA(q = iwpool_strndup2(pool, val.buf + i, val.len - i), finish);
+    RCC(rc, finish, _request_parse_query(req, q));
+  }
+
+finish:
+  return rc;
+}
+
+static iwrc _request_parse_method(struct request *req) {
+  struct iwn_http_val val = iwn_http_request_method(req->base.http);
+  if (!val.len) {
+    return IW_ERROR_ASSERTION;
+  }
+  switch (val.len) {
+    case 3:
+      if (strncmp(val.buf, "GET", val.len) == 0) {
+        req->base.method = IWN_WF_GET;
+      } else if (strncmp(val.buf, "PUT", val.len) == 0) {
+        req->base.method = IWN_WF_PUT;
+      }
+      break;
+    case 4:
+      if (strncmp(val.buf, "POST", val.len) == 0) {
+        req->base.method = IWN_WF_POST;
+      } else if (strncmp(val.buf, "HEAD", val.len) == 0) {
+        req->base.method = IWN_WF_HEAD;
+      }
+      break;
+    default:
+      if (strncmp(val.buf, "DELETE", val.len) == 0) {
+        req->base.method = IWN_WF_DELETE;
+      } else if (strncmp(val.buf, "OPTIONS", val.len) == 0) {
+        req->base.method = IWN_WF_OPTIONS;
+      } else if (strncmp(val.buf, "PATCH", val.len) == 0) {
+        req->base.method = IWN_WF_PATCH;
+      } else {
+        return WF_ERROR_UNSUPPORTED_HTTP_METHOD;
+      }
+  }
+  return 0;
+}
+
+static bool _is_route_matched(struct request *req, struct route *route) {
+  // TODO:
+  return route;
+}
+
+static void _route_iter_init(struct route_iter *iter) {
+  struct ctx *ctx = (void*) iter->req->base.ctx;
+  iter->stack[0] = ctx->root;
+  iter->spos = 1;
+}
+
+static bool _route_iter_has_next(struct route_iter *iter) {
+  return iter->spos > 0;
+}
+
+static struct route* _route_iter_next(struct route_iter *iter) {
+start:  
+  if (iter->spos < 1) {
+    return 0;
+  }
+  struct route *r = 0, *p = iter->stack[iter->spos - 1];
+  if (p->child) {
+    r = p->child;
+    iter->stack[iter->spos++] = r;
+  } else if (p->next) {
+    r = p->next;
+    iter->stack[iter->spos - 1] = r;
+  } else {
+    // TODO:
+    goto start;
+  }
+
+  // TODO:
+  return r;
+}
+
 static iwrc _request_create(struct iwn_http_request *hreq) {
   iwrc rc = 0;
   struct request *req = 0;
@@ -223,40 +454,11 @@ static iwrc _request_create(struct iwn_http_request *hreq) {
   req->base.ctx = &ctx->base;
   req->base.http = hreq;
 
-  struct iwn_http_val val = iwn_http_request_target(hreq);
-  if (!val.len) {
-    rc = IW_ERROR_ASSERTION;
-    goto finish;
-  }
-  RCA(req->base.target = iwpool_strndup2(pool, val.buf, val.len), finish);
-  val = iwn_http_request_method(hreq);
-  if (!val.len) {
-    rc = IW_ERROR_ASSERTION;
-    goto finish;
-  }
-  
-  // TODO: Fill path
+  RCC(rc, finish, _request_parse_target(req));
+  RCC(rc, finish, _request_parse_method(req));
 
-  if (strncmp(val.buf, "GET", val.len) == 0) {
-    req->base.method = IWN_WF_GET;
-  } else if (strncmp(val.buf, "POST", val.len) == 0) {
-    req->base.method = IWN_WF_POST;
-  } else if (strncmp(val.buf, "PUT", val.len) == 0) {
-    req->base.method = IWN_WF_PUT;
-  } else if (strncmp(val.buf, "HEAD", val.len) == 0) {
-    req->base.method = IWN_WF_HEAD;
-  } else if (strncmp(val.buf, "DELETE", val.len) == 0) {
-    req->base.method = IWN_WF_DELETE;
-  } else if (strncmp(val.buf, "OPTIONS", val.len) == 0) {
-    req->base.method = IWN_WF_OPTIONS;
-  } else if (strncmp(val.buf, "PATCH", val.len) == 0) {
-    req->base.method = IWN_WF_PATCH;
-  } else {
-    rc = WF_ERROR_UNSUPPORTED_HTTP_METHOD;
-    goto finish;
-  }
-
-  // Attach to http request
+  // TODO:
+  // req->first_matched_route = _request_first_mached_leaf_route(req, ctx->root);
   hreq->request_user_data = req;
   hreq->on_request_destroy = _request_on_destroy;
 
@@ -271,27 +473,58 @@ finish:
   return rc;
 }
 
+static bool _request_process(struct request *req) {
+  struct ctx *ctx = (void*) req->base.ctx;
+
+  return true;
+}
+
+static bool _request_stream_process(struct request *req) {
+  struct ctx *ctx = (void*) req->base.ctx;
+  if (ctx->request_file_max_size < 0) {
+    return false;
+  }
+  // TODO:
+  return false;
+}
+
 static bool _request_handler(struct iwn_http_request *hreq) {
   iwrc rc = 0;
   struct ctx *ctx = hreq->server_user_data;
   assert(ctx);
-  struct req *req = hreq->request_user_data;
+  struct request *req = hreq->request_user_data;
   if (!req) {
     RCC(rc, finish, _request_create(hreq));
   }
-
+  // TODO:
+  if (1) { //(!req->first_matched_route) {
+    rc = iwn_http_response_write_code(hreq, 404);
+    goto finish;
+  }
   if (iwn_http_request_is_streamed(hreq)) {
-    // TODO:
-    return false;
+    return _request_stream_process(req);
+  } else {
+    return _request_process(req);
   }
 
-  // TODO:
 finish:
   if (rc) {
     iwlog_ecode_error3(rc);
     return false;
   }
   return true;
+}
+
+iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
+  struct route *route;
+  struct ctx *ctx = (void*) spec->ctx;
+  if (!ctx && spec->parent) {
+    ctx = (void*) spec->parent->ctx;
+  }
+  if (!ctx) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  return _route_import(spec, ctx, &route);
 }
 
 iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx) {
@@ -398,6 +631,8 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
       return "Illegal instruction in compiled regular expression (please report this bug) (WF_ERROR_REGEXP_ENGINE)";
     case WF_ERROR_UNSUPPORTED_HTTP_METHOD:
       return "Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD)";
+    case WF_ERROR_MAX_NESTED_ROUTES:
+      return "Exceeds max number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES)";
   }
   return 0;
 }
