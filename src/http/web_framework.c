@@ -409,7 +409,7 @@ static bool _is_route_matched(struct request *req, struct route *route) {
     return false;
   }
   struct ctx *ctx = (void*) req->base.ctx;
-  
+
 
   return route;
 }
