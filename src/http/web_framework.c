@@ -49,22 +49,22 @@ struct route {
   uint32_t   flags;
 };
 
-struct request {
-  struct iwn_wf_req base;
-  struct pairs      query_params;
-  struct pairs      post_params;
-  //struct route     *first_matched_route; ///< First matched route
-  IWPOOL  *pool;
-  uint32_t flags;
-};
-
 #define ROUTE_MATCHING_STACK_SIZE 127
 
 struct route_iter {
   struct request *req;
-  int spos; ///< Position of top element on stack
+  int cnt; ///< Position of top element on stack
   struct route *stack[ROUTE_MATCHING_STACK_SIZE];
-  int path_segments[ROUTE_MATCHING_STACK_SIZE];
+  bool matched[ROUTE_MATCHING_STACK_SIZE];
+};
+
+struct request {
+  struct iwn_wf_req base;
+  struct pairs      query_params;
+  struct pairs      post_params;
+  struct route_iter it; ///< Routes matching iterator
+  IWPOOL  *pool;
+  uint32_t flags;
 };
 
 static const char* _ecodefn(locale_t, uint32_t);
@@ -405,39 +405,61 @@ static iwrc _request_parse_method(struct request *req) {
 }
 
 static bool _is_route_matched(struct request *req, struct route *route) {
-  // TODO:
+  if (!route) {
+    return false;
+  }
+  struct ctx *ctx = (void*) req->base.ctx;
+  
+
   return route;
 }
 
 static void _route_iter_init(struct route_iter *iter) {
   struct ctx *ctx = (void*) iter->req->base.ctx;
+  memset(iter->stack, 0, sizeof(iter->stack));
+  memset(iter->matched, 0, sizeof(iter->matched));
   iter->stack[0] = ctx->root;
-  iter->spos = 1;
+  iter->matched[0] = true;
+  iter->cnt = 1;
 }
 
-static bool _route_iter_has_next(struct route_iter *iter) {
-  return iter->spos > 0;
+IW_INLINE bool _route_iter_has_next(struct route_iter *iter) {
+  return iter->cnt > 0;
 }
 
-static struct route* _route_iter_next(struct route_iter *iter) {
-start:  
-  if (iter->spos < 1) {
-    return 0;
+IW_INLINE struct route* _route_iter_pop_next(struct request *req, struct route_iter *it) {
+  --it->cnt;
+  if (it->cnt > 0) {
+    struct route *r = it->stack[it->cnt - 1];
+    if (r) {
+      r = it->stack[it->cnt - 1] = r->next;
+      it->matched[it->cnt - 1] = _is_route_matched(req, r);
+    }
+    return r;
   }
-  struct route *r = 0, *p = iter->stack[iter->spos - 1];
-  if (p->child) {
-    r = p->child;
-    iter->stack[iter->spos++] = r;
-  } else if (p->next) {
-    r = p->next;
-    iter->stack[iter->spos - 1] = r;
-  } else {
-    // TODO:
-    goto start;
-  }
+  return 0;
+}
 
-  // TODO:
-  return r;
+static struct route* _route_iter_next(struct request *req, struct route_iter *it) {
+  while (it->cnt > 0) {
+    bool m;
+    struct route *r, *p = it->stack[it->cnt - 1];
+    if (!p) {
+      r = _route_iter_pop_next(req, it);
+      m = r ? it->matched[it->cnt - 1] : 0;
+    } else if (p->child && it->matched[it->cnt - 1]) {
+      // Process children only if parent is matched
+      r = it->stack[it->cnt++] = p->child;
+      m = it->matched[it->cnt - 1] = _is_route_matched(req, r);
+    } else {
+      r = it->stack[it->cnt - 1] = p->next;
+      m = it->matched[it->cnt - 1] = r ? _is_route_matched(req, r) : 0;
+    }
+    if (m && r->base.handler) {
+      return r;
+    }
+  }
+  return 0;
 }
 
 static iwrc _request_create(struct iwn_http_request *hreq) {
