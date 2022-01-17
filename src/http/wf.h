@@ -36,13 +36,14 @@ typedef enum {
 #define  IWN_WF_RES_BAD_REQUEST      400
 
 // Route methods:
-#define IWN_WF_GET       0x01U
-#define IWN_WF_PUT       0x02U
-#define IWN_WF_POST      0x04U
-#define IWN_WF_DELETE    0x08U
-#define IWN_WF_HEAD      0x10U
-#define IWN_WF_OPTIONS   0x20U
-#define IWN_WF_PATCH     0x40U
+#define IWN_WF_GET            0x01U
+#define IWN_WF_PUT            0x02U
+#define IWN_WF_POST           0x04U
+#define IWN_WF_DELETE         0x08U
+#define IWN_WF_HEAD           0x10U
+#define IWN_WF_OPTIONS        0x20U
+#define IWN_WF_PATCH          0x40U
+#define IWN_WF_FLAG_MATCH_END 0x80U
 
 struct iwn_wf_ctx;
 struct iwn_wf_req;

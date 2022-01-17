@@ -1,9 +1,5 @@
-#include "web_framework.h"
+#include "wf_internal.h"
 #include "utils/codec.h"
-
-#include <iowow/iwlog.h>
-#include <iowow/iwpool.h>
-#include <iowow/iwre.h>
 
 #include <assert.h>
 #include <stdlib.h>
@@ -11,63 +7,6 @@
 #include <string.h>
 #include <stdbool.h>
 #include <pthread.h>
-
-struct route;
-
-struct pair {
-  const char *key;
-  char       *val;
-  size_t      key_len;
-  size_t      val_len;
-  struct pair *next;
-};
-
-struct pairs {
-  struct pair *first;
-  struct pair *last;
-};
-
-struct ctx {
-  struct iwn_wf_ctx  base;
-  struct route      *root;
-  struct iwn_poller *poller;
-  IWPOOL *pool;
-  int     server_fd;
-  int     request_file_max_size;
-};
-
-#define ROUTE_FLG_RE_MATCH_END 0x01
-
-struct route {
-  struct iwn_wf_route base;
-  struct route       *parent;
-  struct route       *child;
-  struct route       *next;
-  pthread_mutex_t     mtx;
-  char      *pattern;
-  struct re *pattern_re;
-  int      pattern_len;
-  uint32_t flags;
-};
-
-#define ROUTE_MATCHING_STACK_SIZE 127
-
-struct route_iter {
-  struct request *req;
-  int cnt; ///< Position of top element on stack
-  struct route *stack[ROUTE_MATCHING_STACK_SIZE];
-  int  mlen[ROUTE_MATCHING_STACK_SIZE]; // Matched sections lengh
-  bool matched[ROUTE_MATCHING_STACK_SIZE];
-};
-
-struct request {
-  struct iwn_wf_req base;
-  struct pairs      query_params;
-  struct pairs      post_params;
-  struct route_iter it; ///< Routes matching iterator
-  IWPOOL  *pool;
-  uint32_t flags;
-};
 
 static const char* _ecodefn(locale_t, uint32_t);
 
@@ -208,7 +147,7 @@ static iwrc _route_init(struct route *route) {
   if (len) {
     if (*pattern == '^') { // We use regexp
       if (pattern[len - 1] == '$') {
-        route->flags |= ROUTE_FLG_RE_MATCH_END;
+        route->flags |= IWN_WF_FLAG_MATCH_END;
         pattern[len - 1] = '\0';
       }
       route->pattern++; // skip `^`
@@ -247,9 +186,12 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
 
   RCA(route = iwpool_calloc(sizeof(*route), pool), finish);
   memcpy(&route->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(route->mtx));
-  memcpy(&route->base, spec, sizeof(*route));
+  memcpy(&route->base, spec, sizeof(route->base));
   base = &route->base;
-
+  route->flags = base->flags;
+  if (base->parent) {
+    route->parent = (void*) route->base.parent;
+  }
   if (spec->pattern) {
     RCA(base->pattern = iwpool_strdup2(pool, spec->pattern), finish);
     route->pattern = (char*) base->pattern; // Discarding `const` here
@@ -407,8 +349,8 @@ static iwrc _request_parse_method(struct request *req) {
   return 0;
 }
 
-static bool _route_do_match(int pos, int mlen_fix, struct route_iter *it) {
-  struct route *route = it->stack[pos - 1];
+static bool _route_do_match(int pos, struct route_iter *it) {
+  struct route *route = it->stack[pos];
   if (!route) {
     return false;
   }
@@ -429,16 +371,20 @@ static bool _route_do_match(int pos, int mlen_fix, struct route_iter *it) {
       m = true;
     }
     if (m) {
-      const char *path_unmatched = wreq->path_unmatched += mlen + mlen_fix;
-      if (*path_unmatched != '\0' && (route->flags & ROUTE_FLG_RE_MATCH_END)) {
+      const char *path_unmatched = wreq->path_unmatched += mlen - it->prev_sibling_mlen;
+      if (*path_unmatched != '\0' && (route->flags & IWN_WF_FLAG_MATCH_END)) {
         m = false;
+        mlen = 0;
       } else {
         wreq->path_unmatched = path_unmatched;
-        it->mlen[it->cnt - 1] = mlen;
       }
     }
   }
-
+  it->matched[pos] = m;
+  it->mlen[pos] = mlen;
+  if (m) {
+    it->prev_sibling_mlen = mlen;
+  }
   return m;
 }
 
@@ -450,21 +396,21 @@ static void _route_iter_init(struct request *req, struct route_iter *iter) {
   memset(iter->matched, 0, sizeof(iter->matched));
   iter->stack[0] = ctx->root;
   iter->matched[0] = true;
+  iter->prev_sibling_mlen = 0;
   iter->cnt = 1;
 }
 
-IW_INLINE struct route* _route_iter_pop_and_next(struct request *req, struct route_iter *it) {
-  if (it->cnt) {
-    // Adjust unmatched part of path
-    it->req->base.path_unmatched -= it->mlen[it->cnt - 1];
-    if (--it->cnt > 0) {
-      struct route *r = it->stack[it->cnt - 1];
-      if (r) {
-        r = it->stack[it->cnt - 1] = r->next;
-        it->matched[it->cnt - 1] = _route_do_match(it->cnt - 1, 0, it);
-      }
-      return r;
-    }
+static struct route* _route_iter_pop_then_next(struct request *req, struct route_iter *it) {
+  it->req->base.path_unmatched -= it->prev_sibling_mlen;
+  if (--it->cnt > 0) {
+    struct route *r = it->stack[it->cnt - 1];
+    assert(r);
+    it->prev_sibling_mlen = it->mlen[it->cnt - 1];
+    r = it->stack[it->cnt - 1] = r->next;
+    _route_do_match(it->cnt - 1, it);
+    return r;
+  } else {
+    it->prev_sibling_mlen = 0;
   }
   return 0;
 }
@@ -474,15 +420,15 @@ static struct route* _route_iter_next(struct request *req, struct route_iter *it
     bool m;
     struct route *r, *p = it->stack[it->cnt - 1];
     if (!p) {
-      r = _route_iter_pop_and_next(req, it);
+      r = _route_iter_pop_then_next(req, it);
       m = r ? it->matched[it->cnt - 1] : 0;
     } else if (p->child && it->matched[it->cnt - 1]) {
-      // Process children only if parent is matched
+      it->prev_sibling_mlen = 0;
       r = it->stack[it->cnt++] = p->child;
-      m = it->matched[it->cnt - 1] = _route_do_match(it->cnt - 1, -it->mlen[it->cnt - 1], it);
+      m = _route_do_match(it->cnt - 1, it);
     } else {
       r = it->stack[it->cnt - 1] = p->next;
-      m = it->matched[it->cnt - 1] = _route_do_match(it->cnt - 1, -it->mlen[it->cnt - 1], it);
+      m = _route_do_match(it->cnt - 1, it);
     }
     if (m && r->base.handler) {
       return r;
@@ -526,7 +472,7 @@ finish:
 
 static bool _request_process(struct request *req) {
   struct ctx *ctx = (void*) req->base.ctx;
-
+  // TODO:
   return true;
 }
 
@@ -568,6 +514,9 @@ finish:
 
 iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
   struct route *route;
+  if (out_route) {
+    *out_route = 0;
+  }
   struct ctx *ctx = (void*) spec->ctx;
   if (!ctx && spec->parent) {
     ctx = (void*) spec->parent->ctx;
@@ -575,7 +524,11 @@ iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **
   if (!ctx) {
     return IW_ERROR_INVALID_ARGS;
   }
-  return _route_import(spec, ctx, &route);
+  iwrc rc = _route_import(spec, ctx, &route);
+  if (!rc && out_route) {
+    *out_route = &route->base;
+  }
+  return rc;
 }
 
 iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx) {
@@ -687,3 +640,19 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
   }
   return 0;
 }
+
+#ifdef IW_TESTS
+
+void route_iter_init(struct request *req, struct route_iter *it) {
+  _route_iter_init(req, it);
+}
+
+struct route* route_iter_next(struct request *req, struct route_iter *it) {
+  return _route_iter_next(req, it);
+}
+
+void request_destroy(struct request *req) {
+  _request_destroy(req);
+}
+
+#endif
