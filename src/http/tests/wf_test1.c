@@ -65,14 +65,19 @@ static iwrc test_matching1(void) {
 
   RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
     .ctx = ctx,
-    .pattern = "/foo/zaz",
+    .pattern = "/foo/bar",
     .handler = _route_handler,
   }, 0));
 
   struct route *r = _request_first_matched("/foo", IWN_WF_GET, &it);
-  if (it.req) {
-    request_destroy(it.req);
+  IWN_ASSERT(r);
+  if (r) {
+    IWN_ASSERT(strcmp(r->pattern, "/foo") == 0);
   }
+  request_destroy(it.req);
+
+  // r = _request_first_matched("")
+
 
 finish:
   iwn_wf_destroy(ctx);

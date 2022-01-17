@@ -188,6 +188,9 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   memcpy(&route->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(route->mtx));
   memcpy(&route->base, spec, sizeof(route->base));
   base = &route->base;
+  if (!(base->flags & IWN_WF_ALL_METHODS)) {
+    base->flags |= IWN_WF_GET;
+  }
   route->flags = base->flags;
   if (base->parent) {
     route->parent = (void*) route->base.parent;
@@ -350,8 +353,8 @@ static iwrc _request_parse_method(struct request *req) {
 }
 
 static bool _route_do_match(int pos, struct route_iter *it) {
-  struct route *route = it->stack[pos];
-  if (!route) {
+  struct route *r = it->stack[pos];
+  if (!r) {
     return false;
   }
   struct request *req = it->req;
@@ -360,19 +363,20 @@ static bool _route_do_match(int pos, struct route_iter *it) {
   int mlen = 0;
   bool m = false;
 
-  if (wreq->method & route->base.flags) { // Request method matched
-    if (route->pattern_re) {              // RE
+  if (wreq->method & r->base.flags) { // Request method matched
+    if (r->pattern_re) {              // RE
       // TODO:
-    } else if (route->pattern) { // Simple path subpart match
-      if (strncmp(wreq->path_unmatched, route->pattern, route->pattern_len) == 0) {
-        mlen = route->pattern_len;
+    } else if (r->pattern) { // Simple path subpart match
+      if (strncmp(wreq->path_unmatched, r->pattern, r->pattern_len) == 0) {
+        mlen = r->pattern_len;
+        m = true;
       }
     } else {
       m = true;
     }
     if (m) {
       const char *path_unmatched = wreq->path_unmatched += mlen - it->prev_sibling_mlen;
-      if (*path_unmatched != '\0' && (route->flags & IWN_WF_FLAG_MATCH_END)) {
+      if (*path_unmatched != '\0' && (r->flags & IWN_WF_FLAG_MATCH_END)) {
         m = false;
         mlen = 0;
       } else {

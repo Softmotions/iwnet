@@ -43,7 +43,9 @@ typedef enum {
 #define IWN_WF_HEAD           0x10U
 #define IWN_WF_OPTIONS        0x20U
 #define IWN_WF_PATCH          0x40U
-#define IWN_WF_FLAG_MATCH_END 0x80U
+#define IWN_WF_ALL_METHODS    (IWN_WF_GET | IWN_WF_PUT | IWN_WF_POST | IWN_WF_DELETE | IWN_WF_HEAD | IWN_WF_OPTIONS \
+                               | IWN_WF_PATCH)
+#define IWN_WF_FLAG_MATCH_END 0x100U
 
 struct iwn_wf_ctx;
 struct iwn_wf_req;
