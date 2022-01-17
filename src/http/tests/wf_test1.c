@@ -35,7 +35,7 @@ static struct route* _request_first_matched(const char *path, int methods, struc
   if (oit) {
     memcpy(oit, &it, sizeof(*oit));
   } else {
-    iwpool_destroy(pool);
+    request_destroy(req);
   }
   return route;
 }
