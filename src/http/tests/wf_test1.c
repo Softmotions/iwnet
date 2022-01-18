@@ -41,7 +41,35 @@ static struct route* _request_first_matched(const char *path, int methods, struc
 
 static iwrc test_regexp_matching(void) {
   iwrc rc = 0;
+  struct route_iter it = { 0 };
+  struct route *r;
+  struct iwn_wf_route *p;
 
+  RCC(rc, finish, iwn_wf_create(&(struct iwn_wf_route) {
+    .handler = _root_handler,
+    .tag = "root"
+  }, &ctx));
+
+  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "^/fo{[^/]+}",
+    .handler = _route_handler,
+  }, &p));
+
+  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "^/b{a}{rr?}",
+    .handler = _route_handler,
+    .tag = "bar0",
+  }, 0));
+
+  r = _request_first_matched("/foo", IWN_WF_GET, &it);
+  IWN_ASSERT(r);
+  dbg_request_destroy(it.req);
+
+finish:
+  iwn_wf_destroy(ctx);
+  ctx = 0;
   return rc;
 }
 
@@ -69,7 +97,6 @@ static iwrc test_simple_matching(void) {
     .handler = _route_handler,
     .tag = "bar0",
   }, 0));
-
 
   RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
     .parent = p,
@@ -133,7 +160,8 @@ finish:
 
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
-  RCC(rc, finish, test_simple_matching());
+  //RCC(rc, finish, test_simple_matching());
+  RCC(rc, finish, test_regexp_matching());
 finish:
   IWN_ASSERT(rc == 0);
   return iwn_asserts_failed > 0 ? 1 : 0;
