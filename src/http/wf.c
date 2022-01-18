@@ -1,6 +1,8 @@
 #include "wf_internal.h"
 #include "utils/codec.h"
 
+#include <iowow/iwutils.h>
+
 #include <assert.h>
 #include <stdlib.h>
 #include <errno.h>
@@ -369,9 +371,33 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
 
   if (wreq->method & r->base.flags) { // Request method matched
     if (r->pattern_re) {              // RE
-      if (*path_unmatched) {
-        // TODO:
+      pthread_mutex_lock(&r->mtx);
+      int mret = iwre_match(r->pattern_re, path_unmatched);
+      iwrc rc = _iwre_code(mret);
+      if (IW_LIKELY(!rc)) {
+        if (mret >= 0) {
+          mlen = mret == 0 ? -1 : mret;
+          for (int n = 0; n < r->pattern_re->nmatches; n += 2) { // Record regexp submatches
+            struct route_re_submatch *sm = iwpool_alloc(sizeof(sm), req->pool);
+            if (sm) {
+              sm->route = &r->base;
+              sm->input = path_unmatched;
+              sm->sp = r->pattern_re->matches[n];
+              sm->ep = r->pattern_re->matches[n + 1];
+              if (wreq->last) {
+                wreq->last->next = sm;
+                wreq->last = sm;
+              } else {
+                wreq->first = wreq->last = sm;
+              }
+            }
+          }
+        }
+      } else {
+        iwlog_ecode_error(rc, "Route matching failed. Pattern: %s tag: %s", rc, r->pattern_re->expression,
+                          (r->base.tag ? r->base.tag : ""));
       }
+      pthread_mutex_unlock(&r->mtx);
     } else if (r->pattern) { // Simple path subpart match
       if (*path_unmatched && strncmp(path_unmatched, r->pattern, r->pattern_len) == 0) {
         mlen = r->pattern_len;
@@ -397,16 +423,16 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
   return mlen != 0;
 }
 
-static void _route_iter_init(struct request *req, struct route_iter *iter) {
-  iter->req = req;
+static void _route_iter_init(struct request *req, struct route_iter *it) {
+  it->req = req;
   req->base.path_unmatched = req->base.path;
-  struct ctx *ctx = (void*) iter->req->base.ctx;
-  memset(iter->stack, 0, sizeof(iter->stack));
-  memset(iter->mlen, 0, sizeof(iter->mlen));
-  iter->stack[0] = ctx->root;
-  iter->mlen[0] = -1; // matched
-  iter->prev_sibling_mlen = 0;
-  iter->cnt = 1;
+  struct ctx *ctx = (void*) it->req->base.ctx;
+  memset(it->stack, 0, sizeof(it->stack));
+  memset(it->mlen, 0, sizeof(it->mlen));
+  it->stack[0] = ctx->root;
+  it->mlen[0] = -1; // matched
+  it->prev_sibling_mlen = 0;
+  it->cnt = 1;
 }
 
 static struct route* _route_iter_pop_then_next(struct request *req, struct route_iter *it) {
@@ -418,6 +444,17 @@ static struct route* _route_iter_pop_then_next(struct request *req, struct route
     return r;
   } else {
     it->prev_sibling_mlen = 0;
+  }
+  return 0;
+}
+
+static struct route* _route_iter_current(struct route_iter *it) {
+  if (it->cnt > 0) {
+    struct ctx *ctx = (void*) it->req->base.ctx;
+    struct route *r = it->stack[it->cnt - 1];
+    if (r && r != ctx->root && it->mlen[it->cnt - 1] != 0) {
+      return r;
+    }
   }
   return 0;
 }
@@ -462,8 +499,10 @@ static iwrc _request_create(struct iwn_http_request *hreq) {
   RCC(rc, finish, _request_parse_target(req));
   RCC(rc, finish, _request_parse_method(req));
 
-  // TODO:
-  // req->first_matched_route = _request_first_mached_leaf_route(req, ctx->root);
+  // Scroll to the first matched route
+  _route_iter_init(req, &req->it);
+  _route_iter_next(&req->it);
+
   hreq->request_user_data = req;
   hreq->on_request_destroy = _request_on_destroy;
 
@@ -501,8 +540,8 @@ static bool _request_handler(struct iwn_http_request *hreq) {
   if (!req) {
     RCC(rc, finish, _request_create(hreq));
   }
-  // TODO:
-  if (1) { //(!req->first_matched_route) {
+  if (!_route_iter_current(&req->it)) {
+    // No matched routes found
     rc = iwn_http_response_write_code(hreq, 404);
     goto finish;
   }
@@ -658,15 +697,15 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
 
 #ifdef IW_TESTS
 
-void route_iter_init(struct request *req, struct route_iter *it) {
+void dbg_route_iter_init(struct request *req, struct route_iter *it) {
   _route_iter_init(req, it);
 }
 
-struct route* route_iter_next(struct route_iter *it) {
+struct route* dbg_route_iter_next(struct route_iter *it) {
   return _route_iter_next(it);
 }
 
-void request_destroy(struct request *req) {
+void dbg_request_destroy(struct request *req) {
   _request_destroy(req);
 }
 

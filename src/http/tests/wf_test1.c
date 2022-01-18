@@ -29,17 +29,23 @@ static struct route* _request_first_matched(const char *path, int methods, struc
   IWN_ASSERT_FATAL(pool);
   struct request *req = _request_create(path, methods, pool);
   struct route_iter it = { 0 };
-  route_iter_init(req, &it);
-  struct route *route = route_iter_next(&it);
+  dbg_route_iter_init(req, &it);
+  struct route *route = dbg_route_iter_next(&it);
   if (oit) {
     memcpy(oit, &it, sizeof(*oit));
   } else {
-    request_destroy(req);
+    dbg_request_destroy(req);
   }
   return route;
 }
 
-static iwrc test_matching1(void) {
+static iwrc test_regexp_matching(void) {
+  iwrc rc = 0;
+
+  return rc;
+}
+
+static iwrc test_simple_matching(void) {
   iwrc rc = 0;
   struct route_iter it = { 0 };
   struct route *r, *r2;
@@ -89,35 +95,35 @@ static iwrc test_matching1(void) {
   if (r) {
     IWN_ASSERT(strcmp(r->pattern, "/bar") == 0);
   }
-  request_destroy(it.req);
+  dbg_request_destroy(it.req);
 
   r = _request_first_matched("/bar", IWN_WF_POST, &it);
   IWN_ASSERT(!rc);
-  request_destroy(it.req);
+  dbg_request_destroy(it.req);
 
   r = _request_first_matched("/foo", IWN_WF_GET, &it);
   IWN_ASSERT(r);
   if (r) {
     IWN_ASSERT(strcmp(r->pattern, "/foo") == 0);
   }
-  r = route_iter_next(&it);
+  r = dbg_route_iter_next(&it);
   IWN_ASSERT(!r);
-  request_destroy(it.req);
+  dbg_request_destroy(it.req);
 
   r = _request_first_matched("/foo/bar", IWN_WF_GET, &it);
   IWN_ASSERT_FATAL(r);
   IWN_ASSERT_FATAL(strcmp(r->pattern, "/foo") == 0);
 
-  r2 = route_iter_next(&it);
+  r2 = dbg_route_iter_next(&it);
   IWN_ASSERT_FATAL(r2);
   IWN_ASSERT(r2->parent == r);
   IWN_ASSERT_FATAL(strcmp(r2->pattern, "/bar") == 0);
 
-  r = route_iter_next(&it);
+  r = dbg_route_iter_next(&it);
   IWN_ASSERT_FATAL(r);
   IWN_ASSERT(r->parent == r2);
   IWN_ASSERT(strcmp(r->base.tag, "bar2_nested") == 0);
-  request_destroy(it.req);
+  dbg_request_destroy(it.req);
 
 finish:
   iwn_wf_destroy(ctx);
@@ -127,7 +133,7 @@ finish:
 
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
-  RCC(rc, finish, test_matching1());
+  RCC(rc, finish, test_simple_matching());
 finish:
   IWN_ASSERT(rc == 0);
   return iwn_asserts_failed > 0 ? 1 : 0;

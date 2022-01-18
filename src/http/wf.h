@@ -24,7 +24,7 @@ typedef enum {
      bug) (WF_ERROR_REGEXP_ENGINE) */
   WF_ERROR_UNSUPPORTED_HTTP_METHOD, /**< Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD) */
   WF_ERROR_MAX_NESTED_ROUTES,       /**<  Exceeds the max number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES) */
-  WF_ERROR_ROUTE_CANNOT_BE_PARENT, /**< Route cannot be parent route (WF_ERROR_ROUTE_CANNOT_BE_PARENT) */
+  WF_ERROR_ROUTE_CANNOT_BE_PARENT,  /**< Route cannot be parent route (WF_ERROR_ROUTE_CANNOT_BE_PARENT) */
   _WF_ERROR_END,
 } iwn_wf_ecode_e;
 
@@ -55,6 +55,14 @@ typedef int (*iwn_wf_handler)(struct iwn_wf_req*);
 typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx *ctx, void *user_data);
 typedef void (*iwn_wf_request_dispose)(struct iwn_wf_req*);
 
+struct route_re_submatch {          ///< Route regexp submatch node
+  const char *input;                ///< Matched input
+  const char *sp;                   ///< Pointer to start of submatch
+  const char *ep;                   ///< Pointer to the end of submatch (exclusive)
+  const struct iwn_wf_route *route; ///< Matched route
+  struct route_re_submatch  *next;
+};
+
 struct iwn_wf_req {
   struct iwn_wf_ctx       *ctx;
   struct iwn_http_request *http;
@@ -63,7 +71,9 @@ struct iwn_wf_req {
   void       *request_user_data;
   const char *path;           ///< Full request path except query string
   const char *path_unmatched; ///< Rest of path not consumed by previous router matcher.
-  uint8_t     method;         ///< Request method.
+  struct route_re_submatch *first;
+  struct route_re_submatch *last;
+  uint8_t method;             ///< Request method.
 };
 
 struct iwn_wf_route {

@@ -49,7 +49,7 @@ struct route_iter {
   int cnt; ///< Position of top element on stack
   int prev_sibling_mlen;
   struct route *stack[ROUTE_MATCHING_STACK_SIZE];
-  int  mlen[ROUTE_MATCHING_STACK_SIZE]; // Matched sections lengh
+  int mlen[ROUTE_MATCHING_STACK_SIZE];  // Matched sections lengh
 };
 
 struct request {
@@ -62,8 +62,8 @@ struct request {
 
 #ifdef IW_TESTS
 
-void request_destroy(struct request *req);
-void route_iter_init(struct request *req, struct route_iter *it);
-struct route* route_iter_next(struct route_iter *it);
+void dbg_request_destroy(struct request *req);
+void dbg_route_iter_init(struct request *req, struct route_iter *it);
+struct route* dbg_route_iter_next(struct route_iter *it);
 
 #endif
