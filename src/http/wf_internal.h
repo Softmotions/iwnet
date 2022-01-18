@@ -50,7 +50,6 @@ struct route_iter {
   int prev_sibling_mlen;
   struct route *stack[ROUTE_MATCHING_STACK_SIZE];
   int  mlen[ROUTE_MATCHING_STACK_SIZE]; // Matched sections lengh
-  bool matched[ROUTE_MATCHING_STACK_SIZE];
 };
 
 struct request {
@@ -65,6 +64,6 @@ struct request {
 
 void request_destroy(struct request *req);
 void route_iter_init(struct request *req, struct route_iter *it);
-struct route* route_iter_next(struct request *req, struct route_iter *it);
+struct route* route_iter_next(struct route_iter *it);
 
 #endif

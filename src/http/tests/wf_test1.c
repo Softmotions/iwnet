@@ -29,9 +29,8 @@ static struct route* _request_first_matched(const char *path, int methods, struc
   IWN_ASSERT_FATAL(pool);
   struct request *req = _request_create(path, methods, pool);
   struct route_iter it = { 0 };
-  it.req = req;
   route_iter_init(req, &it);
-  struct route *route = route_iter_next(req, &it);
+  struct route *route = route_iter_next(&it);
   if (oit) {
     memcpy(oit, &it, sizeof(*oit));
   } else {
@@ -43,6 +42,8 @@ static struct route* _request_first_matched(const char *path, int methods, struc
 static iwrc test_matching1(void) {
   iwrc rc = 0;
   struct route_iter it = { 0 };
+  struct route *r, *r2;
+  struct iwn_wf_route *p, *p2;
 
   RCC(rc, finish, iwn_wf_create(&(struct iwn_wf_route) {
     .handler = _root_handler,
@@ -52,32 +53,71 @@ static iwrc test_matching1(void) {
   RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "/foo",
-    .flags = IWN_WF_FLAG_MATCH_END,
     .handler = _route_handler,
-  }, 0));
+  }, &p));
 
   RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "/bar",
     .flags = IWN_WF_GET | IWN_WF_PUT,
     .handler = _route_handler,
+    .tag = "bar0",
   }, 0));
 
+
   RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
-    .ctx = ctx,
-    .pattern = "/foo/bar",
+    .parent = p,
+    .pattern = "/zaz",
     .handler = _route_handler,
   }, 0));
 
-  struct route *r = _request_first_matched("/foo", IWN_WF_GET, &it);
+  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+    .parent = p,
+    .pattern = "/bar",
+    .handler = _route_handler,
+    .tag = "bar2"
+  }, &p2));
+
+  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+    .parent = p2,
+    .handler = _route_handler,
+    .tag = "bar2_nested"
+  }, 0));
+
+  r = _request_first_matched("/bar", IWN_WF_PUT, &it);
+  IWN_ASSERT(r);
+  if (r) {
+    IWN_ASSERT(strcmp(r->pattern, "/bar") == 0);
+  }
+  request_destroy(it.req);
+
+  r = _request_first_matched("/bar", IWN_WF_POST, &it);
+  IWN_ASSERT(!rc);
+  request_destroy(it.req);
+
+  r = _request_first_matched("/foo", IWN_WF_GET, &it);
   IWN_ASSERT(r);
   if (r) {
     IWN_ASSERT(strcmp(r->pattern, "/foo") == 0);
   }
+  r = route_iter_next(&it);
+  IWN_ASSERT(!r);
   request_destroy(it.req);
 
-  // r = _request_first_matched("")
+  r = _request_first_matched("/foo/bar", IWN_WF_GET, &it);
+  IWN_ASSERT_FATAL(r);
+  IWN_ASSERT_FATAL(strcmp(r->pattern, "/foo") == 0);
 
+  r2 = route_iter_next(&it);
+  IWN_ASSERT_FATAL(r2);
+  IWN_ASSERT(r2->parent == r);
+  IWN_ASSERT_FATAL(strcmp(r2->pattern, "/bar") == 0);
+
+  r = route_iter_next(&it);
+  IWN_ASSERT_FATAL(r);
+  IWN_ASSERT(r->parent == r2);
+  IWN_ASSERT(strcmp(r->base.tag, "bar2_nested") == 0);
+  request_destroy(it.req);
 
 finish:
   iwn_wf_destroy(ctx);

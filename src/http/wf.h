@@ -23,7 +23,8 @@ typedef enum {
   /**< Illegal instruction in compiled regular expression (please report this
      bug) (WF_ERROR_REGEXP_ENGINE) */
   WF_ERROR_UNSUPPORTED_HTTP_METHOD, /**< Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD) */
-  WF_ERROR_MAX_NESTED_ROUTES,       /**<  Exceeds max number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES) */
+  WF_ERROR_MAX_NESTED_ROUTES,       /**<  Exceeds the max number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES) */
+  WF_ERROR_ROUTE_CANNOT_BE_PARENT, /**< Route cannot be parent route (WF_ERROR_ROUTE_CANNOT_BE_PARENT) */
   _WF_ERROR_END,
 } iwn_wf_ecode_e;
 
