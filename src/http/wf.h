@@ -1,5 +1,8 @@
 #pragma once
+
 #include "http_server.h"
+
+#include <stdio.h>
 
 IW_EXTERN_C_START
 
@@ -31,22 +34,27 @@ typedef enum {
 #define  IWN_WF_RES_NOT_PROCESSED    0
 #define  IWN_WF_RES_PROCESSED        1
 #define  IWN_WF_RES_CONNECTION_CLOSE -1
-#define  IWN_WF_RES_INTERNAL_ERROR   500
-#define  IWN_WF_RES_NOT_IMPLEMENTED  501
 #define  IWN_WF_RES_FORBIDDEN        403
 #define  IWN_WF_RES_BAD_REQUEST      400
+#define  IWN_WF_RES_INTERNAL_ERROR   500
+#define  IWN_WF_RES_NOT_IMPLEMENTED  501
 
-// Route methods:
-#define IWN_WF_GET            0x01U
-#define IWN_WF_PUT            0x02U
-#define IWN_WF_POST           0x04U
-#define IWN_WF_DELETE         0x08U
-#define IWN_WF_HEAD           0x10U
-#define IWN_WF_OPTIONS        0x20U
-#define IWN_WF_PATCH          0x40U
-#define IWN_WF_ALL_METHODS    (IWN_WF_GET | IWN_WF_PUT | IWN_WF_POST | IWN_WF_DELETE | IWN_WF_HEAD | IWN_WF_OPTIONS \
-                               | IWN_WF_PATCH)
+// Methods
+#define IWN_WF_GET         0x01U
+#define IWN_WF_PUT         0x02U
+#define IWN_WF_POST        0x04U
+#define IWN_WF_DELETE      0x08U
+#define IWN_WF_HEAD        0x10U
+#define IWN_WF_OPTIONS     0x20U
+#define IWN_WF_PATCH       0x40U
+#define IWN_WF_ALL_METHODS (IWN_WF_GET | IWN_WF_PUT | IWN_WF_POST | IWN_WF_DELETE | IWN_WF_HEAD | IWN_WF_OPTIONS \
+                            | IWN_WF_PATCH)
+/// Route specific flags
 #define IWN_WF_FLAG_MATCH_END 0x100U
+
+/// Request specific flags
+#define IWN_WF_FORM_MULTIPART   0x200U
+#define IWN_WF_FORM_URL_ENCODED 0x400U
 
 struct iwn_wf_ctx;
 struct iwn_wf_req;
@@ -71,9 +79,11 @@ struct iwn_wf_req {
   void       *request_user_data;
   const char *path;           ///< Full request path except query string
   const char *path_unmatched; ///< Rest of path not consumed by previous router matcher.
+  const char *body;
+  size_t      body_len;
   struct route_re_submatch *first;
   struct route_re_submatch *last;
-  uint8_t method;             ///< Request method.
+  uint32_t flags;             ///< Request method.
 };
 
 struct iwn_wf_route {

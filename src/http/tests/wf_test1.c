@@ -19,7 +19,7 @@ static struct request* _request_create(const char *path, int method, IWPOOL *poo
   req->base.path = path;
   req->base.path_unmatched = path;
   req->base.ctx = ctx;
-  req->base.method = method;
+  req->base.flags = method;
   req->pool = pool;
   return req;
 }

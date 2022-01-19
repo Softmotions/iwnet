@@ -6,20 +6,9 @@
 #include <iowow/iwpool.h>
 #include <iowow/iwlog.h>
 
+#include <stdio.h>
+
 struct route;
-
-struct pair {
-  const char *key;
-  char       *val;
-  size_t      key_len;
-  size_t      val_len;
-  struct pair *next;
-};
-
-struct pairs {
-  struct pair *first;
-  struct pair *last;
-};
 
 struct ctx {
   struct iwn_wf_ctx  base;
@@ -52,12 +41,18 @@ struct route_iter {
   int mlen[ROUTE_MATCHING_STACK_SIZE];  // Matched sections lengh
 };
 
+#define REQUEST_STREAM_FILE_MMAPED 0x01U
+
 struct request {
   struct iwn_wf_req base;
-  struct pairs      query_params;
-  struct pairs      post_params;
+  struct iwn_pairs  query_params;
+  struct iwn_pairs  post_params;
   struct route_iter it; ///< Routes matching iterator
-  IWPOOL *pool;
+  IWPOOL     *pool;
+  FILE       *stream_file;
+  const char *stream_file_path;
+  size_t      streamed_bytes;
+  uint32_t    flags;
 };
 
 #ifdef IW_TESTS

@@ -42,7 +42,7 @@ static void _on_connection_close(const struct iwn_http_server_connection *conn) 
 static bool _chunk_req_cb(struct iwn_http_request *req) {
   IWXSTR *xstr = req->request_user_data;
   IWN_ASSERT_FATAL(xstr);
-  struct iwn_http_val val = iwn_http_request_chunk_get(req);
+  struct iwn_val val = iwn_http_request_chunk_get(req);
   if (val.len > 0) {
     iwrc rc = iwxstr_cat(xstr, val.buf, val.len);
     IWN_ASSERT_FATAL(rc == 0);
@@ -94,11 +94,11 @@ static bool _request_handler(struct iwn_http_request *req) {
   if (iwn_http_request_target_is(req, "/empty", -1)) {
     ; // No body
   } else if (iwn_http_request_target_is(req, "/echo", -1)) {
-    struct iwn_http_val val = iwn_http_request_body(req);
+    struct iwn_val val = iwn_http_request_body(req);
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/header", -1)) {
-    struct iwn_http_val val = iwn_http_request_header_get(req, "X-Foo", -1);
+    struct iwn_val val = iwn_http_request_header_get(req, "X-Foo", -1);
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/large", -1)) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
