@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <sys/mman.h>
 
 static int _aunit;
@@ -233,7 +234,7 @@ static iwrc _request_parse_query(struct request *req, char *p) {
       } else if (*p == '&') {
         *p = '\0';
         iwn_url_decode_inplace(p, -1);
-        iwn_pair_add2(pool, &req->query_params, key, -1, "", 0);
+        iwn_pair_add_pool(pool, &req->query_params, key, -1, "", 0);
         key = p + 1;
         state = 0;
       }
@@ -242,7 +243,7 @@ static iwrc _request_parse_query(struct request *req, char *p) {
         *p = '\0';
         iwn_url_decode_inplace(key, -1);
         iwn_url_decode_inplace(val, -1);
-        iwn_pair_add2(pool, &req->query_params, key, -1, val, -1);
+        iwn_pair_add_pool(pool, &req->query_params, key, -1, val, -1);
         key = p + 1;
         state = 0;
       }
@@ -252,11 +253,11 @@ static iwrc _request_parse_query(struct request *req, char *p) {
   if (state == 0) {
     if (key[0] != '\0') {
       iwn_url_decode_inplace(key, -1);
-      iwn_pair_add2(pool, &req->query_params, key, -1, "", 0);
+      iwn_pair_add_pool(pool, &req->query_params, key, -1, "", 0);
     } else {
       iwn_url_decode_inplace(key, -1);
       iwn_url_decode_inplace(val, -1);
-      iwn_pair_add2(pool, &req->query_params, key, -1, val, -1);
+      iwn_pair_add_pool(pool, &req->query_params, key, -1, val, -1);
     }
   }
 
@@ -327,10 +328,75 @@ static iwrc _request_parse_method(struct request *req) {
   return 0;
 }
 
+IW_INLINE bool _c_is_ctl(char c) {
+  return c >= 0 && c <= 31;
+}
+
+static bool _c_is_tspecial(char c) {
+  switch (c) {
+    case ';':
+    case ',':
+    case ':':
+    case '=':
+    case '?':
+    case '/':
+    case '\\':
+    case '"':
+    case '@':
+    case '(':
+    case ')':
+    case '<':
+    case '>':
+    case '[':
+    case ']':
+      return true;
+  }
+  return false;
+}
+
+IW_INLINE bool _c_is_token(char c) {
+  return !(c == ' ' || _c_is_ctl(c) || _c_is_tspecial(c));
+}
+
+static char* _header_parse_next_parameter(char *rp, struct iwn_pair *kv) {
+  memset(kv, 0, sizeof(*kv));
+  for ( ; *rp && (*rp != ';'); ++rp);
+  if (*rp == '\0') {
+    return 0;
+  }
+  char *ks = rp, *ke = ks;
+  ++rp;
+  while (*rp) {
+    if (ks == ke) { 
+      if (*rp == '=') {
+        ke = rp;
+      } else if (!_c_is_token(*rp)) {
+        return 0;
+      }
+      ++rp;
+    } else {
+      // TODO:
+      ++rp;
+    }
+  }
+  return rp;
+}
+
 static iwrc _request_parse_headers(struct request *req) {
   iwrc rc = 0;
-
-  // TODO: detect form url ecnded / multipart form data
+  struct iwn_val val = iwn_http_request_header_get(req->base.http, "content-type", sizeof("content-type") - 1);
+  if (val.len > 0) {
+    if (strncasecmp(val.buf, "application/x-www-form-urlencoded",
+                    sizeof("application/x-www-form-urlencoded") - 1) == 0) {
+      req->base.flags |= IWN_WF_FORM_URL_ENCODED;
+    } else if (strncasecmp(val.buf, "multipart/form-data", sizeof("multipart/form-data") - 1) == 0) {
+      req->base.flags |= IWN_WF_FORM_MULTIPART;
+      char *rp = val.buf += sizeof("multipart/form-data") - 1;
+      if (!*rp) {
+        return WF_ERROR_INVALID_FORM_DATA;
+      }
+    }
+  }
 
   return rc;
 }
@@ -560,10 +626,11 @@ static bool _request_stream_process(struct request *req) {
       goto finish;
     }
     req->streamed_bytes += val.len;
-
   } else {
     if (req->streamed_bytes > 0) {
-      int fd = fileno(req->stream_file);
+      int fd;
+      RCN(finish, fflush(req->stream_file));
+      RCN(finish, fd = fileno(req->stream_file));
       void *mm = mmap(0, IW_ROUNDUP(req->streamed_bytes, _aunit), PROT_READ, MAP_PRIVATE, fd, 0);
       if (!mm) {
         rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);

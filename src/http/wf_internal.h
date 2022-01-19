@@ -50,9 +50,10 @@ struct request {
   struct route_iter it; ///< Routes matching iterator
   IWPOOL     *pool;
   FILE       *stream_file;
+  char       *boundary; ///< Current multipart form boundary
   const char *stream_file_path;
   size_t      streamed_bytes;
-  uint32_t    flags;
+  uint8_t     flags;
 };
 
 #ifdef IW_TESTS
