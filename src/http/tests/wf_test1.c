@@ -5,12 +5,12 @@
 
 static struct iwn_wf_ctx *ctx;
 
-static int _root_handler(struct iwn_wf_req *req) {
-  return -1;
+static int _root_handler(struct iwn_wf_req *req, void *user_data) {
+  return 0;
 }
 
-static int _route_handler(struct iwn_wf_req *req) {
-  return -1;
+static int _route_handler(struct iwn_wf_req *req, void *user_data) {
+  return 0;
 }
 
 static struct request* _request_create(const char *path, int method, IWPOOL *pool) {
@@ -164,5 +164,5 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, test_regexp_matching());
 finish:
   IWN_ASSERT(rc == 0);
-  return iwn_asserts_failed > 0 ? 1 : 0;
+  return iwn_assertions_failed > 0 ? 1 : 0;
 }

@@ -33,7 +33,7 @@ void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p);
 
 struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
 
-void iwn_pair_add_pool(
+iwrc iwn_pair_add_pool(
   IWPOOL           *pool,
   struct iwn_pairs *pairs,
   const char       *key,

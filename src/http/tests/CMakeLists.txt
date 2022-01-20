@@ -10,7 +10,9 @@ file(
   PATTERN "*.log")
 
 add_executable(server1 server1.c)
-
+add_executable(server2 server2.c)
+set_target_properties(server1 server2 PROPERTIES COMPILE_FLAGS
+                                                 "-DIW_STATIC -DIW_TESTS")
 add_test(
   NAME "http_server1_test"
   WORKING_DIRECTORY ${TEST_DATA_DIR}

@@ -185,6 +185,52 @@ finish:
   return rc;
 }
 
+static iwrc _request_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, char *p, size_t len) {
+  iwrc rc = 0;
+  char *key = 0, *val = 0, *ep = p + len;
+  int state = 0;
+
+  key = p;
+  while (p < ep) {
+    if (state == 0) {
+      if (*p == '=') {
+        *p = '\0';
+        val = p + 1;
+        state = 1;
+      } else if (*p == '&') {
+        *p = '\0';
+        iwn_url_decode_inplace(p, -1);
+        RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, "", 0));
+        key = p + 1;
+        state = 0;
+      }
+    } else {
+      if (*p == '&') {
+        *p = '\0';
+        iwn_url_decode_inplace(key, -1);
+        iwn_url_decode_inplace(val, -1);
+        RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
+        key = p + 1;
+        state = 0;
+      }
+    }
+    ++p;
+  }
+  if (state == 0) {
+    if (key[0] != '\0') {
+      iwn_url_decode_inplace(key, -1);
+      RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, "", 0));
+    } else {
+      iwn_url_decode_inplace(key, -1);
+      iwn_url_decode_inplace(val, -1);
+      RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
+    }
+  }
+
+finish:
+  return rc;
+}
+
 static void _request_stream_destroy(struct request *req) {
   if (req->stream_file) {
     if (req->flags & REQUEST_STREAM_FILE_MMAPED) {
@@ -218,52 +264,6 @@ static void _request_on_destroy(struct iwn_http_request *hreq) {
   }
 }
 
-static iwrc _request_parse_query(struct request *req, char *p) {
-  iwrc rc = 0;
-  IWPOOL *pool = req->pool;
-  char *key = 0, *val = 0;
-  int state = 0;
-
-  key = p;
-  while (*p) {
-    if (state == 0) {
-      if (*p == '=') {
-        *p = '\0';
-        val = p + 1;
-        state = 1;
-      } else if (*p == '&') {
-        *p = '\0';
-        iwn_url_decode_inplace(p, -1);
-        iwn_pair_add_pool(pool, &req->query_params, key, -1, "", 0);
-        key = p + 1;
-        state = 0;
-      }
-    } else {
-      if (*p == '&') {
-        *p = '\0';
-        iwn_url_decode_inplace(key, -1);
-        iwn_url_decode_inplace(val, -1);
-        iwn_pair_add_pool(pool, &req->query_params, key, -1, val, -1);
-        key = p + 1;
-        state = 0;
-      }
-    }
-    ++p;
-  }
-  if (state == 0) {
-    if (key[0] != '\0') {
-      iwn_url_decode_inplace(key, -1);
-      iwn_pair_add_pool(pool, &req->query_params, key, -1, "", 0);
-    } else {
-      iwn_url_decode_inplace(key, -1);
-      iwn_url_decode_inplace(val, -1);
-      iwn_pair_add_pool(pool, &req->query_params, key, -1, val, -1);
-    }
-  }
-
-  return rc;
-}
-
 static iwrc _request_parse_target(struct request *req) {
   iwrc rc = 0;
   char *p;
@@ -287,7 +287,7 @@ static iwrc _request_parse_target(struct request *req) {
   if (++i < val.len) {
     char *q;
     RCA(q = iwpool_strndup2(pool, val.buf + i, val.len - i), finish);
-    RCC(rc, finish, _request_parse_query(req, q));
+    _request_parse_query_inplace(pool, &req->base.query_params, q, val.len - i);
   }
 
 finish:
@@ -358,28 +358,66 @@ IW_INLINE bool _c_is_token(char c) {
   return !(c == ' ' || _c_is_ctl(c) || _c_is_tspecial(c));
 }
 
+IW_INLINE bool _c_is_space(char c) {
+  return c == ' ' || c == '\t';
+}
+
 static char* _header_parse_next_parameter(char *rp, struct iwn_pair *kv) {
   memset(kv, 0, sizeof(*kv));
-  for ( ; *rp && (*rp != ';'); ++rp);
+  for ( ; *rp && *rp != ';'; ++rp);
   if (*rp == '\0') {
     return 0;
   }
+  bool quoted = false;
   char *ks = rp, *ke = ks;
+  char *vs, *ve = 0;
   ++rp;
   while (*rp) {
-    if (ks == ke) { 
-      if (*rp == '=') {
+    if (ks == ke) {
+      if (_c_is_space(*rp)) { // skip leading space
+        ks = ke = rp + 1;
+      } else if (*rp == '=') {
         ke = rp;
+        vs = rp + 1;
       } else if (!_c_is_token(*rp)) {
         return 0;
       }
       ++rp;
     } else {
-      // TODO:
-      ++rp;
+      if (rp - 1 == ke && *rp == '"') {
+        quoted = true;
+        vs = ++rp;
+      } else if (quoted) {
+        if (*(rp - 1) == '\\') {
+          ; // any char can be escaped
+        } else if (*rp == '"') {
+          ve = rp;
+          break;
+        } else if (*rp == '\r') {
+          return 0;
+        }
+        ++rp;
+      } else if (*rp == ';') {
+        ve = rp;
+        --rp;
+        break;
+      } else if (!_c_is_token(*rp)) {
+        return 0;
+      } else {
+        ++rp;
+        ve = rp;
+      }
     }
   }
-  return rp;
+  if (ve) {
+    kv->key = ks;
+    kv->key_len = ke - ks;
+    kv->val = vs;
+    kv->val_len = ve - vs;
+    return rp;
+  } else {
+    return 0;
+  }
 }
 
 static iwrc _request_parse_headers(struct request *req) {
@@ -392,12 +430,18 @@ static iwrc _request_parse_headers(struct request *req) {
     } else if (strncasecmp(val.buf, "multipart/form-data", sizeof("multipart/form-data") - 1) == 0) {
       req->base.flags |= IWN_WF_FORM_MULTIPART;
       char *rp = val.buf += sizeof("multipart/form-data") - 1;
-      if (!*rp) {
+      struct iwn_pair p;
+      while ((rp = _header_parse_next_parameter(rp, &p))) {
+        if (strncasecmp(p.key, "boundary", sizeof("boundary") - 1) == 0) {
+          req->boundary = iwpool_strndup2(req->pool, p.val, p.val_len);
+          break;
+        }
+      }
+      if (!req->boundary) {
         return WF_ERROR_INVALID_FORM_DATA;
       }
     }
   }
-
   return rc;
 }
 
@@ -564,34 +608,75 @@ finish:
   return rc;
 }
 
+static bool _request_form_multipart_parse(struct request *req) {
+  // TODO:
+  return true;
+}
+
+IW_INLINE bool _request_form_url_encoded_parse(struct request *req) {
+  if (  req->base.body_len > 0
+     && !_request_parse_query_inplace(req->pool, &req->base.post_params, (char*) req->base.body, req->base.body_len)) {
+    return false;
+  }
+  return true;
+}
+
+IW_INLINE bool _request_form_parse(struct request *req) {
+  if (req->base.flags & IWN_WF_FORM_URL_ENCODED) {
+    return _request_form_url_encoded_parse(req);
+  } else if (req->base.flags & IWN_WF_FORM_MULTIPART) {
+    return _request_form_multipart_parse(req);
+  } else {
+    return true;
+  }
+}
+
 static bool _request_routes_process(struct request *req) {
+  if (!_request_form_parse(req)) {
+    return false;
+  }
+
+  int rv = 0;
+  bool ok = true;
   struct route *r = _route_iter_current(&req->it);
   assert(r);
+
   do {
     if (r->base.handler) {
-      int res = r->base.handler(&req->base);
-      if (res > 0) {
-        if (res > 1) {
-          return iwn_http_response_write_code(req->base.http, res);
-        } else {
-          return true;
+      rv = r->base.handler(&req->base, r->base.user_data);
+      if (rv > 0) {
+        if (rv > 1) {
+          ok = iwn_http_response_write_code(req->base.http, rv);
         }
-      } else if (res < 0) {
+        break;
+      } else if (rv < 0) {
         return false;
       }
     }
   } while ((r = _route_iter_next(&req->it)));
-  return true;
+
+  if (ok && rv == 0) { // Delegate all unhandled requests to the root route
+    struct ctx *ctx = (void*) req->base.ctx;
+    if (ctx->root->base.handler) {
+      rv = ctx->root->base.handler(&req->base, ctx->root->base.user_data);
+      if (rv > 1) {
+        ok = iwn_http_response_write_code(req->base.http, rv);
+      } else if (rv < 0) {
+        ok = false;
+      }
+    }
+    if (rv == 0) {
+      // Respond with not found at least
+      ok = iwn_http_response_write_code(req->base.http, 404);
+    }
+  }
+  return ok;
 }
 
 static bool _request_process(struct request *req) {
   struct iwn_val val = iwn_http_request_body(req->base.http);
   req->base.body_len = val.len;
-  if (val.len) {
-    req->base.body = val.buf;
-  } else {
-    req->base.body = 0;
-  }
+  req->base.body = val.len ? val.buf : 0;
   return _request_routes_process(req);
 }
 
@@ -600,6 +685,7 @@ static bool _request_stream_process(struct request *req) {
   struct iwn_http_request *hreq = req->base.http;
   struct ctx *ctx = (void*) req->base.ctx;
   if (ctx->request_file_max_size < 0) {
+    iwlog_warn("HTTP streaed requests are not allowed");
     return false;
   }
   struct iwn_val val = iwn_http_request_chunk_get(hreq);

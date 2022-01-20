@@ -35,5 +35,5 @@ finish:
   iwtp_shutdown(&tp, true);
   IWN_ASSERT(rc == 0);
   IWN_ASSERT(et >= st);
-  return iwn_asserts_failed > 0 ? 1 : 0;
+  return iwn_assertions_failed > 0 ? 1 : 0;
 }

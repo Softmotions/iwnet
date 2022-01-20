@@ -87,5 +87,5 @@ finish:
   IWN_ASSERT(rc == 0);
   IWN_ASSERT(ws == 0);
   IWN_ASSERT(cnt == 4);
-  return iwn_asserts_failed > 0 ? 1 : 0;
+  return iwn_assertions_failed > 0 ? 1 : 0;
 }

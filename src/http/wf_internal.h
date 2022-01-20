@@ -14,9 +14,10 @@ struct ctx {
   struct iwn_wf_ctx  base;
   struct route      *root;
   struct iwn_poller *poller;
+
   IWPOOL *pool;
-  int     server_fd;
-  int     request_file_max_size;
+  int server_fd;
+  int request_file_max_size;
 };
 
 struct route {
@@ -45,8 +46,6 @@ struct route_iter {
 
 struct request {
   struct iwn_wf_req base;
-  struct iwn_pairs  query_params;
-  struct iwn_pairs  post_params;
   struct route_iter it; ///< Routes matching iterator
   IWPOOL     *pool;
   FILE       *stream_file;

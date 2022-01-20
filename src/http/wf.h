@@ -59,8 +59,8 @@ typedef enum {
 struct iwn_wf_ctx;
 struct iwn_wf_req;
 
-typedef int (*iwn_wf_handler)(struct iwn_wf_req*);
-typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx *ctx, void *user_data);
+typedef int (*iwn_wf_handler)(struct iwn_wf_req*, void* user_data);
+typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx*, void *user_data);
 typedef void (*iwn_wf_request_dispose)(struct iwn_wf_req*);
 
 struct route_re_submatch {          ///< Route regexp submatch node
@@ -83,7 +83,9 @@ struct iwn_wf_req {
   size_t      body_len;
   struct route_re_submatch *first;
   struct route_re_submatch *last;
-  uint32_t flags;             ///< Request method.
+  struct iwn_pairs query_params;
+  struct iwn_pairs post_params;
+  uint32_t flags;             ///< Request method, form flags.
 };
 
 struct iwn_wf_route {

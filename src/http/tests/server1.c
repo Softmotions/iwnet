@@ -142,18 +142,25 @@ int main(int argc, char *argv[]) {
   if (signal(SIGINT, _on_signal) == SIG_ERR) {
     return EXIT_FAILURE;
   }
+
   bool ssl = false;
   int port = 9292;
+  int nthreads = 1;
+  int oneshot = 1;
 
   for (int i = 0; i < argc; ++i) {
     if (strcmp(argv[i], "--ssl") == 0) {
       ssl = true;
     } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
       port = iwatoi(argv[i + 1]);
+    } else if (strcmp(argv[i], "--poll-threads") == 0 && i + 1 < argc) {
+      nthreads = iwatoi(argv[i + 1]);
+    } else if (strcmp(argv[i], "--poll-oneshot-events") == 0 && i + 1 < argc) {
+      oneshot = iwatoi(argv[i + 1]);
     }
   }
 
-  RCC(rc, finish, iwn_poller_create(1, 1, &poller));
+  RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));
 
   struct iwn_http_server_spec spec = {
     .listen                        = "localhost",
@@ -185,5 +192,5 @@ finish:
   IWN_ASSERT(state & STATE_CLOSED_ON_SIGNAL);
   IWN_ASSERT(opened_fds_sum == closed_fds_sum);
   iwn_poller_destroy(&poller);
-  return iwn_asserts_failed > 0 ? 1 : 0;
+  return iwn_assertions_failed > 0 ? 1 : 0;
 }
