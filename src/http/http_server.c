@@ -475,7 +475,7 @@ IW_INLINE void _response_free(struct client *client) {
 }
 
 static bool _client_response_error(struct client *client, int code, char *response) {
-  return iwn_http_response_write_simple(&client->request, code, "text/plain", response, -1, 0);
+  return iwn_http_response_simple(&client->request, code, "text/plain", response, -1, 0);
 }
 
 static void _client_reset(struct client *client) {
@@ -1347,7 +1347,7 @@ finish:
   return rc;
 }
 
-bool iwn_http_response_write_simple(
+bool iwn_http_response_simple(
   struct iwn_http_request *request,
   int                      status_code,
   const char              *content_type,
@@ -1374,7 +1374,55 @@ finish:
 
 bool iwn_http_response_by_code(struct iwn_http_request *request, int code) {
   const char *text = _status_text[code];
-  return iwn_http_response_write_simple(request, code, "text/plain", text, -1, 0);
+  return iwn_http_response_simple(request, code, "text/plain", text, -1, 0);
+}
+
+IW_INLINE int _printf_estimate_size(const char *format, va_list ap) {
+  char buf[1];
+  int ret = vsnprintf(buf, sizeof(buf), format, ap);
+  if (ret < 0) {
+    return ret;
+  } else {
+    return ret + 1;
+  }
+}
+
+bool iwn_http_response_printf_va(
+  struct iwn_http_request *req,
+  int status_code, const char *content_type,
+  const char *body_fmt, va_list va
+  ) {
+  va_list cva;
+  va_copy(cva, va);
+  int size = _printf_estimate_size(body_fmt, va);
+  if (size < 0) {
+    va_end(cva);
+    return false;
+  }
+  char *buf = malloc(size);
+  if (!buf) {
+    va_end(cva);
+    return false;
+  }
+  size = vsnprintf(buf, size, body_fmt, cva);
+  va_end(cva);
+  if (size < 0) {
+    free(buf);
+    return false;
+  }
+  return iwn_http_response_simple(req, status_code, content_type, buf, size, free);
+}
+
+bool iwn_http_response_printf(
+  struct iwn_http_request *req,
+  int status_code, const char *content_type,
+  const char *body_fmt, ...
+  ) {
+  va_list ap;
+  va_start(ap, body_fmt);
+  bool res = iwn_http_response_printf_va(req, status_code, content_type, body_fmt, ap);
+  va_end(ap);
+  return res;
 }
 
 ///////////////////////////////////////////////////////////////////////////

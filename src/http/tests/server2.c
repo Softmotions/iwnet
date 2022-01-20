@@ -27,7 +27,7 @@ static void _on_root_dispose(struct iwn_wf_ctx *ctx, void *data) {
 
 static int _handle_root(struct iwn_wf_req *req, void *user_data) {
   ++_handle_root_cnt;
-  if (!iwn_http_response_write_simple(req->http, 404, "text/plain", "Not found from root", -1, 0)) {
+  if (!iwn_http_response_simple(req->http, 404, "text/plain", "Not found from root", -1, 0)) {
     return -1;
   } else {
     return 1;

@@ -3,6 +3,8 @@
 #include "poller.h"
 #include "utils/pairs.h"
 
+#include <stdarg.h>
+
 IW_EXTERN_C_START
 
 struct iwn_http_server {
@@ -117,7 +119,7 @@ IW_EXPORT iwrc iwn_http_response_end(struct iwn_http_request*);
 
 IW_EXPORT bool iwn_http_response_by_code(struct iwn_http_request*, int code);
 
-IW_EXPORT bool iwn_http_response_write_simple(
+IW_EXPORT bool iwn_http_response_simple(
   struct iwn_http_request*,
   int         status_code,
   const char *content_type,
@@ -125,11 +127,21 @@ IW_EXPORT bool iwn_http_response_write_simple(
   ssize_t     body_len,
   void (     *body_free )(void*));
 
+IW_EXPORT bool iwn_http_response_printf(
+  struct iwn_http_request*,
+  int status_code, const char *content_type,
+  const char *body_fmt, ...);
+
+IW_EXPORT bool iwn_http_response_printf_va(
+  struct iwn_http_request *req,
+  int status_code, const char *content_type,
+  const char *body_fmt, va_list va);
+
 IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_request*,
-  char   *body,
+  char *body,
   ssize_t body_len,
-  void ( *body_free )(void*),
+  void (*body_free)(void*),
   iwn_http_server_request_chunk_handler);
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_request*);
