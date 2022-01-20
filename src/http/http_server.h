@@ -119,7 +119,7 @@ IW_EXPORT iwrc iwn_http_response_end(struct iwn_http_request*);
 
 IW_EXPORT bool iwn_http_response_by_code(struct iwn_http_request*, int code);
 
-IW_EXPORT bool iwn_http_response_simple(
+IW_EXPORT bool iwn_http_response_write(
   struct iwn_http_request*,
   int         status_code,
   const char *content_type,

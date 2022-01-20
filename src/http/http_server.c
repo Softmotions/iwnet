@@ -475,7 +475,7 @@ IW_INLINE void _response_free(struct client *client) {
 }
 
 static bool _client_response_error(struct client *client, int code, char *response) {
-  return iwn_http_response_simple(&client->request, code, "text/plain", response, -1, 0);
+  return iwn_http_response_write(&client->request, code, "text/plain", response, -1, 0);
 }
 
 static void _client_reset(struct client *client) {
@@ -1347,7 +1347,7 @@ finish:
   return rc;
 }
 
-bool iwn_http_response_simple(
+bool iwn_http_response_write(
   struct iwn_http_request *request,
   int                      status_code,
   const char              *content_type,
@@ -1374,7 +1374,7 @@ finish:
 
 bool iwn_http_response_by_code(struct iwn_http_request *request, int code) {
   const char *text = _status_text[code];
-  return iwn_http_response_simple(request, code, "text/plain", text, -1, 0);
+  return iwn_http_response_write(request, code, "text/plain", text, -1, 0);
 }
 
 IW_INLINE int _printf_estimate_size(const char *format, va_list ap) {
@@ -1410,7 +1410,7 @@ bool iwn_http_response_printf_va(
     free(buf);
     return false;
   }
-  return iwn_http_response_simple(req, status_code, content_type, buf, size, free);
+  return iwn_http_response_write(req, status_code, content_type, buf, size, free);
 }
 
 bool iwn_http_response_printf(
