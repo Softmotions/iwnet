@@ -1,7 +1,8 @@
 cd ./build/src/http/tests
-file ./wf_test1
+file ./server2
 #set args --ssl
 
+set confirm off
 set follow-fork-mode parent
 set detach-on-fork on
 set print elements 4096

@@ -8,6 +8,8 @@
 #include <errno.h>
 
 #define S_ROOT_DISPOSED 0x01U
+static int _handle_get_empty_cnt;
+static int _handle_root_cnt;
 
 static uint32_t state;
 static struct iwn_poller *poller;
@@ -24,11 +26,25 @@ static void _on_root_dispose(struct iwn_wf_ctx *ctx, void *data) {
 }
 
 static int _handle_root(struct iwn_wf_req *req, void *user_data) {
-  return 0;
+  ++_handle_root_cnt;
+  if (!iwn_http_response_write_simple(req->http, 404, "text/plain", "Not found from root", -1, 0)) {
+    return -1;
+  } else {
+    return 1;
+  }
 }
 
 static int _handle_get_empty(struct iwn_wf_req *req, void *user_data) {
+  ++_handle_get_empty_cnt;
+  IWN_ASSERT((intptr_t) user_data == 1);
   return 200; // Empty reponse with ok status
+}
+
+static int _handle_get_query(struct iwn_wf_req *req, void *user_data) {
+  //req->query_params
+  
+
+  return 200;
 }
 
 int main(int argc, char *argv[]) {
@@ -76,16 +92,20 @@ int main(int argc, char *argv[]) {
 
   struct iwn_wf_route *r;
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
-    .pattern = "/get"
+    .pattern = "/get",
+    .flags = IWN_WF_GET,
   }, &r));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .parent = r,
     .pattern = "/empty",
+    .handler = _handle_get_empty,
     .user_data = (void*) 1
   }, 0));
+
+  
 
   // Start the server
 
@@ -106,12 +126,15 @@ int main(int argc, char *argv[]) {
     spec.certs_len = -1;
   }
 
-  RCC(rc, finish, iwn_wf_server_create(&spec, ctx));
+  RCC(rc, finish, iwn_wf_server(&spec, ctx));
 
   iwn_poller_poll(poller);
 
 finish:
   IWN_ASSERT(rc == 0);
+  //IWN_ASSERT(_handle_get_empty_cnt == 1);
+  //IWN_ASSERT(_handle_root_cnt == 1);
+  IWN_ASSERT(state & S_ROOT_DISPOSED);
   iwn_poller_destroy(&poller);
   return iwn_assertions_failed > 0 ? 1 : 0;
 }

@@ -1070,10 +1070,10 @@ struct iwn_val iwn_http_request_header_get(
 }
 
 static bool _iteration_headers_assign(
-  struct client       *client,
+  struct client  *client,
   struct iwn_val *key,
   struct iwn_val *val,
-  int                 *iter
+  int            *iter
   ) {
   struct token token = client->tokens.buf[*iter];
   if (client->tokens.buf[*iter].type == HS_TOK_BODY) {
@@ -1094,8 +1094,8 @@ static bool _iteration_headers_assign(
 
 bool iwn_http_request_headers_iterate(
   struct iwn_http_request *request,
-  struct iwn_val     *key,
-  struct iwn_val     *val,
+  struct iwn_val          *key,
+  struct iwn_val          *val,
   int                     *iter
   ) {
   struct client *client = (void*) request;
@@ -1372,7 +1372,7 @@ finish:
   return true;
 }
 
-bool iwn_http_response_write_code(struct iwn_http_request *request, int code) {
+bool iwn_http_response_by_code(struct iwn_http_request *request, int code) {
   const char *text = _status_text[code];
   return iwn_http_response_write_simple(request, code, "text/plain", text, -1, 0);
 }

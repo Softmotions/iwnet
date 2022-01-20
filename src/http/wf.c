@@ -150,7 +150,7 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   memcpy(&route->base, spec, sizeof(route->base));
   base = &route->base;
   base->ctx = &ctx->base;
-  if (!(base->flags & IWN_WF_ALL_METHODS)) {
+  if (!(base->flags & IWN_WF_METHODS_ALL)) {
     base->flags |= IWN_WF_GET;
   }
   route->flags = base->flags;
@@ -635,39 +635,36 @@ static bool _request_routes_process(struct request *req) {
   if (!_request_form_parse(req)) {
     return false;
   }
-
   int rv = 0;
   bool ok = true;
-  struct route *r = _route_iter_current(&req->it);
-  assert(r);
 
-  do {
+  for (struct route *r = _route_iter_current(&req->it); r; r = _route_iter_next(&req->it)) {
     if (r->base.handler) {
       rv = r->base.handler(&req->base, r->base.user_data);
       if (rv > 0) {
         if (rv > 1) {
-          ok = iwn_http_response_write_code(req->base.http, rv);
+          ok = iwn_http_response_by_code(req->base.http, rv);
         }
         break;
       } else if (rv < 0) {
         return false;
       }
     }
-  } while ((r = _route_iter_next(&req->it)));
+  }
 
   if (ok && rv == 0) { // Delegate all unhandled requests to the root route
     struct ctx *ctx = (void*) req->base.ctx;
     if (ctx->root->base.handler) {
       rv = ctx->root->base.handler(&req->base, ctx->root->base.user_data);
       if (rv > 1) {
-        ok = iwn_http_response_write_code(req->base.http, rv);
+        ok = iwn_http_response_by_code(req->base.http, rv);
       } else if (rv < 0) {
         ok = false;
       }
     }
     if (rv == 0) {
       // Respond with not found at least
-      ok = iwn_http_response_write_code(req->base.http, 404);
+      ok = iwn_http_response_by_code(req->base.http, 404);
     }
   }
   return ok;
@@ -747,9 +744,14 @@ static bool _request_handler(struct iwn_http_request *hreq) {
       iwlog_ecode_error3(rc);
       return false;
     }
+    req = hreq->request_user_data;
   }
   if (!_route_iter_current(&req->it)) {
-    return iwn_http_response_write_code(hreq, 404);
+    // No routes found.
+    // Do not parse request body.
+    // Call the root handler or respond 404
+    req->base.flags &= ~IWN_WF_FORM_ALL;
+    return _request_routes_process(req);
   } else if (iwn_http_request_is_streamed(hreq)) {
     return _request_stream_process(req);
   } else {
@@ -757,7 +759,7 @@ static bool _request_handler(struct iwn_http_request *hreq) {
   }
 }
 
-iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
+iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
   struct route *route;
   if (out_route) {
     *out_route = 0;
@@ -819,7 +821,7 @@ struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx) {
   return ((struct ctx*) ctx)->poller;
 }
 
-iwrc iwn_wf_server_create(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {
+iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {
   struct ctx *ctx = (void*) ctx_;
   struct iwn_wf_server_spec spec;
   struct iwn_http_server_spec http = { 0 };

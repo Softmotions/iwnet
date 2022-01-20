@@ -50,13 +50,13 @@ static iwrc test_regexp_matching(void) {
     .tag = "root"
   }, &ctx));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "^/fo{[^/]+}",
     .handler = _route_handler,
   }, &p));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "^/b{a}{rr?}",
     .handler = _route_handler,
@@ -84,13 +84,13 @@ static iwrc test_simple_matching(void) {
     .tag = "root"
   }, &ctx));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "/foo",
     .handler = _route_handler,
   }, &p));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "/bar",
     .flags = IWN_WF_GET | IWN_WF_PUT,
@@ -98,20 +98,20 @@ static iwrc test_simple_matching(void) {
     .tag = "bar0",
   }, 0));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .parent = p,
     .pattern = "/zaz",
     .handler = _route_handler,
   }, 0));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .parent = p,
     .pattern = "/bar",
     .handler = _route_handler,
     .tag = "bar2"
   }, &p2));
 
-  RCC(rc, finish, iwn_wf_route_create(&(struct iwn_wf_route) {
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .parent = p2,
     .handler = _route_handler,
     .tag = "bar2_nested"

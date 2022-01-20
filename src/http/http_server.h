@@ -88,7 +88,7 @@ IW_EXPORT bool iwn_http_request_headers_iterate(
   struct iwn_http_request*,
   struct iwn_val *key,
   struct iwn_val *val,
-  int                 *iter);
+  int            *iter);
 
 IW_EXPORT void iwn_http_connection_set_automatic(struct iwn_http_request *request);
 
@@ -115,7 +115,7 @@ IW_EXPORT void iwn_http_response_body_set(
 
 IW_EXPORT iwrc iwn_http_response_end(struct iwn_http_request*);
 
-IW_EXPORT bool iwn_http_response_write_code(struct iwn_http_request*, int code);
+IW_EXPORT bool iwn_http_response_by_code(struct iwn_http_request*, int code);
 
 IW_EXPORT bool iwn_http_response_write_simple(
   struct iwn_http_request*,
@@ -127,9 +127,9 @@ IW_EXPORT bool iwn_http_response_write_simple(
 
 IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_request*,
-  char *body,
+  char   *body,
   ssize_t body_len,
-  void (*body_free)(void*),
+  void ( *body_free )(void*),
   iwn_http_server_request_chunk_handler);
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_request*);

@@ -47,7 +47,7 @@ typedef enum {
 #define IWN_WF_HEAD        0x10U
 #define IWN_WF_OPTIONS     0x20U
 #define IWN_WF_PATCH       0x40U
-#define IWN_WF_ALL_METHODS (IWN_WF_GET | IWN_WF_PUT | IWN_WF_POST | IWN_WF_DELETE | IWN_WF_HEAD | IWN_WF_OPTIONS \
+#define IWN_WF_METHODS_ALL (IWN_WF_GET | IWN_WF_PUT | IWN_WF_POST | IWN_WF_DELETE | IWN_WF_HEAD | IWN_WF_OPTIONS \
                             | IWN_WF_PATCH)
 /// Route specific flags
 #define IWN_WF_FLAG_MATCH_END 0x100U
@@ -55,11 +55,12 @@ typedef enum {
 /// Request specific flags
 #define IWN_WF_FORM_MULTIPART   0x200U
 #define IWN_WF_FORM_URL_ENCODED 0x400U
+#define IWN_WF_FORM_ALL         (IWN_WF_FORM_MULTIPART | IWN_WF_FORM_URL_ENCODED)
 
 struct iwn_wf_ctx;
 struct iwn_wf_req;
 
-typedef int (*iwn_wf_handler)(struct iwn_wf_req*, void* user_data);
+typedef int (*iwn_wf_handler)(struct iwn_wf_req*, void *user_data);
 typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx*, void *user_data);
 typedef void (*iwn_wf_request_dispose)(struct iwn_wf_req*);
 
@@ -125,21 +126,13 @@ struct iwn_wf_ctx {
   const struct iwn_wf_route *root;
 };
 
-IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx);
+IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root, struct iwn_wf_ctx **out_ctx);
 
-IW_EXPORT WUR iwrc iwn_wf_route_create(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route);
+IW_EXPORT WUR iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route);
 
-IW_EXPORT WUR iwrc iwn_wf_server_create(const struct iwn_wf_server_spec *spec, struct iwn_wf_ctx *ctx);
+IW_EXPORT WUR iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec, struct iwn_wf_ctx *ctx);
 
 IW_EXPORT struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx);
-
-IW_EXPORT const char* iwn_wf_request_header_get(struct iwn_wf_req*, const char *name);
-
-IW_EXPORT const char* iwn_wf_request_param_get(struct iwn_wf_req*, const char *name, const char *defval);
-
-IW_EXPORT const char* iwn_wf_request_post_param_get(struct iwn_wf_req*, const char *name, const char *defval);
-
-IW_EXPORT const char* iwn_wf_request_file_get(struct iwn_wf_req*, const char *name);
 
 IW_EXPORT const char* iwn_wf_request_session_get(struct iwn_wf_req*, const char *name);
 
