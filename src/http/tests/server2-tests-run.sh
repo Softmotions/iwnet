@@ -48,3 +48,18 @@
 #< 
 #* Connection #0 to host localhost left intact
 #foo=bar&baz=a@za
+
+# base64 /dev/urandom | head -c 25165824 > ./test.dat
+
+#curl -v -XPUT -H'Content-Type:text/plain' -d'ff5fd857-c90b-4066-910f-a9a5d1fa1b47' 'http://localhost:9292/post/putdata'
+#> PUT /post/putdata HTTP/1.1
+#> Host: localhost:9292
+#> Accept: */*
+#> Content-Type:text/plain
+#> Content-Length: 36
+#> 
+#< connection: keep-alive
+#< content-type: text/plan
+#< content-length: 36
+#< 
+#ff5fd857-c90b-4066-910f-a9a5d1fa1b47

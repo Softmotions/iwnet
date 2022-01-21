@@ -74,6 +74,12 @@ static int _handle_post_urlencoded(struct iwn_wf_req *req, void *user_data) {
   return 1;
 }
 
+static int _handle_put_data(struct iwn_wf_req *req, void *user_data) {
+  IWN_ASSERT(req->body && req->body_len);
+  bool ret = iwn_http_response_write(req->http, 200, "text/plan", req->body, req->body_len, 0);
+  return 1;
+}
+
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();
@@ -147,7 +153,7 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "/post",
-    .flags = IWN_WF_POST
+    .flags = IWN_WF_POST | IWN_WF_PUT
   }, &r));
 
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
@@ -157,6 +163,12 @@ int main(int argc, char *argv[]) {
     .flags = IWN_WF_POST
   }, 0));
 
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .parent = r,
+    .pattern = "/putdata",
+    .handler = _handle_put_data,
+    .flags = IWN_WF_PUT
+  }, 0));
 
   // Start the server:
 

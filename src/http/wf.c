@@ -673,14 +673,12 @@ static bool _request_process(struct request *req) {
   return _request_routes_process(req);
 }
 
-static bool _request_stream_process(struct request *req) {
+static bool _request_stream_chunk_next(struct iwn_http_request *hreq);
+
+static bool _request_stream_chunk_process(struct request *req) {
   iwrc rc = 0;
   struct iwn_http_request *hreq = req->base.http;
   struct ctx *ctx = (void*) req->base.ctx;
-  if (ctx->request_file_max_size < 0) {
-    iwlog_warn("HTTP streaed requests are not allowed");
-    return false;
-  }
   struct iwn_val val = iwn_http_request_chunk_get(hreq);
   if (val.len > 0) {
     if (req->streamed_bytes + val.len > ctx->request_file_max_size) {
@@ -705,12 +703,13 @@ static bool _request_stream_process(struct request *req) {
       goto finish;
     }
     req->streamed_bytes += val.len;
+    iwn_http_request_chunk_next(hreq, _request_stream_chunk_next);
   } else {
     if (req->streamed_bytes > 0) {
       int fd;
       RCN(finish, fflush(req->stream_file));
       RCN(finish, fd = fileno(req->stream_file));
-      void *mm = mmap(0, IW_ROUNDUP(req->streamed_bytes, _aunit), PROT_READ, MAP_PRIVATE, fd, 0);
+      void *mm = mmap(0, IW_ROUNDUP(req->streamed_bytes, _aunit), PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
       if (!mm) {
         rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
         goto finish;
@@ -728,6 +727,12 @@ finish:
     return false;
   }
   return true;
+}
+
+static bool _request_stream_chunk_next(struct iwn_http_request *hreq) {
+  struct request *req = hreq->request_user_data;
+  assert(req);
+  return _request_stream_chunk_process(req);
 }
 
 static bool _request_handler(struct iwn_http_request *hreq) {
@@ -749,7 +754,12 @@ static bool _request_handler(struct iwn_http_request *hreq) {
     req->base.flags &= ~IWN_WF_FORM_ALL;
     return _request_routes_process(req);
   } else if (iwn_http_request_is_streamed(hreq)) {
-    return _request_stream_process(req);
+    if (ctx->request_file_max_size < 0) {
+      iwlog_warn("HTTP large/chunked requests are not allowed by server settings (request_file_max_size)");
+      return false;
+    }
+    iwn_http_request_chunk_next(hreq, _request_stream_chunk_next);
+    return true;
   } else {
     return _request_process(req);
   }
