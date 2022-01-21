@@ -107,11 +107,7 @@ static iwrc _route_init(struct route *route) {
   route->pattern_len = len;
   if (len) {
     if (*pattern == '^') { // We use regexp
-      if (pattern[len - 1] == '$') {
-        route->flags |= IWN_WF_FLAG_MATCH_END;
-        pattern[len - 1] = '\0';
-      }
-      route->pattern++; // skip `^`
+      route->pattern++;    // skip `^`
       RCA(route->pattern_re = iwre_new(route->pattern), finish);
       // Check pattern matching
       rc = _iwre_code(iwre_match(route->pattern_re, ""));
@@ -153,7 +149,6 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   if (!(base->flags & IWN_WF_METHODS_ALL)) {
     base->flags |= IWN_WF_GET;
   }
-  route->flags = base->flags;
   if (base->parent) {
     route->parent = (void*) route->base.parent;
   }
@@ -284,6 +279,7 @@ static iwrc _request_parse_target(struct request *req) {
   iwn_url_decode_inplace(p, i);
 
   req->base.path_unmatched = req->base.path = p;
+  req->path_len = i;
   if (++i < val.len) {
     char *q;
     RCA(q = iwpool_strndup2(pool, val.buf + i, val.len - i), finish);
@@ -458,6 +454,7 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
     it->prev_sibling_mlen = 0;
     return false;
   }
+  size_t unmatched_len = req->path_len - (path_unmatched - req->base.path);
 
   if (wreq->flags & r->base.flags) { // Request method matched
     if (r->pattern_re) {             // RE
@@ -466,19 +463,21 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
       iwrc rc = _iwre_code(mret);
       if (IW_LIKELY(!rc)) {
         if (mret >= 0) {
-          mlen = mret == 0 ? -1 : mret;
-          for (int n = 0; n < r->pattern_re->nmatches; n += 2) { // Record regexp submatches
-            struct route_re_submatch *sm = iwpool_alloc(sizeof(sm), req->pool);
-            if (sm) {
-              sm->route = &r->base;
-              sm->input = path_unmatched;
-              sm->sp = r->pattern_re->matches[n];
-              sm->ep = r->pattern_re->matches[n + 1];
-              if (wreq->last) {
-                wreq->last->next = sm;
-                wreq->last = sm;
-              } else {
-                wreq->first = wreq->last = sm;
+          if ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == mret) {
+            mlen = mret == 0 ? -1 : mret;
+            for (int n = 0; n < r->pattern_re->nmatches; n += 2) { // Record regexp submatches
+              struct route_re_submatch *sm = iwpool_alloc(sizeof(sm), req->pool);
+              if (sm) {
+                sm->route = &r->base;
+                sm->input = path_unmatched;
+                sm->sp = r->pattern_re->matches[n];
+                sm->ep = r->pattern_re->matches[n + 1];
+                if (wreq->last) {
+                  wreq->last->next = sm;
+                  wreq->last = sm;
+                } else {
+                  wreq->first = wreq->last = sm;
+                }
               }
             }
           }
@@ -489,7 +488,8 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
       }
       pthread_mutex_unlock(&r->mtx);
     } else if (r->pattern) { // Simple path subpart match
-      if (*path_unmatched && strncmp(path_unmatched, r->pattern, r->pattern_len) == 0) {
+      if (  ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == r->pattern_len)
+         && strncmp(path_unmatched, r->pattern, r->pattern_len) == 0) {
         mlen = r->pattern_len;
       }
     } else {
@@ -500,12 +500,8 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
       if (mlen > 0) {
         path_unmatched += mlen;
       }
-      if (*path_unmatched != '\0' && (r->flags & IWN_WF_FLAG_MATCH_END)) {
-        mlen = 0;
-      } else {
-        wreq->path_unmatched = path_unmatched;
-        it->prev_sibling_mlen = mlen > 0 ? mlen : 0;
-      }
+      wreq->path_unmatched = path_unmatched;
+      it->prev_sibling_mlen = mlen > 0 ? mlen : 0;
     }
   }
 
@@ -766,9 +762,7 @@ iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_rou
   }
   struct ctx *ctx = (void*) spec->ctx;
   if (spec->parent) {
-    if (spec->parent->flags & IWN_WF_FLAG_MATCH_END) {
-      return WF_ERROR_ROUTE_CANNOT_BE_PARENT;
-    }
+    spec->parent->flags |= IWN_WF_MATCH_PREFIX;
     for (struct iwn_wf_route *p = spec->parent; !ctx && p; p = p->parent) {
       ctx = (void*) p->ctx;
     }
@@ -889,8 +883,6 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
       return "Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD)";
     case WF_ERROR_MAX_NESTED_ROUTES:
       return "Exceeds the maximum number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES)";
-    case WF_ERROR_ROUTE_CANNOT_BE_PARENT:
-      return "Route cannot be parent route (WF_ERROR_ROUTE_CANNOT_BE_PARENT)";
   }
   return 0;
 }

@@ -16,8 +16,8 @@ struct ctx {
   struct iwn_poller *poller;
 
   IWPOOL *pool;
-  int server_fd;
-  int request_file_max_size;
+  int     server_fd;
+  int     request_file_max_size;
 };
 
 struct route {
@@ -29,7 +29,6 @@ struct route {
   char      *pattern;
   struct re *pattern_re;
   int      pattern_len;
-  uint32_t flags;
 };
 
 #define ROUTE_MATCHING_STACK_SIZE 127
@@ -52,6 +51,7 @@ struct request {
   char       *boundary; ///< Current multipart form boundary
   const char *stream_file_path;
   size_t      streamed_bytes;
+  size_t      path_len;
   uint8_t     flags;
 };
 

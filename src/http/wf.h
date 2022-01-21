@@ -27,7 +27,6 @@ typedef enum {
      bug) (WF_ERROR_REGEXP_ENGINE) */
   WF_ERROR_UNSUPPORTED_HTTP_METHOD, /**< Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD) */
   WF_ERROR_MAX_NESTED_ROUTES,       /**<  Exceeds the max number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES) */
-  WF_ERROR_ROUTE_CANNOT_BE_PARENT,  /**< Route cannot be parent route (WF_ERROR_ROUTE_CANNOT_BE_PARENT) */
   _WF_ERROR_END,
 } iwn_wf_ecode_e;
 
@@ -50,7 +49,7 @@ typedef enum {
 #define IWN_WF_METHODS_ALL (IWN_WF_GET | IWN_WF_PUT | IWN_WF_POST | IWN_WF_DELETE | IWN_WF_HEAD | IWN_WF_OPTIONS \
                             | IWN_WF_PATCH)
 /// Route specific flags
-#define IWN_WF_FLAG_MATCH_END 0x100U
+#define IWN_WF_MATCH_PREFIX 0x100U
 
 /// Request specific flags
 #define IWN_WF_FORM_MULTIPART   0x200U

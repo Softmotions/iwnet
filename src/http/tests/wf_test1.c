@@ -17,6 +17,7 @@ static struct request* _request_create(const char *path, int method, IWPOOL *poo
   struct request *req = iwpool_calloc(sizeof(*req), pool);
   IWN_ASSERT_FATAL(req);
   req->base.path = path;
+  req->path_len = strlen(path);
   req->base.path_unmatched = path;
   req->base.ctx = ctx;
   req->base.flags = method;

@@ -15,3 +15,15 @@
 #< content-type: text/plain
 #< content-length: 19
 #Not found from root
+
+#curl -v 'http://localhost:9292/get/query?foo=bar&baz=a%40z'
+#> GET /get/query?foo=bar&baz=a%40z HTTP/1.1
+#> Host: localhost:9292
+#> Accept: */*
+#> 
+#< HTTP/1.1 200 OK
+#< connection: keep-alive
+#< content-type: text/plain;
+#< content-length: 15
+#< 
+#foo=bar&baz=a@z

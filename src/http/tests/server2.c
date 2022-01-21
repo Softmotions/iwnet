@@ -52,6 +52,10 @@ static int _handle_get_query(struct iwn_wf_req *req, void *user_data) {
   return 1;
 }
 
+static int _handle_fail(struct iwn_wf_req *req, void *user_data) {
+  return -1;
+}
+
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();
@@ -114,6 +118,12 @@ int main(int argc, char *argv[]) {
     .parent = r,
     .pattern = "/query",
     .handler = _handle_get_query
+  }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "^/fa.l$",
+    .flags = IWN_WF_GET,
   }, 0));
 
   // Start the server:
