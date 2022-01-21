@@ -220,11 +220,11 @@ static iwrc _request_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, 
     if (key[0] != '\0') {
       iwn_url_decode_inplace(key, -1);
       RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, "", 0));
-    } else {
-      iwn_url_decode_inplace(key, -1);
-      iwn_url_decode_inplace(val, -1);
-      RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
     }
+  } else {
+    iwn_url_decode_inplace(key, -1);
+    iwn_url_decode_inplace(val, -1);
+    RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
   }
 
 finish:

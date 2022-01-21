@@ -41,10 +41,15 @@ static int _handle_get_empty(struct iwn_wf_req *req, void *user_data) {
 }
 
 static int _handle_get_query(struct iwn_wf_req *req, void *user_data) {
-  //req->query_params
-  
-
-  return 200;
+  struct iwn_val foo = iwn_pair_find_val(&req->query_params, "foo", -1);
+  IWN_ASSERT(foo.len && foo.buf);
+  struct iwn_val baz = iwn_pair_find_val(&req->query_params, "baz", -1);
+  IWN_ASSERT(baz.len && baz.buf);
+  IWN_ASSERT(strcmp(baz.buf, "a@z") == 0);
+  IWN_ASSERT(strcmp(foo.buf, "bar") == 0);
+  bool ret = iwn_http_response_printf(req->http, 200, "text/plain;", "foo=%s&baz=%s", foo.buf, baz.buf);
+  IWN_ASSERT(ret);
+  return 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -105,9 +110,13 @@ int main(int argc, char *argv[]) {
     .user_data = (void*) 1
   }, 0));
 
-  
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .parent = r,
+    .pattern = "/query",
+    .handler = _handle_get_query
+  }, 0));
 
-  // Start the server
+  // Start the server:
 
   RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));
 

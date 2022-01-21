@@ -28,6 +28,17 @@ struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t
   return 0;
 }
 
+struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize_t key_len) {
+  struct iwn_pair *p = iwn_pair_find(pairs, key, key_len);
+  if (p) {
+    return (struct iwn_val) {
+             .buf = p->val,
+             .len = p->val_len
+    };
+  }
+  return (struct iwn_val) {};
+}
+
 iwrc iwn_pair_add_pool(
   IWPOOL           *pool,
   struct iwn_pairs *pairs,
@@ -49,7 +60,7 @@ iwrc iwn_pair_add_pool(
   p->key = key;
   p->key_len = key_len;
   p->val = val;
-  p->val_len = 0;
+  p->val_len = val_len;
   iwn_pair_add(pairs, p);
   return 0;
 }
