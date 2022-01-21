@@ -9,6 +9,7 @@
 
 #define S_ROOT_DISPOSED 0x01U
 static int _handle_get_empty_cnt;
+static int _handle_get_cnt;
 static int _handle_root_cnt;
 
 static uint32_t state;
@@ -34,6 +35,11 @@ static int _handle_root(struct iwn_wf_req *req, void *user_data) {
   }
 }
 
+// Get handler in middle of the path
+static int _handle_get(struct iwn_wf_req *req, void *user_data) {
+  return 0;
+}
+
 static int _handle_get_empty(struct iwn_wf_req *req, void *user_data) {
   ++_handle_get_empty_cnt;
   IWN_ASSERT((intptr_t) user_data == 1);
@@ -54,6 +60,18 @@ static int _handle_get_query(struct iwn_wf_req *req, void *user_data) {
 
 static int _handle_fail(struct iwn_wf_req *req, void *user_data) {
   return -1;
+}
+
+static int _handle_post_urlencoded(struct iwn_wf_req *req, void *user_data) {
+  struct iwn_val foo = iwn_pair_find_val(&req->post_params, "foo", -1);
+  IWN_ASSERT(foo.len && foo.buf);
+  struct iwn_val baz = iwn_pair_find_val(&req->post_params, "baz", -1);
+  IWN_ASSERT(baz.len && baz.buf);
+  IWN_ASSERT(strcmp(baz.buf, "a@z") == 0);
+  IWN_ASSERT(strcmp(foo.buf, "bar") == 0);
+  bool ret = iwn_http_response_printf(req->http, 200, "text/plain;", "foo=%s&baz=%s", foo.buf, baz.buf);
+  IWN_ASSERT(ret);
+  return 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -104,7 +122,7 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
     .pattern = "/get",
-    .flags = IWN_WF_GET,
+    .handler = _handle_get,
   }, &r));
 
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
@@ -122,9 +140,23 @@ int main(int argc, char *argv[]) {
 
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
-    .pattern = "^/fa.l$",
-    .flags = IWN_WF_GET,
+    .pattern = "^/fa.l",
+    .handler = _handle_fail,
   }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "/post",
+    .flags = IWN_WF_POST
+  }, &r));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .parent = r,
+    .pattern = "/urlencoded",
+    .handler = _handle_post_urlencoded,
+    .flags = IWN_WF_POST
+  }, 0));
+
 
   // Start the server:
 

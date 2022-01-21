@@ -611,7 +611,7 @@ static bool _request_form_multipart_parse(struct request *req) {
 
 IW_INLINE bool _request_form_url_encoded_parse(struct request *req) {
   if (  req->base.body_len > 0
-     && !_request_parse_query_inplace(req->pool, &req->base.post_params, (char*) req->base.body, req->base.body_len)) {
+     && _request_parse_query_inplace(req->pool, &req->base.post_params, (char*) req->base.body, req->base.body_len)) {
     return false;
   }
   return true;

@@ -27,3 +27,24 @@
 #< content-length: 15
 #< 
 #foo=bar&baz=a@z
+
+#curl -v 'http://localhost:9292/fail'
+#> GET /fail HTTP/1.1
+#* Empty reply from server
+#curl: (52) Empty reply from server
+
+
+#curl -v -d'foo=bar&baz=a%40z' 'http://localhost:9292/post/urlencoded'
+#> POST /post/urlencoded HTTP/1.1
+#> Host: localhost:9292
+#> Accept: */*
+#> Content-Length: 17
+#> Content-Type: application/x-www-form-urlencoded
+#> 
+#< HTTP/1.1 200 OK
+#< connection: keep-alive
+#< content-type: text/plain;
+#< content-length: 15
+#< 
+#* Connection #0 to host localhost left intact
+#foo=bar&baz=a@za
