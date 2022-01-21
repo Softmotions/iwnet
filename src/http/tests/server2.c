@@ -77,6 +77,15 @@ static int _handle_post_urlencoded(struct iwn_wf_req *req, void *user_data) {
 static int _handle_put_data(struct iwn_wf_req *req, void *user_data) {
   IWN_ASSERT(req->body && req->body_len);
   bool ret = iwn_http_response_write(req->http, 200, "text/plan", req->body, req->body_len, 0);
+  IWN_ASSERT(ret);
+  return 1;
+}
+
+static int _handle_post_bigparam(struct iwn_wf_req *req, void *user_data) {
+  struct iwn_val bigparam = iwn_pair_find_val(&req->post_params, "bigparam", -1);
+  IWN_ASSERT(bigparam.len && bigparam.buf);
+  bool ret = iwn_http_response_write(req->http, 200, "text/plain", bigparam.buf, bigparam.len, 0);
+  IWN_ASSERT(ret)
   return 1;
 }
 
@@ -168,6 +177,13 @@ int main(int argc, char *argv[]) {
     .pattern = "/putdata",
     .handler = _handle_put_data,
     .flags = IWN_WF_PUT
+  }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .parent = r,
+    .pattern = "/bigparam",
+    .handler = _handle_post_bigparam,
+    .flags = IWN_WF_POST
   }, 0));
 
   // Start the server:

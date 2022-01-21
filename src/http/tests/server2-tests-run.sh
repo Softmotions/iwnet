@@ -63,3 +63,14 @@
 #< content-length: 36
 #< 
 #ff5fd857-c90b-4066-910f-a9a5d1fa1b47
+
+# curl -s -XPOST -H'Expect:' -H'Transfer-Encoding: chunked' --data-urlencode bigparam@test.dat
+# 'http://localhost:9292/post/bigparam' -o r1.dat
+# diff ./test.dat ./r1.dat 
+
+
+
+
+
+
+
