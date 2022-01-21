@@ -446,14 +446,15 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
   struct request *req = it->req;
   struct iwn_wf_req *wreq = &req->base;
   const char *path_unmatched = wreq->path_unmatched - it->prev_sibling_mlen;
-  struct ctx *ctx = (void*) req->base.ctx;
-  int mlen = 0;
 
   if (!r) {
     wreq->path_unmatched = path_unmatched;
     it->prev_sibling_mlen = 0;
     return false;
   }
+
+  struct ctx *ctx = (void*) req->base.ctx;
+  int mlen = 0;
   size_t unmatched_len = req->path_len - (path_unmatched - req->base.path);
 
   if (wreq->flags & r->base.flags) { // Request method matched
@@ -462,22 +463,20 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
       int mret = iwre_match(r->pattern_re, path_unmatched);
       iwrc rc = _iwre_code(mret);
       if (IW_LIKELY(!rc)) {
-        if (mret >= 0) {
-          if ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == mret) {
-            mlen = mret == 0 ? -1 : mret;
-            for (int n = 0; n < r->pattern_re->nmatches; n += 2) { // Record regexp submatches
-              struct route_re_submatch *sm = iwpool_alloc(sizeof(sm), req->pool);
-              if (sm) {
-                sm->route = &r->base;
-                sm->input = path_unmatched;
-                sm->sp = r->pattern_re->matches[n];
-                sm->ep = r->pattern_re->matches[n + 1];
-                if (wreq->last) {
-                  wreq->last->next = sm;
-                  wreq->last = sm;
-                } else {
-                  wreq->first = wreq->last = sm;
-                }
+        if (mret >= 0 && ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == mret)) {
+          mlen = mret == 0 ? -1 : mret;
+          for (int n = 0; n < r->pattern_re->nmatches; n += 2) {   // Record regexp submatches
+            struct route_re_submatch *sm = iwpool_alloc(sizeof(sm), req->pool);
+            if (sm) {
+              sm->route = &r->base;
+              sm->input = path_unmatched;
+              sm->sp = r->pattern_re->matches[n];
+              sm->ep = r->pattern_re->matches[n + 1];
+              if (wreq->last) {
+                wreq->last->next = sm;
+                wreq->last = sm;
+              } else {
+                wreq->first = wreq->last = sm;
               }
             }
           }
