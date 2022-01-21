@@ -63,9 +63,9 @@ static int _handle_fail(struct iwn_wf_req *req, void *user_data) {
 }
 
 static int _handle_post_urlencoded(struct iwn_wf_req *req, void *user_data) {
-  struct iwn_val foo = iwn_pair_find_val(&req->post_params, "foo", -1);
+  struct iwn_val foo = iwn_pair_find_val(&req->form_params, "foo", -1);
   IWN_ASSERT(foo.len && foo.buf);
-  struct iwn_val baz = iwn_pair_find_val(&req->post_params, "baz", -1);
+  struct iwn_val baz = iwn_pair_find_val(&req->form_params, "baz", -1);
   IWN_ASSERT(baz.len && baz.buf);
   IWN_ASSERT(strcmp(baz.buf, "a@z") == 0);
   IWN_ASSERT(strcmp(foo.buf, "bar") == 0);
@@ -82,7 +82,7 @@ static int _handle_put_data(struct iwn_wf_req *req, void *user_data) {
 }
 
 static int _handle_post_bigparam(struct iwn_wf_req *req, void *user_data) {
-  struct iwn_val bigparam = iwn_pair_find_val(&req->post_params, "bigparam", -1);
+  struct iwn_val bigparam = iwn_pair_find_val(&req->form_params, "bigparam", -1);
   IWN_ASSERT(bigparam.len && bigparam.buf);
   bool ret = iwn_http_response_write(req->http, 200, "text/plain", bigparam.buf, bigparam.len, 0);
   IWN_ASSERT(ret)

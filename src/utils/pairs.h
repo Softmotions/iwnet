@@ -5,6 +5,8 @@
 
 IW_EXTERN_C_START
 
+struct iwn_pairs;
+
 struct iwn_val {
   size_t len;
   char  *buf;
@@ -21,7 +23,8 @@ struct iwn_pair {
   char       *val;
   size_t      key_len;
   size_t      val_len;
-  struct iwn_pair *next;
+  struct iwn_pair  *next;  ///< Next pair in pairs chain
+  struct iwn_pairs *extra; ///< Optional extra pairs associated with this pair
 };
 
 struct iwn_pairs {

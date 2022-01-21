@@ -68,8 +68,8 @@
 # 'http://localhost:9292/post/bigparam' -o r1.dat
 # diff ./test.dat ./r1.dat 
 
-
-
+# Multipart
+# curl -s -XPOST -H'Expect:' -F 'foo=bar' -F 'bigparam=@test.dat;type=text/html'  'http://localhost:9292/post/bigparam' -o r1.dat
 
 
 

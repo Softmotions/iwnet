@@ -358,17 +358,17 @@ IW_INLINE bool _c_is_space(char c) {
   return c == ' ' || c == '\t';
 }
 
-static char* _header_parse_next_parameter(char *rp, struct iwn_pair *kv) {
+static char* _header_parse_next_parameter(char *rp, char *ep, struct iwn_pair *kv) {
   memset(kv, 0, sizeof(*kv));
-  for ( ; *rp && *rp != ';'; ++rp);
-  if (*rp == '\0') {
+  for ( ; rp < ep && *rp != ';'; ++rp);
+  if (rp >= ep) {
     return 0;
   }
   bool quoted = false;
   char *ks = rp, *ke = ks;
   char *vs, *ve = 0;
   ++rp;
-  while (*rp) {
+  while (rp < ep) {
     if (ks == ke) {
       if (_c_is_space(*rp)) { // skip leading space
         ks = ke = rp + 1;
@@ -417,17 +417,19 @@ static char* _header_parse_next_parameter(char *rp, struct iwn_pair *kv) {
 }
 
 static iwrc _request_parse_headers(struct request *req) {
+  #define _HN_UEC "application/x-www-form-urlencoded"
+  #define _HN_MFD "multipart/form-data"
+
   iwrc rc = 0;
   struct iwn_val val = iwn_http_request_header_get(req->base.http, "content-type", sizeof("content-type") - 1);
   if (val.len > 0) {
-    if (strncasecmp(val.buf, "application/x-www-form-urlencoded",
-                    sizeof("application/x-www-form-urlencoded") - 1) == 0) {
+    if (val.len >= sizeof(_HN_UEC) - 1 && strncasecmp(val.buf, _HN_UEC, sizeof(_HN_UEC) - 1) == 0) {
       req->base.flags |= IWN_WF_FORM_URL_ENCODED;
-    } else if (strncasecmp(val.buf, "multipart/form-data", sizeof("multipart/form-data") - 1) == 0) {
-      req->base.flags |= IWN_WF_FORM_MULTIPART;
-      char *rp = val.buf += sizeof("multipart/form-data") - 1;
+    } else if (val.len > sizeof(_HN_MFD) - 1 && strncasecmp(val.buf, _HN_MFD, sizeof(_HN_MFD) - 1) == 0) {
+      char *ep = val.buf + val.len;
+      char *rp = val.buf += sizeof(_HN_MFD) - 1;
       struct iwn_pair p;
-      while ((rp = _header_parse_next_parameter(rp, &p))) {
+      while ((rp = _header_parse_next_parameter(rp, ep, &p))) {
         if (strncasecmp(p.key, "boundary", sizeof("boundary") - 1) == 0) {
           req->boundary = iwpool_strndup2(req->pool, p.val, p.val_len);
           break;
@@ -436,9 +438,13 @@ static iwrc _request_parse_headers(struct request *req) {
       if (!req->boundary) {
         return WF_ERROR_INVALID_FORM_DATA;
       }
+      req->base.flags |= IWN_WF_FORM_MULTIPART;
     }
   }
   return rc;
+
+  #undef _HN_UEC
+  #undef _HN_MFD
 }
 
 static bool _route_do_match_next(int pos, struct route_iter *it) {
@@ -604,13 +610,15 @@ finish:
 }
 
 static bool _request_form_multipart_parse(struct request *req) {
-  // TODO:
-  return true;
+  //fprintf(stderr, "Multipart form boundary: %s\n", req->boundary);
+  //TODO: 
+
+  return false;
 }
 
 IW_INLINE bool _request_form_url_encoded_parse(struct request *req) {
   if (  req->base.body_len > 0
-     && _request_parse_query_inplace(req->pool, &req->base.post_params, (char*) req->base.body, req->base.body_len)) {
+     && _request_parse_query_inplace(req->pool, &req->base.form_params, (char*) req->base.body, req->base.body_len)) {
     return false;
   }
   return true;

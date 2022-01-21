@@ -84,7 +84,7 @@ struct iwn_wf_req {
   struct route_re_submatch *first;
   struct route_re_submatch *last;
   struct iwn_pairs query_params;
-  struct iwn_pairs post_params;
+  struct iwn_pairs form_params;
   uint32_t flags;             ///< Request method, form flags.
 };
 
