@@ -610,7 +610,18 @@ finish:
 }
 
 static bool _request_form_multipart_parse(struct request *req) {
-  //fprintf(stderr, "Multipart form boundary: %s\n", req->boundary);
+  // https://andreubotella.com/multipart-form-data/#parsing
+  //
+  // --<boundary>\r\n
+  // Content-Disposition: form-data; name="field2"; filename="example.txt"
+  // Content-Type: ...
+  // \r\n\r\n 
+  //
+  // <data>\r\n
+  //
+  // EOF:
+  // --<boundary>--\r\n
+  //
   //TODO: 
 
   return false;
