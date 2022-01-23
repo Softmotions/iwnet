@@ -617,16 +617,16 @@ static char* _multipar_parse_next(
   char            *rp,
   char            *ep,
   struct iwn_pair *bp,
-  bool *malformed
-  ) {    
+  bool            *eof
+  ) {
   memset(bp, 0, sizeof(*bp));
-  *malformed = true;
+  *eof = false;
 
   while (rp < ep && (*rp == '\r' || *rp == '\n')) {
     ++rp;
   }
   if (rp >= ep) {
-    *malformed = false;
+    *eof = true;
     return 0;
   }
   char *be = rp + IW_LLEN("--") + boundary_len + IW_LLEN("\r\n" /* or -- */);
@@ -634,20 +634,18 @@ static char* _multipar_parse_next(
     return 0;
   }
   rp += IW_LLEN("--");
-  if (boundary_len > 0 && strncmp(rp, boundary, boundary_len) != 0) {  
+  if (boundary_len > 0 && strncmp(rp, boundary, boundary_len) != 0) {
     return 0;
   }
   rp += boundary_len;
   if (rp[0] == '-' && rp[1] == '-') {
-    *malformed = false;
+    *eof = true;
     return 0; // EOF
   }
   if (rp[0] != '\r' || rp[1] != '\n') {
     return 0;
   }
 
-
-  
 
   return 0;
 }
