@@ -431,6 +431,7 @@ static iwrc _request_parse_headers(struct request *req) {
       struct iwn_pair p;
       while ((rp = _header_parse_next_parameter(rp, ep, &p))) {
         if (strncasecmp(p.key, "boundary", sizeof("boundary") - 1) == 0) {
+          req->boundary_len = p.val_len;
           req->boundary = iwpool_strndup2(req->pool, p.val, p.val_len);
           break;
         }
@@ -609,20 +610,42 @@ finish:
   return rc;
 }
 
+static char* _multipar_parse_next(
+  char            *boundary,
+  size_t           boundary_len,
+  char            *rp,
+  char            *ep,
+  struct iwn_pair *bp,
+  IWPOOL          *pool
+  ) {
+  char *be = rp + IW_LLEN("--") + boundary_len + IW_LLEN("\r\n");  // or --
+  if (be > ep || rp[0] != '-' || rp[1] != '-') {
+    return 0;
+  }
+  rp += IW_LLEN("--");
+  if (strncmp(rp, boundary, boundary_len) != 0) {
+    return 0;
+  }
+
+  
+
+  return 0;
+}
+
 static bool _request_form_multipart_parse(struct request *req) {
   // https://andreubotella.com/multipart-form-data/#parsing
   //
   // --<boundary>\r\n
   // Content-Disposition: form-data; name="field2"; filename="example.txt"
   // Content-Type: ...
-  // \r\n\r\n 
+  // \r\n\r\n
   //
   // <data>\r\n
   //
   // EOF:
   // --<boundary>--\r\n
   //
-  //TODO: 
+  //TODO:
 
   return false;
 }

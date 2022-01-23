@@ -28,7 +28,7 @@ struct route {
   pthread_mutex_t     mtx;
   char      *pattern;
   struct re *pattern_re;
-  int      pattern_len;
+  int pattern_len;
 };
 
 #define ROUTE_MATCHING_STACK_SIZE 127
@@ -52,6 +52,7 @@ struct request {
   const char *stream_file_path;
   size_t      streamed_bytes;
   size_t      path_len;
+  size_t      boundary_len;
   uint8_t     flags;
 };
 
