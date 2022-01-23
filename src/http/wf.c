@@ -611,21 +611,41 @@ finish:
 }
 
 static char* _multipar_parse_next(
+  IWPOOL          *pool,
   char            *boundary,
   size_t           boundary_len,
   char            *rp,
   char            *ep,
   struct iwn_pair *bp,
-  IWPOOL          *pool
-  ) {
-  char *be = rp + IW_LLEN("--") + boundary_len + IW_LLEN("\r\n");  // or --
+  bool *malformed
+  ) {    
+  memset(bp, 0, sizeof(*bp));
+  *malformed = true;
+
+  while (rp < ep && (*rp == '\r' || *rp == '\n')) {
+    ++rp;
+  }
+  if (rp >= ep) {
+    *malformed = false;
+    return 0;
+  }
+  char *be = rp + IW_LLEN("--") + boundary_len + IW_LLEN("\r\n" /* or -- */);
   if (be > ep || rp[0] != '-' || rp[1] != '-') {
     return 0;
   }
   rp += IW_LLEN("--");
-  if (strncmp(rp, boundary, boundary_len) != 0) {
+  if (boundary_len > 0 && strncmp(rp, boundary, boundary_len) != 0) {  
     return 0;
   }
+  rp += boundary_len;
+  if (rp[0] == '-' && rp[1] == '-') {
+    *malformed = false;
+    return 0; // EOF
+  }
+  if (rp[0] != '\r' || rp[1] != '\n') {
+    return 0;
+  }
+
 
   
 
