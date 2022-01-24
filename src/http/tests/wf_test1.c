@@ -159,10 +159,41 @@ finish:
   return rc;
 }
 
+static void _multipart_parsing1(IWPOOL *pool) {
+  const char *rp
+    = "--xyz\r\n"
+      "Content-Disposition: form-data; name=\"name\"\r\n"
+      "Content-Type: text/plain;charset=UTF-8\r\n"
+      "\r\nJohn\r\n"
+      "--xyz\r\n"
+      "Content-Disposition: form-data; name=\"age\"\r\n"
+      "\r\n23\r\n"
+      "--xyz\r\n"
+      "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpeg\"\r\n"
+      "Content-TYPE: image/jpeg\r\n"
+      "\r\nxxJPGxx\r\n"
+      "--xyz--\r\n";
+
+  bool eof = false;
+  struct iwn_pairs pp = { 0 };
+  const char *ep = rp + strlen(rp);
+  const char *cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &pp, &eof);
+}
+
+static iwrc test_multipart_parsing(void) {
+  iwrc rc = 0;
+  IWPOOL *pool = iwpool_create_empty();
+  IWN_ASSERT_FATAL(pool);
+  _multipart_parsing1(pool);
+  iwpool_destroy(pool);
+  return rc;
+}
+
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   //RCC(rc, finish, test_simple_matching());
-  RCC(rc, finish, test_regexp_matching());
+  //RCC(rc, finish, test_regexp_matching());
+  RCC(rc, finish, test_multipart_parsing());
 finish:
   IWN_ASSERT(rc == 0);
   return iwn_assertions_failed > 0 ? 1 : 0;

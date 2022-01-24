@@ -754,11 +754,9 @@ static const char* _multipart_parse_next(
   be = rp;
 
   while (ep - rp < boundary_len + 6) {
-
     if (  rp[0] == '\r' && rp[1] == '\n'
        && rp[2] == '-' && rp[3] == '-'
        && (boundary_len == 0 || strncmp(rp + 4, boundary, boundary_len) == 0)) {
-
       rp += boundary_len + 4;
 
       if ((rp[0] == '\r' && rp[1] == '\n') || (rp[0] == '-' && rp[1] == '-')) {
@@ -798,6 +796,22 @@ finish:
 #undef _HL_CDIS
 #undef _HL_CTYPE
 }
+
+#ifdef IW_TESTS
+
+const char* dbg_multipart_parse_next(
+  IWPOOL           *pool,
+  const char       *boundary,
+  size_t            boundary_len,
+  const char       *rp,
+  const char* const ep,
+  struct iwn_pairs *bp,
+  bool             *eof
+  ) {
+  return _multipart_parse_next(pool, boundary, boundary_len, rp, ep, bp, eof);
+}
+
+#endif
 
 static bool _request_form_multipart_parse(struct request *req) {
   // https://andreubotella.com/multipart-form-data/#parsing
