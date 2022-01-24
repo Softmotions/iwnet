@@ -350,65 +350,113 @@ static bool _c_is_tspecial(char c) {
   return false;
 }
 
-IW_INLINE bool _c_is_token(char c) {
-  return !(c == ' ' || _c_is_ctl(c) || _c_is_tspecial(c));
-}
-
 IW_INLINE bool _c_is_space(char c) {
   return c == ' ' || c == '\t';
 }
 
-static char* _header_parse_next_parameter(char *rp, char *ep, struct iwn_pair *kv) {
-  memset(kv, 0, sizeof(*kv));
-  for ( ; rp < ep && *rp != ';'; ++rp);
-  if (rp >= ep) {
-    return 0;
+IW_INLINE bool _c_is_token(char c) {
+  return !(c == ' ' || _c_is_ctl(c) || _c_is_tspecial(c));
+}
+
+IW_INLINE bool _c_is_lsep(char c) {
+  return c == '\r' || c == '\n';
+}
+
+IW_INLINE bool _c_is_blank(char c) {
+  return _c_is_space(c) || _c_is_lsep(c);
+}
+
+IW_INLINE bool _c_is_token2(bool header_value, char c) {
+  if (IW_UNLIKELY(header_value && c == '/')) {
+    return true;
+  } else {
+    return _c_is_token(c);
   }
-  bool quoted = false;
-  char *ks = rp, *ke = ks;
-  char *vs, *ve = 0;
-  ++rp;
+}
+
+static const char* _header_parse_skip_name(const char *rp, const char *ep) {
+  const char *sp = rp;
   while (rp < ep) {
-    if (ks == ke) {
-      if (_c_is_space(*rp)) { // skip leading space
-        ks = ke = rp + 1;
-      } else if (*rp == '=') {
-        ke = rp;
-        vs = rp + 1;
-      } else if (!_c_is_token(*rp)) {
+    if (*rp == ':') {
+      if (rp > sp) {
+        return rp;
+      } else {
         return 0;
       }
-      ++rp;
-    } else {
-      if (rp - 1 == ke && *rp == '"') {
-        quoted = true;
+    } else if (!_c_is_token(*rp)) {
+      return 0;
+    }
+    ++rp;
+  }
+  return rp;
+}
+
+static const char* _header_parse_next_parameter(const char *rp, const char *ep, struct iwn_pair *kv) {
+  memset(kv, 0, sizeof(*kv));
+  bool header_value = *rp == ':'; // Start if header value
+  if (!header_value) {
+    for ( ; rp < ep && *rp != ';'; ++rp) {
+      if (_c_is_lsep(*rp)) {
+        return 0;
+      }
+    }
+  }
+
+  bool in_quote = false, in_key = true, expect_eq = false;
+  const char *ks = rp, *ke = ks;
+  const char *vs, *ve = 0;
+  ++rp;
+
+  while (rp < ep) {
+    if (in_key) {
+      if (*rp == '=') {
+        in_key = false;
         vs = ++rp;
-      } else if (quoted) {
+      } else if (_c_is_space(*rp)) {
+        if (ke == ks) {
+          ++ks;
+          ke = ks;
+        } else {
+          expect_eq = true;
+        }
+        ++rp;
+      } else if (_c_is_token(*rp) && !expect_eq) {
+        ++rp;
+        ke = rp;
+      } else {
+        return 0;
+      }
+    } else {
+      if (IW_UNLIKELY(in_quote)) {
         if (*(rp - 1) == '\\') {
           ; // any char can be escaped
         } else if (*rp == '"') {
           ve = rp;
           break;
-        } else if (*rp == '\r') {
+        } else if (_c_is_lsep(*rp)) {
           return 0;
         }
         ++rp;
-      } else if (*rp == ';') {
+      } else if (*rp == '"' && vs == rp) {
+        in_quote = true;
+        vs = ++rp;
+        ve = vs;
+      } else if (*rp == ';' || _c_is_blank(*rp)) {
         ve = rp;
-        --rp;
         break;
-      } else if (!_c_is_token(*rp)) {
-        return 0;
-      } else {
+      } else if (_c_is_token2(header_value && ve != vs, *rp)) {
         ++rp;
         ve = rp;
+      } else {
+        return 0;
       }
     }
   }
+
   if (ve) {
     kv->key = ks;
     kv->key_len = ke - ks;
-    kv->val = vs;
+    kv->val = (char*) vs;
     kv->val_len = ve - vs;
     return rp;
   } else {
@@ -427,7 +475,7 @@ static iwrc _request_parse_headers(struct request *req) {
       req->base.flags |= IWN_WF_FORM_URL_ENCODED;
     } else if (val.len > sizeof(_HN_MFD) - 1 && strncasecmp(val.buf, _HN_MFD, sizeof(_HN_MFD) - 1) == 0) {
       char *ep = val.buf + val.len;
-      char *rp = val.buf += sizeof(_HN_MFD) - 1;
+      const char *rp = val.buf += sizeof(_HN_MFD) - 1;
       struct iwn_pair p;
       while ((rp = _header_parse_next_parameter(rp, ep, &p))) {
         if (strncasecmp(p.key, "boundary", sizeof("boundary") - 1) == 0) {
@@ -610,26 +658,26 @@ finish:
   return rc;
 }
 
-static char* _multipar_parse_next(
-  IWPOOL          *pool,
-  char            *boundary,
-  size_t           boundary_len,
-  char            *rp,
-  char            *ep,
-  struct iwn_pair *bp,
-  bool            *eof
+static const char* _multipart_parse_next(
+  IWPOOL           *pool,
+  const char       *boundary,
+  size_t            boundary_len,
+  const char       *rp,
+  const char* const ep,
+  struct iwn_pairs *bp,
+  bool             *eof
   ) {
-  memset(bp, 0, sizeof(*bp));
-  *eof = false;
+  #define _HL_CDIS  IW_LLEN("content-disposition")
+  #define _HL_CTYPE IW_LLEN("content-type")
 
-  while (rp < ep && (*rp == '\r' || *rp == '\n')) {
-    ++rp;
-  }
+  iwrc rc = 0;
+  *eof = false;
   if (rp >= ep) {
     *eof = true;
     return 0;
   }
-  char *be = rp + IW_LLEN("--") + boundary_len + IW_LLEN("\r\n" /* or -- */);
+
+  const char *be = rp + IW_LLEN("--") + boundary_len + IW_LLEN("\r\n" /* or -- */);
   if (be > ep || rp[0] != '-' || rp[1] != '-') {
     return 0;
   }
@@ -642,12 +690,113 @@ static char* _multipar_parse_next(
     *eof = true;
     return 0; // EOF
   }
-  if (rp[0] != '\r' || rp[1] != '\n') {
+
+  struct iwn_pair kv;
+  struct iwn_val name = { 0 }, file_name = { 0 },
+                 disposition = { 0 }, ctype = { 0 }, data = { 0 };
+
+  while (1) {
+    if (ep - rp < 2 || rp[0] != '\r' || rp[1] != '\n') {
+      return 0;
+    }
+    rp += 2;
+
+    const char *hs = rp;
+    const char *he = _header_parse_skip_name(hs, ep);
+    if (!he) {
+      break; // No more headers
+    }
+    rp = he;
+    if (he - hs == _HL_CDIS && strncasecmp(hs, "content-disposition", _HL_CDIS) == 0) {
+      int i = 0;
+      for (const char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
+           rp = pp,
+           pp = _header_parse_next_parameter(pp, ep, &kv),
+           ++i) {
+        if (i == 0) {
+          disposition.len = kv.key_len;
+          disposition.buf = (char*) kv.key;
+        } else if (kv.val_len) {
+          if (kv.key_len == IW_LLEN("name") && strncasecmp(kv.key, "name", IW_LLEN("name")) == 0) {
+            name.len = kv.val_len;
+            name.buf = kv.val;
+          } else if (kv.key_len == IW_LLEN("filename") && strncasecmp(kv.key, "filename", IW_LLEN("filename")) == 0) {
+            file_name.len = kv.val_len;
+            file_name.buf = kv.val;
+          }
+        }
+      }
+    } else if (he - hs == _HL_CTYPE && strncasecmp(hs, "content-type", _HL_CTYPE) == 0) {
+      int i = 0;
+      for (const char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
+           rp = pp,
+           pp = _header_parse_next_parameter(pp, ep, &kv),
+           ++i) {
+        if (i == 0) {
+          ctype.len = kv.key_len;
+          ctype.buf = (char*) kv.key;
+        }
+      }
+      if (i > 0) {
+        ctype.len = rp - ctype.buf;
+      }
+    }
+  }
+
+  if (!disposition.len || !name.len) {
+    return 0;
+  }
+  if (ep - rp < 2 || rp[0] != '\r' || rp[1] != '\n') {
     return 0;
   }
 
+  rp += 2;
+  be = rp;
 
+  while (ep - rp < boundary_len + 6) {
+
+    if (  rp[0] == '\r' && rp[1] == '\n'
+       && rp[2] == '-' && rp[3] == '-'
+       && (boundary_len == 0 || strncmp(rp + 4, boundary, boundary_len) == 0)) {
+
+      rp += boundary_len + 4;
+
+      if ((rp[0] == '\r' && rp[1] == '\n') || (rp[0] == '-' && rp[1] == '-')) {
+        data.buf = (char*) be;
+        rp -= (boundary_len + 6); // Position at start of \r\n--<boundary>
+        data.len = rp - be;
+        rp += 2; // Position at start of --<boundary>
+
+        RCC(rc, finish, iwn_pair_add_pool(pool, bp, name.buf, name.len, 0, 0));
+
+        struct iwn_pair *np = bp->last;
+        RCA(np->extra = iwpool_calloc(sizeof(*np->extra), pool), finish);
+        RCC(rc, finish, iwn_pair_add_pool(pool, np->extra, "data", IW_LLEN("data"), data.buf, data.len));
+        if (file_name.len) {
+          RCC(rc, finish, iwn_pair_add_pool(pool, bp, "file", IW_LLEN("file"), file_name.buf, file_name.len));
+        }
+        if (ctype.len) {
+          RCC(rc, finish, iwn_pair_add_pool(pool, np->extra,
+                                            "content-type", IW_LLEN("content-type"), ctype.buf, ctype.len));
+        }
+        RCC(rc, finish, iwn_pair_add_pool(pool, np->extra,
+                                          "content-disposition", IW_LLEN("content-disposition"),
+                                          disposition.buf, disposition.len));
+        return rp;
+      }
+    }
+
+    ++rp;
+  }
+
+finish:
+  if (rc) {
+    iwlog_ecode_error3(rc);
+  }
   return 0;
+
+#undef _HL_CDIS
+#undef _HL_CTYPE
 }
 
 static bool _request_form_multipart_parse(struct request *req) {
