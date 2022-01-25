@@ -194,11 +194,11 @@ static bool _ensure_multipart(
 }
 
 static void _multipart_parsing3(IWPOOL *pool) {
-  const char *rp
-    = "--x\r\n"
-      "Content-Disposition: inline; name=\"zz\"\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+  char *rp
+    = strdup("--x\r\n"
+             "Content-Disposition: inline; name=\"zz\"\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
 
   bool eof = false;
   struct iwn_pairs parts = { 0 };
@@ -208,176 +208,175 @@ static void _multipart_parsing3(IWPOOL *pool) {
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; name=\"zz\"\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; name=\"zz\"\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(cp);
   IWN_ASSERT(!eof);
-
+  
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; name=\"zz\"; filename=\"f\\oo.html\"\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; name=\"zz\"; filename=\"f\\oo.html\"\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  // NOTE: We do not process escaped characters
-  IWN_ASSERT(_ensure_multipart(&parts, "zz", "f\\oo.html", 0, 0));
+  IWN_ASSERT(_ensure_multipart(&parts, "zz", "foo.html", 0, 0));
   IWN_ASSERT(cp);
   IWN_ASSERT(!eof);
 
-  struct iwn_pair *part = iwn_pair_find(&parts, "zz", -1);
-  IWN_ASSERT_FATAL(part);
-  part = iwn_pair_find(part->extra, "filename", -1);
-  IWN_ASSERT_FATAL(part && part->val_len > 0);
-  char *p = malloc(part->val_len + 1);
-  IWN_ASSERT_FATAL(p);
-  memcpy(p, part->val, part->val_len);
-  p[part->val_len] = '\0';
-  iwn_unescape_backslashes_inplace(p, part->val_len);
-  IWN_ASSERT(strcmp(p, "foo.html") == 0);
-  free(p);
-
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; name=z,z\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; name=z,z\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(!cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; name=z"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; name=z"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(!cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; name=\"zz\"\r\n"
-      "\r\nz\r\n"
-      "--xx--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; name=\"zz\"\r\n"
+             "\r\nz\r\n"
+             "--xx--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(!cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; name=\"zz\";\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; name=\"zz\";\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(!cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; name=\"a\"; filename=foo[1](2).html\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; name=\"a\"; filename=foo[1](2).html\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(!cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: form-data; filename=\"zz\"\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: form-data; filename=\"zz\"\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(!cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
+  free(rp);
   rp
-    = "--x\r\n"
-      "Content-Disposition: \"kk\"; name=\"zz\"\r\n"
-      "\r\nz\r\n"
-      "--x--\r\n";
+    = strdup("--x\r\n"
+             "Content-Disposition: \"kk\"; name=\"zz\"\r\n"
+             "\r\nz\r\n"
+             "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(!cp);
   IWN_ASSERT(!eof);
+  free(rp);
 }
 
 static void _multipart_parsing2(IWPOOL *pool) {
-  const char *rp
-    = "--\r\n"
-      "Content-Disposition: form-data; name=\"\"\r\n"
-      "Content-Type: \r\n"
-      "\r\n[DATA]\r\n"
-      "----\r\n";
+  char *rp
+    = strdup("--\r\n"
+             "Content-Disposition: form-data; name=\"\"\r\n"
+             "Content-Type: \r\n"
+             "\r\n[DATA]\r\n"
+             "----\r\n");
 
   bool eof = false;
   struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
 
-  rp = dbg_multipart_parse_next(pool, "", 0, rp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(rp);
+  char *cp = dbg_multipart_parse_next(pool, "", 0, rp, ep, &parts, &eof);
+  IWN_ASSERT_FATAL(cp);
   IWN_ASSERT(!eof);
   IWN_ASSERT(_ensure_multipart(&parts, "", 0, 0, 0));
-  rp = dbg_multipart_parse_next(pool, "", 0, rp, ep, &parts, &eof);
-  IWN_ASSERT(!rp);
+  cp = dbg_multipart_parse_next(pool, "", 0, cp, ep, &parts, &eof);
+  IWN_ASSERT(!cp);
   IWN_ASSERT(eof);
+  free(rp);
 }
 
 static void _multipart_parsing1(IWPOOL *pool) {
-  const char *rp
-    = "--xyz\r\n"
-      "Content-Disposition: form-data; name=\"name\"\r\n"
-      "Content-Type: text/plain;charset=UTF-8\r\n"
-      "\r\nJohn\r\n"
-      "--xyz\r\n"
-      "Content-Disposition:form-data; name=\"age\"\r\n"
-      "\r\n23\r\n"
-      "--xyz\r\n"
-      "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpeg\"\r\n"
-      "Content-TYPE: image/jpeg\r\n"
-      "\r\nxxJPGxx\r\n"
-      "--xyz--\r\n";
+  char *rp
+    = strdup("--xyz\r\n"
+             "Content-Disposition: form-data; name=\"name\"\r\n"
+             "Content-Type: text/plain;charset=UTF-8\r\n"
+             "\r\nJohn\r\n"
+             "--xyz\r\n"
+             "Content-Disposition:form-data; name=\"age\"\r\n"
+             "\r\n23\r\n"
+             "--xyz\r\n"
+             "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpeg\"\r\n"
+             "Content-TYPE: image/jpeg\r\n"
+             "\r\nxxJPGxx\r\n"
+             "--xyz--\r\n");
 
   bool eof = false;
   struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
-  rp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(rp);
+  char *cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
+  IWN_ASSERT_FATAL(cp);
   IWN_ASSERT(!eof);
   IWN_ASSERT(_ensure_multipart(&parts, "name", 0, "text/plain;charset=UTF-8", "John"));
 
-  rp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(rp);
+  cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), cp, ep, &parts, &eof);
+  IWN_ASSERT_FATAL(cp);
   IWN_ASSERT(!eof);
   IWN_ASSERT(_ensure_multipart(&parts, "age", 0, 0, "23"));
 
-  rp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(rp);
+  cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), cp, ep, &parts, &eof);
+  IWN_ASSERT_FATAL(cp);
   IWN_ASSERT(!eof);
   IWN_ASSERT(_ensure_multipart(&parts, "photo", "photo.jpeg", "image/jpeg", "xxJPGxx"));
 
-  rp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
-  IWN_ASSERT(!rp);
+  cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), cp, ep, &parts, &eof);
+  IWN_ASSERT(!cp);
   IWN_ASSERT(eof);
+  free(rp);
 }
 
 static iwrc test_multipart_parsing(void) {
@@ -393,8 +392,8 @@ static iwrc test_multipart_parsing(void) {
 
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
-  //RCC(rc, finish, test_simple_matching());
-  //RCC(rc, finish, test_regexp_matching());
+  RCC(rc, finish, test_simple_matching());
+  RCC(rc, finish, test_regexp_matching());
   RCC(rc, finish, test_multipart_parsing());
 finish:
   IWN_ASSERT(rc == 0);

@@ -68,14 +68,11 @@ IW_ALLOC char* iwn_url_encode_new(const char *src, ssize_t src_len) {
   return ret;
 }
 
-void iwn_url_decode_inplace(char *str, ssize_t str_len) {
-  if (str_len < 0) {
-    str_len = SSIZE_MAX;
-  }
-  char *rp = str;
+void iwn_url_decode_inplace(char *str) {
+  const char *rp = str;
   char *wp = str;
   char tmp[] = { 0, 0, 0 };
-  while (rp - str < str_len && *rp) {
+  while (*rp) {
     if (IW_UNLIKELY(*rp == '%')) {
       rp++;
       tmp[0] = *rp++;
@@ -92,11 +89,11 @@ void iwn_url_decode_inplace(char *str, ssize_t str_len) {
   *wp = '\0';
 }
 
-void iwn_unescape_backslashes_inplace(char *str, ssize_t str_len) {
+size_t iwn_unescape_backslashes_inplace(char *str, ssize_t str_len) {
   if (str_len < 0) {
     str_len = SSIZE_MAX;
   }
-  char *rp = str;
+  const char *rp = str;
   char *wp = str;
   while (rp - str < str_len && *rp) {
     if (IW_UNLIKELY(*rp == '\\')) {
@@ -109,8 +106,8 @@ void iwn_unescape_backslashes_inplace(char *str, ssize_t str_len) {
     } else {
       *wp = *rp;
     }
-    ++rp;    
+    ++rp;
     ++wp;
   }
-  *wp = '\0';
+  return wp - str;
 }

@@ -181,11 +181,14 @@ finish:
 }
 
 static iwrc _request_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, char *p, size_t len) {
+  if (!p || !len) {
+    return 0;
+  }
+
   iwrc rc = 0;
-  char *key = 0, *val = 0, *ep = p + len;
+  char *key = p, *val = 0, *ep = p + len;
   int state = 0;
 
-  key = p;
   while (p < ep) {
     if (state == 0) {
       if (*p == '=') {
@@ -194,7 +197,7 @@ static iwrc _request_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, 
         state = 1;
       } else if (*p == '&') {
         *p = '\0';
-        iwn_url_decode_inplace(p, -1);
+        iwn_url_decode_inplace(key);
         RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, "", 0));
         key = p + 1;
         state = 0;
@@ -202,8 +205,8 @@ static iwrc _request_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, 
     } else {
       if (*p == '&') {
         *p = '\0';
-        iwn_url_decode_inplace(key, -1);
-        iwn_url_decode_inplace(val, -1);
+        iwn_url_decode_inplace(key);
+        iwn_url_decode_inplace(val);
         RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
         key = p + 1;
         state = 0;
@@ -211,14 +214,15 @@ static iwrc _request_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, 
     }
     ++p;
   }
+
   if (state == 0) {
     if (key[0] != '\0') {
-      iwn_url_decode_inplace(key, -1);
+      iwn_url_decode_inplace(key);
       RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, "", 0));
     }
   } else {
-    iwn_url_decode_inplace(key, -1);
-    iwn_url_decode_inplace(val, -1);
+    iwn_url_decode_inplace(key);
+    iwn_url_decode_inplace(val);
     RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
   }
 
@@ -276,7 +280,7 @@ static iwrc _request_parse_target(struct request *req) {
     }
   }
   RCA(p = iwpool_strndup2(pool, val.buf, i), finish);
-  iwn_url_decode_inplace(p, i);
+  iwn_url_decode_inplace(p);
 
   req->base.path_unmatched = req->base.path = p;
   req->path_len = i;
@@ -366,7 +370,7 @@ IW_INLINE bool _c_is_blank(char c) {
   return _c_is_space(c) || _c_is_lsep(c);
 }
 
-static const char* _header_parse_skip_name(const char *rp, const char *ep) {
+static char* _header_parse_skip_name(char *rp, const char *ep) {
   const char *sp = rp;
   while (rp < ep) {
     if (*rp == ':') {
@@ -383,7 +387,7 @@ static const char* _header_parse_skip_name(const char *rp, const char *ep) {
   return rp;
 }
 
-static const char* _header_parse_next_parameter(const char *rp, const char *ep, struct iwn_pair *kv) {
+static char* _header_parse_next_parameter(char *rp, const char *ep, struct iwn_pair *kv) {
   memset(kv, 0, sizeof(*kv));
   bool header_value = *rp == ':'; // Start if header value
   if (!header_value) {
@@ -395,9 +399,9 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
   }
   ++rp;
 
-  bool in_quote = false, in_key = true, expect_eq = false;
+  bool in_quote = false, in_key = true, expect_eq = false, val_escaped = false;
   const char *ks = rp, *ke = ks;
-  const char *vs, *ve = 0;
+  char *vs, *ve = 0;
 
   while (rp < ep) {
     if (in_key) {
@@ -442,7 +446,7 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
     } else {
       if (IW_UNLIKELY(in_quote)) {
         if (*(rp - 1) == '\\') {
-          ; // any char can be escaped
+          val_escaped = true;
         } else if (*rp == '"') {
           ve = rp;
           ++rp;
@@ -470,8 +474,11 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
   if (ve) {
     kv->key = ks;
     kv->key_len = ke - ks;
-    kv->val = (char*) vs;
+    kv->val = vs;
     kv->val_len = ve - vs;
+    if (val_escaped) {
+      kv->val_len = iwn_unescape_backslashes_inplace(kv->val, kv->val_len);
+    }
     return rp;
   } else {
     return 0;
@@ -489,7 +496,7 @@ static iwrc _request_parse_headers(struct request *req) {
       req->base.flags |= IWN_WF_FORM_URL_ENCODED;
     } else if (val.len > sizeof(_HN_MFD) - 1 && strncasecmp(val.buf, _HN_MFD, sizeof(_HN_MFD) - 1) == 0) {
       char *ep = val.buf + val.len;
-      const char *rp = val.buf += sizeof(_HN_MFD) - 1;
+      char *rp = val.buf += sizeof(_HN_MFD) - 1;
       struct iwn_pair p;
       while ((rp = _header_parse_next_parameter(rp, ep, &p))) {
         if (strncasecmp(p.key, "boundary", sizeof("boundary") - 1) == 0) {
@@ -672,11 +679,11 @@ finish:
   return rc;
 }
 
-static const char* _multipart_parse_next(
+static char* _multipart_parse_next(
   IWPOOL           *pool,
   const char       *boundary,
   size_t            boundary_len,
-  const char       *rp,
+  char             *rp,
   const char* const ep,
   struct iwn_pairs *parts,
   bool             *eof
@@ -715,15 +722,15 @@ static const char* _multipart_parse_next(
     }
     rp += 2;
 
-    const char *hs = rp;
-    const char *he = _header_parse_skip_name(hs, ep);
+    char *hs = rp;
+    char *he = _header_parse_skip_name(hs, ep);
     if (!he) {
       break; // No more headers
     }
     rp = he;
     if (he - hs == _HL_CDIS && strncasecmp(hs, "content-disposition", _HL_CDIS) == 0) {
       int i = 0;
-      for (const char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
+      for (char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
            rp = pp,
            pp = _header_parse_next_parameter(pp, ep, &kv),
            ++i) {
@@ -742,7 +749,7 @@ static const char* _multipart_parse_next(
       }
     } else if (he - hs == _HL_CTYPE && strncasecmp(hs, "content-type", _HL_CTYPE) == 0) {
       int i = 0;
-      for (const char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
+      for (char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
            rp = pp,
            pp = _header_parse_next_parameter(pp, ep, &kv),
            ++i) {
@@ -811,11 +818,11 @@ finish:
 
 #ifdef IW_TESTS
 
-const char* dbg_multipart_parse_next(
+char* dbg_multipart_parse_next(
   IWPOOL           *pool,
   const char       *boundary,
   size_t            boundary_len,
-  const char       *rp,
+  char             *rp,
   const char* const ep,
   struct iwn_pairs *parts,
   bool             *eof
@@ -826,29 +833,18 @@ const char* dbg_multipart_parse_next(
 #endif
 
 static bool _request_form_multipart_parse(struct request *req) {
-  // https://andreubotella.com/multipart-form-data/#parsing
-  //
-  // --<boundary>\r\n
-  // Content-Disposition: form-data; name="field2"; filename="example.txt"
-  // Content-Type: ...
-  // \r\n\r\n
-  //
-  // <data>\r\n
-  //
-  // EOF:
-  // --<boundary>--\r\n
-  //
-  //TODO:
-
-  return false;
+  bool eof;
+  char *cp = (char*) req->base.body;
+  const char *ep = cp + req->base.body_len;
+  while ((cp = _multipart_parse_next(req->pool,
+                                     req->boundary, req->boundary_len,
+                                     cp, ep, &req->base.form_params, &eof)));
+  return eof;
 }
 
 IW_INLINE bool _request_form_url_encoded_parse(struct request *req) {
-  if (  req->base.body_len > 0
-     && _request_parse_query_inplace(req->pool, &req->base.form_params, (char*) req->base.body, req->base.body_len)) {
-    return false;
-  }
-  return true;
+  return 0 == _request_parse_query_inplace(req->pool, &req->base.form_params,
+                                           (char*) req->base.body, req->base.body_len);
 }
 
 IW_INLINE bool _request_form_parse(struct request *req) {
