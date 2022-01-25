@@ -159,6 +159,39 @@ finish:
   return rc;
 }
 
+static bool _ensure_multipart(
+  struct iwn_pairs *parts,
+  const char       *name,
+  const char       *file,
+  const char       *ctype,
+  const char       *data
+  ) {
+  IWN_ASSERT_FATAL(parts && name);
+  struct iwn_pair *part = iwn_pair_find(parts, name, -1), *p;
+  if (!part) {
+    return false;
+  }
+  if (file) {
+    p = iwn_pair_find(part->extra, "file", IW_LLEN("file"));
+    if (!p || strncmp(p->val, file, p->val_len) != 0) {
+      return false;
+    }
+  }
+  if (ctype) {
+    p = iwn_pair_find(part->extra, "content-type", IW_LLEN("content-type"));
+    if (!p || strncmp(p->val, ctype, p->val_len) != 0) {
+      return false;
+    }
+  }
+  if (data) {
+    p = iwn_pair_find(part->extra, "data", IW_LLEN("data"));
+    if (!p || strncmp(p->val, data, p->val_len) != 0) {
+      return false;
+    }
+  }
+  return true;
+}
+
 static void _multipart_parsing1(IWPOOL *pool) {
   const char *rp
     = "--xyz\r\n"
@@ -166,7 +199,7 @@ static void _multipart_parsing1(IWPOOL *pool) {
       "Content-Type: text/plain;charset=UTF-8\r\n"
       "\r\nJohn\r\n"
       "--xyz\r\n"
-      "Content-Disposition: form-data; name=\"age\"\r\n"
+      "Content-Disposition:form-data; name=\"age\"\r\n"
       "\r\n23\r\n"
       "--xyz\r\n"
       "Content-Disposition: form-data; name=\"photo\"; filename=\"photo.jpeg\"\r\n"
@@ -175,9 +208,22 @@ static void _multipart_parsing1(IWPOOL *pool) {
       "--xyz--\r\n";
 
   bool eof = false;
-  struct iwn_pairs pp = { 0 };
+  struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
-  const char *cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &pp, &eof);
+  rp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
+  IWN_ASSERT_FATAL(rp);
+  IWN_ASSERT(!eof);
+  IWN_ASSERT(_ensure_multipart(&parts, "name", 0, "text/plain;charset=UTF-8", "John"));
+
+  rp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
+  IWN_ASSERT_FATAL(rp);
+  IWN_ASSERT(!eof);
+  IWN_ASSERT(_ensure_multipart(&parts, "age", 0, 0, "23"));
+
+  rp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
+  IWN_ASSERT_FATAL(rp);
+  IWN_ASSERT(!eof);
+  IWN_ASSERT(_ensure_multipart(&parts, "photo", "photo.jpeg", "image/jpeg", "xxJPGxx"));
 }
 
 static iwrc test_multipart_parsing(void) {

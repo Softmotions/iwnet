@@ -366,14 +366,6 @@ IW_INLINE bool _c_is_blank(char c) {
   return _c_is_space(c) || _c_is_lsep(c);
 }
 
-IW_INLINE bool _c_is_token2(bool header_value, char c) {
-  if (IW_UNLIKELY(header_value && c == '/')) {
-    return true;
-  } else {
-    return _c_is_token(c);
-  }
-}
-
 static const char* _header_parse_skip_name(const char *rp, const char *ep) {
   const char *sp = rp;
   while (rp < ep) {
@@ -401,30 +393,51 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
       }
     }
   }
+  ++rp;
 
   bool in_quote = false, in_key = true, expect_eq = false;
   const char *ks = rp, *ke = ks;
   const char *vs, *ve = 0;
-  ++rp;
 
   while (rp < ep) {
     if (in_key) {
-      if (*rp == '=') {
-        in_key = false;
-        vs = ++rp;
-      } else if (_c_is_space(*rp)) {
-        if (ke == ks) {
-          ++ks;
-          ke = ks;
+      if (header_value) {
+        if (_c_is_space(*rp)) {
+          if (ke == ks) {
+            ++ks;
+            ke = ks;
+          }
+          ++rp;
+        } else if (*rp == ';' || _c_is_lsep(*rp)) {
+          vs = ve = rp;
+          break;
+        } else if ((*rp == '/' && ke != ks) || _c_is_token(*rp)) { // Allow '/' in header value
+          ++rp;
+          ke = rp;
         } else {
-          expect_eq = true;
+          return 0;
         }
-        ++rp;
-      } else if (_c_is_token(*rp) && !expect_eq) {
-        ++rp;
-        ke = rp;
       } else {
-        return 0;
+        if (*rp == '=') {
+          in_key = false;
+          vs = ++rp;
+        } else if (_c_is_space(*rp)) {
+          if (ke == ks) {
+            ++ks;
+            ke = ks;
+          } else {
+            expect_eq = true;
+          }
+          ++rp;
+        } else if (*rp == ';' && !expect_eq) {
+          vs = ve = rp;
+          break;
+        } else if (_c_is_token(*rp) && !expect_eq) {
+          ++rp;
+          ke = rp;
+        } else {
+          return 0;
+        }
       }
     } else {
       if (IW_UNLIKELY(in_quote)) {
@@ -432,6 +445,7 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
           ; // any char can be escaped
         } else if (*rp == '"') {
           ve = rp;
+          ++rp;
           break;
         } else if (_c_is_lsep(*rp)) {
           return 0;
@@ -444,7 +458,7 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
       } else if (*rp == ';' || _c_is_blank(*rp)) {
         ve = rp;
         break;
-      } else if (_c_is_token2(header_value && ve != vs, *rp)) {
+      } else if (_c_is_token(*rp)) {
         ++rp;
         ve = rp;
       } else {
@@ -664,7 +678,7 @@ static const char* _multipart_parse_next(
   size_t            boundary_len,
   const char       *rp,
   const char* const ep,
-  struct iwn_pairs *bp,
+  struct iwn_pairs *parts,
   bool             *eof
   ) {
   #define _HL_CDIS  IW_LLEN("content-disposition")
@@ -743,7 +757,7 @@ static const char* _multipart_parse_next(
     }
   }
 
-  if (!disposition.len || !name.len) {
+  if (!disposition.len || !name.len || strncasecmp(disposition.buf, "form-data", disposition.len) != 0) {
     return 0;
   }
   if (ep - rp < 2 || rp[0] != '\r' || rp[1] != '\n') {
@@ -753,7 +767,7 @@ static const char* _multipart_parse_next(
   rp += 2;
   be = rp;
 
-  while (ep - rp < boundary_len + 6) {
+  while (ep - rp >= boundary_len + 6) {
     if (  rp[0] == '\r' && rp[1] == '\n'
        && rp[2] == '-' && rp[3] == '-'
        && (boundary_len == 0 || strncmp(rp + 4, boundary, boundary_len) == 0)) {
@@ -761,25 +775,22 @@ static const char* _multipart_parse_next(
 
       if ((rp[0] == '\r' && rp[1] == '\n') || (rp[0] == '-' && rp[1] == '-')) {
         data.buf = (char*) be;
-        rp -= (boundary_len + 6); // Position at start of \r\n--<boundary>
+        rp -= (boundary_len + 4); // Position at start of \r\n--<boundary>
         data.len = rp - be;
         rp += 2; // Position at start of --<boundary>
 
-        RCC(rc, finish, iwn_pair_add_pool(pool, bp, name.buf, name.len, 0, 0));
+        RCC(rc, finish, iwn_pair_add_pool(pool, parts, name.buf, name.len, 0, 0));
 
-        struct iwn_pair *np = bp->last;
+        struct iwn_pair *np = parts->last;
         RCA(np->extra = iwpool_calloc(sizeof(*np->extra), pool), finish);
         RCC(rc, finish, iwn_pair_add_pool(pool, np->extra, "data", IW_LLEN("data"), data.buf, data.len));
         if (file_name.len) {
-          RCC(rc, finish, iwn_pair_add_pool(pool, bp, "file", IW_LLEN("file"), file_name.buf, file_name.len));
+          RCC(rc, finish, iwn_pair_add_pool(pool, np->extra, "file", IW_LLEN("file"), file_name.buf, file_name.len));
         }
         if (ctype.len) {
           RCC(rc, finish, iwn_pair_add_pool(pool, np->extra,
                                             "content-type", IW_LLEN("content-type"), ctype.buf, ctype.len));
         }
-        RCC(rc, finish, iwn_pair_add_pool(pool, np->extra,
-                                          "content-disposition", IW_LLEN("content-disposition"),
-                                          disposition.buf, disposition.len));
         return rp;
       }
     }
@@ -805,10 +816,10 @@ const char* dbg_multipart_parse_next(
   size_t            boundary_len,
   const char       *rp,
   const char* const ep,
-  struct iwn_pairs *bp,
+  struct iwn_pairs *parts,
   bool             *eof
   ) {
-  return _multipart_parse_next(pool, boundary, boundary_len, rp, ep, bp, eof);
+  return _multipart_parse_next(pool, boundary, boundary_len, rp, ep, parts, eof);
 }
 
 #endif

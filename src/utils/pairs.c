@@ -17,6 +17,9 @@ void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p) {
 }
 
 struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len) {
+  if (IW_UNLIKELY(!pairs || !key || !key_len)) {
+    return 0;
+  }
   if (key_len < 0) {
     key_len = strlen(key);
   }
