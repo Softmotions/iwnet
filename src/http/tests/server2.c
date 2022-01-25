@@ -89,6 +89,30 @@ static int _handle_post_bigparam(struct iwn_wf_req *req, void *user_data) {
   return 1;
 }
 
+static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
+  atomic_int af = iwn_assertions_failed;
+  struct iwn_pair *p = iwn_pair_find(&req->form_params, "foo", -1);
+  IWN_ASSERT(p);
+  if (p) {
+    IWN_ASSERT(strncmp(p->val, "bar", p->val_len) == 0);
+  }
+  p = iwn_pair_find(&req->form_params, "baz", -1);
+  IWN_ASSERT(p);
+  if (p) {
+    IWN_ASSERT(strncmp(p->val, "a%40z", p->val_len) == 0);
+  }
+  p = iwn_pair_find(&req->form_params, "bigparam", -1);
+  IWN_ASSERT(p);
+  if (p) {
+    IWN_ASSERT(p->val_len == 25165824);
+  }
+  if (af == iwn_assertions_failed) {
+    return 200;
+  } else {
+    return 500;
+  }
+}
+
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();
@@ -183,6 +207,13 @@ int main(int argc, char *argv[]) {
     .parent = r,
     .pattern = "/bigparam",
     .handler = _handle_post_bigparam,
+    .flags = IWN_WF_POST
+  }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .parent = r,
+    .pattern = "/multipart",
+    .handler = _handle_post_multipart,
     .flags = IWN_WF_POST
   }, 0));
 

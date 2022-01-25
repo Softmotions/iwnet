@@ -790,7 +790,8 @@ static char* _multipart_parse_next(
 
         struct iwn_pair *np = parts->last;
         RCA(np->extra = iwpool_calloc(sizeof(*np->extra), pool), finish);
-        RCC(rc, finish, iwn_pair_add_pool(pool, np->extra, "data", IW_LLEN("data"), data.buf, data.len));
+        np->val = data.buf;
+        np->val_len = data.len;
         if (file_name.len) {
           RCC(rc, finish,
               iwn_pair_add_pool(pool, np->extra, "filename", IW_LLEN("filename"), file_name.buf, file_name.len));

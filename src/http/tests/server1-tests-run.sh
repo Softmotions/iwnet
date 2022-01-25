@@ -101,7 +101,7 @@ if [ -n "${VALGRIND}" ]; then
   diff valgrind-results.log valgrind-success.log
 fi  
 
-echo "Done!"
+echo "\nDone!"
 
 
 

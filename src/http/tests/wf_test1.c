@@ -185,8 +185,7 @@ static bool _ensure_multipart(
     }
   }
   if (data) {
-    p = iwn_pair_find(part->extra, "data", IW_LLEN("data"));
-    if (!p || strncmp(p->val, data, p->val_len) != 0) {
+    if (!p || strncmp(part->val, data, part->val_len) != 0) {
       return false;
     }
   }

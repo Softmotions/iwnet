@@ -33,6 +33,11 @@ add_test(
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./server1-tests-run.sh --valgrind -- --ssl)
 
+add_test(
+  NAME "https_server2_test"
+  WORKING_DIRECTORY ${TEST_DATA_DIR}
+  COMMAND sh ./server2-tests-run.sh)
+
 set(TESTS wf_test1)
 
 foreach(TN IN ITEMS ${TESTS})
