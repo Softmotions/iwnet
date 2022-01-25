@@ -91,3 +91,26 @@ void iwn_url_decode_inplace(char *str, ssize_t str_len) {
   }
   *wp = '\0';
 }
+
+void iwn_unescape_backslashes_inplace(char *str, ssize_t str_len) {
+  if (str_len < 0) {
+    str_len = SSIZE_MAX;
+  }
+  char *rp = str;
+  char *wp = str;
+  while (rp - str < str_len && *rp) {
+    if (IW_UNLIKELY(*rp == '\\')) {
+      ++rp;
+      if (rp - str < str_len && *rp) {
+        *wp = *rp;
+      } else {
+        break;
+      }
+    } else {
+      *wp = *rp;
+    }
+    ++rp;    
+    ++wp;
+  }
+  *wp = '\0';
+}

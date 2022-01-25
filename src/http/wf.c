@@ -730,7 +730,7 @@ static const char* _multipart_parse_next(
         if (i == 0) {
           disposition.len = kv.key_len;
           disposition.buf = (char*) kv.key;
-        } else if (kv.val_len) {
+        } else if (kv.val) {
           if (kv.key_len == IW_LLEN("name") && strncasecmp(kv.key, "name", IW_LLEN("name")) == 0) {
             name.len = kv.val_len;
             name.buf = kv.val;
@@ -757,7 +757,7 @@ static const char* _multipart_parse_next(
     }
   }
 
-  if (!disposition.len || !name.len || strncasecmp(disposition.buf, "form-data", disposition.len) != 0) {
+  if (!disposition.len || !name.buf || strncasecmp(disposition.buf, "form-data", disposition.len) != 0) {
     return 0;
   }
   if (ep - rp < 2 || rp[0] != '\r' || rp[1] != '\n') {
@@ -785,7 +785,8 @@ static const char* _multipart_parse_next(
         RCA(np->extra = iwpool_calloc(sizeof(*np->extra), pool), finish);
         RCC(rc, finish, iwn_pair_add_pool(pool, np->extra, "data", IW_LLEN("data"), data.buf, data.len));
         if (file_name.len) {
-          RCC(rc, finish, iwn_pair_add_pool(pool, np->extra, "file", IW_LLEN("file"), file_name.buf, file_name.len));
+          RCC(rc, finish,
+              iwn_pair_add_pool(pool, np->extra, "filename", IW_LLEN("filename"), file_name.buf, file_name.len));
         }
         if (ctype.len) {
           RCC(rc, finish, iwn_pair_add_pool(pool, np->extra,

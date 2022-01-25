@@ -13,4 +13,6 @@ IW_EXPORT size_t iwn_url_encoded_len(const char *src, ssize_t src_len);
 
 IW_EXPORT void iwn_url_decode_inplace(char *str, ssize_t str_len);
 
+IW_EXPORT void iwn_unescape_backslashes_inplace(char *str, ssize_t str_len);
+
 IW_EXTERN_C_END
