@@ -559,8 +559,10 @@ static void _client_write(struct client *client) {
       return;
     }
   } else {
-    if (client->request.on_response_completed) {
-      if (!client->request.on_response_completed(&client->request)) {
+    bool (*on_response_completed)(struct iwn_http_req*) = client->request.on_response_completed;
+    if (on_response_completed) {
+      client->request.on_response_completed = 0;
+      if (!on_response_completed(&client->request)) {
         client->flags |= HTTP_END_SESSION;
         return;
       }
