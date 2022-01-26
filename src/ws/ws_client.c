@@ -33,7 +33,7 @@
 struct iwn_ws_client {
   struct iwn_ws_client_ctx   ctx;
   struct iwn_ws_client_spec  spec;
-  struct iwn_poller_adapter *poller_adapter;
+  struct iwn_poller_adapter *pa;
   CURLU *url;
   char  *host;
   char  *port;
@@ -325,8 +325,11 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
   struct iwn_ws_client *ws = user_data;
   int64_t ret = -1;
 
+  if (ws->pa != pa) {
+    ws->pa = pa;
+  }
+
   pthread_mutex_lock(&ws->mtx);
-  ws->poller_adapter = pa;
 
   if (IW_UNLIKELY(!(ws->state & _STATE_HANDSHAKE_RECV))) {
     ret = _on_handshake_event(pa, user_data, events);
@@ -351,7 +354,6 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
   }
 
 finish:
-  ws->poller_adapter = 0;
   pthread_mutex_unlock(&ws->mtx);
   return ret;
 }
@@ -365,12 +367,8 @@ static ssize_t _wslay_event_recv_callback(
   ) {
   ssize_t rci = -1;
   struct iwn_ws_client *ws = user_data;
-  struct iwn_poller_adapter *pa = ws->poller_adapter;
-  if (!pa) {
-    iwlog_ecode_error2(IW_ERROR_ASSERTION, "ws->poller_adapter == 0");
-    wslay_event_set_error(ws->wc, WSLAY_ERR_CALLBACK_FAILURE);
-    return -1;
-  }
+  struct iwn_poller_adapter *pa = ws->pa;
+  assert(pa);
 
 again:
   rci = pa->read(pa, buf, len);
@@ -399,12 +397,8 @@ static ssize_t _wslay_event_send_callback(
   ) {
   ssize_t rci = -1;
   struct iwn_ws_client *ws = user_data;
-  struct iwn_poller_adapter *pa = ws->poller_adapter;
-  if (!pa) {
-    iwlog_ecode_error2(IW_ERROR_ASSERTION, "ws->poller_adapter == 0");
-    wslay_event_set_error(ws->wc, WSLAY_ERR_CALLBACK_FAILURE);
-    return -1;
-  }
+  struct iwn_poller_adapter *pa = ws->pa;
+  assert(pa);
 
 again:
   rci = pa->write(pa, buf, len);
@@ -453,24 +447,25 @@ static int _wslay_genmask_callback(
   return 0;
 }
 
-iwrc iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
+bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
   if (!ws || !buf) {
-    return IW_ERROR_INVALID_ARGS;
+    return false;
   }
   if (buf_len == 0) {
-    return 0;
+    return true;
   }
   pthread_mutex_lock(&ws->mtx);
-  iwrc rc = _wslayrc(wslay_event_queue_msg(ws->wc, &(struct wslay_event_msg) {
+  if (wslay_event_queue_msg(ws->wc, &(struct wslay_event_msg) {
     .opcode = WSLAY_TEXT_FRAME,
     .msg = (void*) buf,
     .msg_length = buf_len
-  }));
-  if (!rc) {
-    rc = iwn_poller_arm_events(ws->poller_adapter->poller, ws->fd, IWN_POLLOUT | IWN_POLLET);
+  })) {
+    pthread_mutex_unlock(&ws->mtx);
+    return false;
   }
+  bool ret = 0 == iwn_poller_arm_events(ws->pa->poller, ws->fd, IWN_POLLOUT | IWN_POLLET);
   pthread_mutex_unlock(&ws->mtx);
-  return rc;
+  return ret;
 }
 
 iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_client **out_ws) {

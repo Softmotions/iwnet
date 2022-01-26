@@ -61,7 +61,6 @@ struct iwn_wf_req;
 
 typedef int (*iwn_wf_handler)(struct iwn_wf_req*, void *user_data);
 typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx*, void *user_data);
-typedef void (*iwn_wf_request_dispose)(struct iwn_wf_req*);
 
 struct route_re_submatch {          ///< Route regexp submatch node
   const char *input;                ///< Matched input
@@ -72,9 +71,8 @@ struct route_re_submatch {          ///< Route regexp submatch node
 };
 
 struct iwn_wf_req {
-  struct iwn_wf_ctx     *ctx;
-  struct iwn_http_req   *http;
-  iwn_wf_request_dispose on_request_dispose;
+  struct iwn_wf_ctx   *ctx;
+  struct iwn_http_req *http;
   void       *request_user_data;
   const char *path;           ///< Full request path except query string
   const char *path_unmatched; ///< Rest of path not consumed by previous router matcher.

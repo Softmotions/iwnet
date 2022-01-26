@@ -246,9 +246,6 @@ static void _request_stream_destroy(struct request *req) {
 static void _request_destroy(struct request *req) {
   if (req) {
     _request_stream_destroy(req);
-    if (req->base.on_request_dispose) {
-      req->base.on_request_dispose(&req->base);
-    }
     if (req->pool) {
       iwpool_destroy(req->pool);
     }

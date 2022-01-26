@@ -15,24 +15,15 @@ static int cnt;
 static int ws_server_pid;
 
 static void on_connected(const struct iwn_ws_client_ctx *ctx) {
-  iwrc rc = iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1);
-  IWN_ASSERT(rc == 0);
-  if (rc) {
-    iwlog_ecode_error3(rc);
-  }
+  IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
 }
 
 static void on_message(const char *buf, size_t buf_len, const struct iwn_ws_client_ctx *ctx) {
-  iwrc rc = 0;
   fprintf(stderr, "on_message %.*s\n", (int) buf_len, buf);
   if (cnt++ < 3) {
-    rc = iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1);
+    IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
   } else {
     iwn_ws_client_close(ctx->ws);
-  }
-  IWN_ASSERT(rc == 0);
-  if (rc) {
-    iwlog_ecode_error3(rc);
   }
 }
 

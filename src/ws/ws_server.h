@@ -20,7 +20,7 @@ struct iwn_ws_handler_spec {
   void  (*handler_spec_dispose)(struct iwn_ws_handler_spec*);
 };
 
-IW_EXPORT bool iwn_ws_sess_write(struct iwn_ws_sess*, const char *msg, size_t msg_len);
+IW_EXPORT bool iwn_ws_server_write_text(struct iwn_ws_sess*, const char *buf, size_t buf_len);
 
 IW_EXPORT int iwn_ws_server_handler(struct iwn_wf_req*, void *user_data);
 
