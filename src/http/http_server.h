@@ -14,22 +14,14 @@ struct iwn_http_server {
   int port;
 };
 
-struct iwn_http_server_connection {
-  const struct iwn_http_server *server;
-  int fd;
-};
-
 struct iwn_http_request {
-  void *request_user_data; ///< Request specific user data.
-  void *server_user_data;  ///< User data specified in `iwn_http_server_spec`
-  void  (*on_request_destroy)(struct iwn_http_request*);
+  void     *request_user_data;                               ///< Request specific user data.
+  void     *server_user_data;                                ///< User data specified in `iwn_http_server_spec`
+  void      (*on_request_destroy)(struct iwn_http_request*); ///< Request destroy optional handler.
+  const int fd;                                              ///< HTTP Request socket file descriptor
 };
 
 typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
-
-typedef void (*iwn_http_server_on_connection)(const struct iwn_http_server_connection*);
-
-typedef void (*iwn_http_server_on_connection_close)(const struct iwn_http_server_connection*);
 
 /// Request handler.
 /// Returns `false` if client connection shold be removed from poller (terminated).
@@ -41,8 +33,6 @@ struct iwn_http_server_spec {
   struct iwn_poller *poller;                       ///< Required poller reference.
   const char *listen;
   void       *user_data;
-  iwn_http_server_on_connection       on_connection;
-  iwn_http_server_on_connection_close on_connection_close;
   iwn_http_server_on_dispose on_server_dispose;
   const char *certs;
   ssize_t     certs_len;
@@ -96,6 +86,10 @@ IW_EXPORT void iwn_http_connection_set_automatic(struct iwn_http_request *reques
 
 IW_EXPORT void iwn_http_connection_set_keep_alive(struct iwn_http_request*, bool keep_alive);
 
+IW_EXPORT void iwn_http_connection_set_upgrade(struct iwn_http_request*);
+
+IW_EXPORT bool iwn_http_connection_is_upgrade(struct iwn_http_request*);
+
 IW_EXPORT iwrc iwn_http_response_code_set(struct iwn_http_request*, int code);
 
 IW_EXPORT int iwn_http_response_code_get(struct iwn_http_request*);
@@ -103,7 +97,8 @@ IW_EXPORT int iwn_http_response_code_get(struct iwn_http_request*);
 IW_EXPORT iwrc iwn_http_response_header_set(
   struct iwn_http_request*,
   const char *header_name,
-  const char *header_value);
+  const char *header_value,
+  ssize_t     header_value_len);
 
 IW_EXPORT struct iwn_val iwn_http_response_header_get(struct iwn_http_request*, const char *header_name);
 

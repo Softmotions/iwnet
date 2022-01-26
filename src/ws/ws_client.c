@@ -220,11 +220,11 @@ static iwrc _handshake_output_fill(struct iwn_ws_client *ws) {
 
 static bool _handshake_validate_accept_key(struct iwn_ws_client *ws, const char *accept_key, size_t accept_key_len) {
   size_t len = strlen(ws->client_key);
-  unsigned char buf[len + 36];
+  unsigned char buf[len + IW_LLEN(WS_MAGIC13)];
   unsigned char sbuf[br_sha1_SIZE];
   char vbuf[br_sha1_SIZE * 2];
   memcpy(buf, ws->client_key, len);
-  memcpy(buf + len, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11", 36);
+  memcpy(buf + len, WS_MAGIC13, IW_LLEN(WS_MAGIC13));
   br_sha1_context ctx;
   br_sha1_init(&ctx);
   br_sha1_update(&ctx, buf, sizeof(buf));

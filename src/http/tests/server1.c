@@ -17,8 +17,6 @@ static struct iwn_poller *poller;
 #define STATE_CLOSED_ON_SIGNAL 0x02U
 
 static uint32_t state;
-static int64_t opened_fds_sum;
-static int64_t closed_fds_sum;
 
 static void _on_signal(int signo) {
   state |= STATE_CLOSED_ON_SIGNAL;
@@ -29,14 +27,6 @@ static void _on_signal(int signo) {
 
 static void _server_on_dispose(const struct iwn_http_server *srv) {
   state |= STATE_SERVER_DISPOSED;
-}
-
-static void _on_connection(const struct iwn_http_server_connection *conn) {
-  opened_fds_sum += conn->fd;
-}
-
-static void _on_connection_close(const struct iwn_http_server_connection *conn) {
-  closed_fds_sum += conn->fd;
 }
 
 static bool _chunk_req_cb(struct iwn_http_request *req) {
@@ -95,7 +85,7 @@ static bool _request_handler(struct iwn_http_request *req) {
     ; // No body
   } else if (iwn_http_request_target_is(req, "/echo", -1)) {
     struct iwn_val val = iwn_http_request_body(req);
-    RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
+    RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain", -1));
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/header", -1)) {
     struct iwn_val val = iwn_http_request_header_get(req, "X-Foo", -1);
@@ -109,12 +99,12 @@ static bool _request_handler(struct iwn_http_request *req) {
     iwn_http_request_chunk_next(req, _chunk_req_cb);
     goto finish;
   } else if (iwn_http_request_target_is(req, "/chunked", -1)) {
-    RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
+    RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain", -1));
     RCC(rc, finish, iwn_http_response_chunk_write(req, "\n4cd009fb-dceb-4907-a6be-dd05c3f052b3",
                                                   -1, 0, _chunk_resp_cb));
     goto finish;
   } else {
-    RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain"));
+    RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain", -1));
     iwn_http_response_body_set(req, "4afb7857-6b21-4a25-ae47-0852ebc47014", -1, 0);
   }
 
@@ -168,8 +158,6 @@ int main(int argc, char *argv[]) {
     .poller                        = poller,
     .user_data                     = poller,
     .request_handler               = _request_handler,
-    .on_connection                 = _on_connection,
-    .on_connection_close           = _on_connection_close,
     .on_server_dispose             = _server_on_dispose,
     .request_timeout_sec           = -1,
     .request_timeout_keepalive_sec = -1
@@ -190,7 +178,6 @@ finish:
   IWN_ASSERT(rc == 0);
   IWN_ASSERT(state & STATE_SERVER_DISPOSED);
   IWN_ASSERT(state & STATE_CLOSED_ON_SIGNAL);
-  IWN_ASSERT(opened_fds_sum == closed_fds_sum);
   iwn_poller_destroy(&poller);
   return iwn_assertions_failed > 0 ? 1 : 0;
 }

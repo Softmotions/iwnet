@@ -124,6 +124,7 @@ struct client {
 #define HTTP_END_SESSION      0x04U
 #define HTTP_AUTOMATIC        0x08U
 #define HTTP_CHUNKED_RESPONSE 0x10U
+#define HTTP_UPGRADE          0x20U
 
 // http version indicators
 #define HTTP_1_0 0
@@ -489,13 +490,6 @@ static void _client_reset(struct client *client) {
 static void _client_destroy(struct client *client) {
   if (!client) {
     return;
-  }
-  if (client->server && client->server->spec.on_connection_close) {
-    client->server->spec.on_connection_close(
-      &(struct iwn_http_server_connection) {
-      .server = (void*) client->server,
-      .fd = client->fd
-    });
   }
   _client_reset(client);
   if (client->server) {
@@ -925,7 +919,10 @@ static iwrc _client_accept(struct server *server, int fd) {
   client->pool = pool;
   client->fd = fd;
   RCC(rc, finish, _server_ref(server, &client->server));
-  client->request.server_user_data = client->server->spec.user_data;
+  memcpy(&client->request, &(struct iwn_http_request) {
+    .fd = fd,
+    .server_user_data = client->server->spec.user_data
+  }, sizeof(client->request));
 
   int flags = fcntl(fd, F_GETFL, 0);
   RCN(finish, flags);
@@ -956,13 +953,6 @@ static iwrc _client_accept(struct server *server, int fd) {
           _client_on_poller_adapter_dispose,
           client, IWN_POLLIN, IWN_POLLET,
           server->spec.request_timeout_sec));
-  }
-
-  if (client->server->spec.on_connection) {
-    client->server->spec.on_connection(&(struct iwn_http_server_connection) {
-      .server = (void*) server,
-      .fd = fd
-    });
   }
 
 finish:
@@ -1043,6 +1033,18 @@ void iwn_http_connection_set_keep_alive(struct iwn_http_request *request, bool k
   } else {
     client->flags &= ~HTTP_KEEP_ALIVE;
   }
+}
+
+void iwn_http_connection_set_upgrade(struct iwn_http_request *request) {
+  struct client *client = (void*) request;
+  client->flags &= ~HTTP_AUTOMATIC;
+  client->flags &= ~HTTP_KEEP_ALIVE;
+  client->flags |= HTTP_UPGRADE;
+}
+
+bool iwn_http_connection_is_upgrade(struct iwn_http_request *request) {
+  struct client *client = (void*) request;
+  return client->flags & HTTP_UPGRADE;
 }
 
 struct iwn_val iwn_http_request_header_get(
@@ -1142,11 +1144,20 @@ struct iwn_val iwn_http_response_header_get(struct iwn_http_request *request, co
   return (struct iwn_val) {};
 }
 
-iwrc iwn_http_response_header_set(struct iwn_http_request *request, const char *header_name, const char *header_value) {
+iwrc iwn_http_response_header_set(
+  struct iwn_http_request *request,
+  const char              *header_name,
+  const char              *header_value,
+  ssize_t                  header_value_len
+  ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
   struct header *header = 0;
+
+  if (header_value_len < 0) {
+    header_value_len = strlen(header_value);
+  }
 
   if (!response->pool) {
     RCA(response->pool = iwpool_create_empty(), finish);
@@ -1163,11 +1174,11 @@ iwrc iwn_http_response_header_set(struct iwn_http_request *request, const char *
     for (char *p = header->name; *p != '\0'; ++p) {
       *p = (char) tolower((unsigned char) *p);
     }
-    RCA(header->value = iwpool_strdup2(response->pool, header_value), finish);
+    RCA(header->value = iwpool_strndup2(response->pool, header_value, header_value_len), finish);
     header->next = response->headers;
     response->headers = header;
   } else {
-    RCA(header->value = iwpool_strdup2(response->pool, header_value), finish);
+    RCA(header->value = iwpool_strndup2(response->pool, header_value, header_value_len), finish);
   }
 
 finish:
@@ -1238,10 +1249,12 @@ static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *x
   if (client->flags & HTTP_AUTOMATIC) {
     _client_autodetect_keep_alive(client);
   }
-  if (client->flags & HTTP_KEEP_ALIVE) {
-    iwn_http_response_header_set(&client->request, "connection", "keep-alive");
+  if (IW_UNLIKELY(client->flags & HTTP_UPGRADE)) {
+    iwn_http_response_header_set(&client->request, "connection", "upgrade", IW_LLEN("upgrade"));
+  } else if (client->flags & HTTP_KEEP_ALIVE) {
+    iwn_http_response_header_set(&client->request, "connection", "keep-alive", IW_LLEN("keep-alive"));
   } else {
-    iwn_http_response_header_set(&client->request, "connection", "close");
+    iwn_http_response_header_set(&client->request, "connection", "close", IW_LLEN("close"));
   }
   if (client->response.code == 0) {
     client->response.code = 200;
@@ -1309,7 +1322,7 @@ iwrc iwn_http_response_chunk_write(
   }
   if (!(client->flags & HTTP_CHUNKED_RESPONSE)) {
     client->flags |= HTTP_CHUNKED_RESPONSE;
-    iwn_http_response_header_set(request, "transfer-encoding", "chunked");
+    iwn_http_response_header_set(request, "transfer-encoding", "chunked", IW_LLEN("chunked"));
     RCC(rc, finish, _client_response_headers_write_http(client, xstr));
   }
   iwn_http_response_body_set(request, body, body_len, body_free);
@@ -1360,7 +1373,10 @@ bool iwn_http_response_write(
   if (!content_type) {
     content_type = "text/plain";
   }
-  RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type));
+  if (*content_type != '\0') { 
+    // Content-type header disabled if empty
+    RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type, IW_LLEN("content-type")));
+  }
   iwn_http_response_body_set(request, body, body_len, body_free);
   rc = iwn_http_response_end(request);
 
