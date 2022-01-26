@@ -29,7 +29,7 @@ static void _server_on_dispose(const struct iwn_http_server *srv) {
   state |= STATE_SERVER_DISPOSED;
 }
 
-static bool _chunk_req_cb(struct iwn_http_request *req) {
+static bool _chunk_req_cb(struct iwn_http_req *req) {
   IWXSTR *xstr = req->request_user_data;
   IWN_ASSERT_FATAL(xstr);
   struct iwn_val val = iwn_http_request_chunk_get(req);
@@ -47,7 +47,7 @@ static bool _chunk_req_cb(struct iwn_http_request *req) {
   return true;
 }
 
-static bool _chunk_resp_cb(struct iwn_http_request *req) {
+static bool _chunk_resp_cb(struct iwn_http_req *req) {
   int chunk_count = (int) (intptr_t) req->request_user_data;
   ++chunk_count;
   req->request_user_data = (void*) (intptr_t) chunk_count;
@@ -71,14 +71,14 @@ static bool _chunk_resp_cb(struct iwn_http_request *req) {
   return true;
 }
 
-static void _on_chunk_req_destroy(struct iwn_http_request *req) {
+static void _on_chunk_req_destroy(struct iwn_http_req *req) {
   IWXSTR *xstr = req->request_user_data;
   if (xstr) {
     iwxstr_destroy(xstr);
   }
 }
 
-static bool _request_handler(struct iwn_http_request *req) {
+static bool _request_handler(struct iwn_http_req *req) {
   iwrc rc = 0;
 
   if (iwn_http_request_target_is(req, "/empty", -1)) {
@@ -95,7 +95,7 @@ static bool _request_handler(struct iwn_http_request *req) {
     IWXSTR *xstr;
     RCA(xstr = iwxstr_new(), finish);
     req->request_user_data = xstr;
-    req->on_request_destroy = _on_chunk_req_destroy;
+    req->on_request_dispose = _on_chunk_req_destroy;
     iwn_http_request_chunk_next(req, _chunk_req_cb);
     goto finish;
   } else if (iwn_http_request_target_is(req, "/chunked", -1)) {

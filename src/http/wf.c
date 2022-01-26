@@ -76,7 +76,7 @@ static void _ctx_destroy(struct ctx *ctx) {
   iwpool_destroy(ctx->pool);
 }
 
-static void _on_server_dispose(const struct iwn_http_server *server) {
+static void _server_on_dispose(const struct iwn_http_server *server) {
   struct ctx *ctx = server->user_data;
   if (ctx) {
     _ctx_destroy(ctx);
@@ -246,8 +246,8 @@ static void _request_stream_destroy(struct request *req) {
 static void _request_destroy(struct request *req) {
   if (req) {
     _request_stream_destroy(req);
-    if (req->base.request_dispose) {
-      req->base.request_dispose(&req->base);
+    if (req->base.on_request_dispose) {
+      req->base.on_request_dispose(&req->base);
     }
     if (req->pool) {
       iwpool_destroy(req->pool);
@@ -255,10 +255,10 @@ static void _request_destroy(struct request *req) {
   }
 }
 
-static void _request_on_destroy(struct iwn_http_request *hreq) {
-  struct request *req = hreq->request_user_data;
+static void _request_on_dispose(struct iwn_http_req *hreq) {
+  struct request *req = hreq->_wf_data;
   if (req) {
-    hreq->request_user_data = 0;
+    hreq->_wf_data = 0;
     _request_destroy(req);
   }
 }
@@ -643,7 +643,7 @@ static struct route* _route_iter_next(struct route_iter *it) {
   return 0;
 }
 
-static iwrc _request_create(struct iwn_http_request *hreq) {
+static iwrc _request_create(struct iwn_http_req *hreq) {
   iwrc rc = 0;
   struct request *req = 0;
   struct ctx *ctx = hreq->server_user_data;
@@ -665,8 +665,8 @@ static iwrc _request_create(struct iwn_http_request *hreq) {
   _route_iter_init(req, &req->it);
   _route_iter_next(&req->it);
 
-  hreq->request_user_data = req;
-  hreq->on_request_destroy = _request_on_destroy;
+  hreq->_wf_data = req;
+  hreq->_wf_on_request_dispose = _request_on_dispose;
 
 finish:
   if (rc) {
@@ -904,11 +904,11 @@ static bool _request_process(struct request *req) {
   return _request_routes_process(req);
 }
 
-static bool _request_stream_chunk_next(struct iwn_http_request *hreq);
+static bool _request_stream_chunk_next(struct iwn_http_req *hreq);
 
 static bool _request_stream_chunk_process(struct request *req) {
   iwrc rc = 0;
-  struct iwn_http_request *hreq = req->base.http;
+  struct iwn_http_req *hreq = req->base.http;
   struct ctx *ctx = (void*) req->base.ctx;
   struct iwn_val val = iwn_http_request_chunk_get(hreq);
   if (val.len > 0) {
@@ -960,23 +960,23 @@ finish:
   return true;
 }
 
-static bool _request_stream_chunk_next(struct iwn_http_request *hreq) {
-  struct request *req = hreq->request_user_data;
+static bool _request_stream_chunk_next(struct iwn_http_req *hreq) {
+  struct request *req = hreq->_wf_data;
   assert(req);
   return _request_stream_chunk_process(req);
 }
 
-static bool _request_handler(struct iwn_http_request *hreq) {
+static bool _request_handler(struct iwn_http_req *hreq) {
   struct ctx *ctx = hreq->server_user_data;
   assert(ctx);
-  struct request *req = hreq->request_user_data;
+  struct request *req = hreq->_wf_data;
   if (!req) {
     iwrc rc = _request_create(hreq);
     if (rc) {
       iwlog_ecode_error3(rc);
       return false;
     }
-    req = hreq->request_user_data;
+    req = hreq->_wf_data;
   }
   if (!_route_iter_current(&req->it)) {
     // No routes found.
@@ -1067,7 +1067,7 @@ iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ct
   }
   ctx->poller = spec.poller;
   ctx->request_file_max_size = spec.request_file_max_size;
-  http.on_server_dispose = _on_server_dispose;
+  http.on_server_dispose = _server_on_dispose;
   http.request_handler = _request_handler;
 
   http.user_data = ctx;

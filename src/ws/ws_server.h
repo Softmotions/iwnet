@@ -6,7 +6,7 @@ IW_EXTERN_C_START
 struct iwn_ws_handler_spec;
 
 struct iwn_ws_sess {
-  // TODO:
+  struct iwn_wf_req *req;
   struct iwn_ws_handler_spec *spec;
 };
 

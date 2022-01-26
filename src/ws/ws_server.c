@@ -11,9 +11,10 @@
 #include <strings.h>
 #include <errno.h>
 
-
 struct ctx {
-  struct iwn_ws_sess sess;
+  struct iwn_ws_sess   sess;
+  struct iwn_http_req *hreq;
+  struct iwn_ws_handler_spec *spec;
 };
 
 void iwn_ws_server_handler_dispose(struct iwn_wf_ctx *ctx, void *user_data) {
@@ -23,25 +24,55 @@ void iwn_ws_server_handler_dispose(struct iwn_wf_ctx *ctx, void *user_data) {
   }
 }
 
-static void _request_dispose(struct iwn_wf_req *req) {
-  struct ctx *ctx = req->request_user_data;
+static void _ctx_destroy(struct ctx *ctx) {
   if (ctx) {
+    if (ctx->hreq->_ws_data == ctx) {
+      ctx->hreq->_ws_data = 0;
+    }
+    if (ctx->spec && ctx->spec->on_session_dispose) {
+      ctx->spec->on_session_dispose(&ctx->sess);
+    }
+    free(ctx);
   }
+}
+
+static void _on_request_dispose(struct iwn_http_req *hreq) {
+  struct ctx *ctx = hreq->_ws_data;
+  if (ctx) {
+    _ctx_destroy(ctx);
+  }
+}
+
+static bool _sess_transfer_io_events(struct iwn_http_req *hreq) {
+  /// Transfer IO events to our wslay layer
+
+  // TODO:
+
+  return true;
 }
 
 int iwn_ws_server_handler(struct iwn_wf_req *req, void *user_data) {
   iwrc rc = 0;
   int rv = -1;
-  struct iwn_http_request *hreq = req->http;
-  struct iwn_ws_handler_spec *sess = user_data;
-  if (!sess) {
+
+  struct ctx *ctx = 0;
+  struct iwn_http_req *hreq = req->http;
+  struct iwn_ws_handler_spec *spec = user_data;
+
+  if (!spec) {
     iwlog_error2("Missing user data for iwn_ws_server_handler");
     return -1;
   }
-  if (req->handler_user_data || req->request_dispose) {
-    iwlog_ecode_error2(IW_ERROR_INVALID_STATE, "(struct iwn_fw_req).handler_user_data should not be initialized");
+  if (hreq->on_request_dispose) {
+    iwlog_ecode_error2(IW_ERROR_ASSERTION, "(struct iwn_http_req).on_request_dispose should not be initialized before");
     return -1;
   }
+  if (hreq->on_response_completed) {
+    iwlog_ecode_error2(IW_ERROR_ASSERTION,
+                       "(struct iwn_http_req).on_response_completed should not be initialized before");
+    return -1;
+  }
+
   struct iwn_val val = iwn_http_request_header_get(hreq, "upgrade", IW_LLEN("upgrade"));
   if (val.len != IW_LLEN("websocket") || strncasecmp(val.buf, "websocket", val.len) != 0) {
     goto finish;
@@ -80,12 +111,22 @@ int iwn_ws_server_handler(struct iwn_wf_req *req, void *user_data) {
     RCC(rc, finish, iwn_http_response_header_set(hreq, "sec-websocket-accept", vbuf, len));
   }
 
-  if (!iwn_http_response_write(hreq, 101, "", 0, 0, 0)) {
-    goto finish;
+  RCA(ctx = calloc(1, sizeof(*ctx)), finish);
+  ctx->hreq = hreq;
+  ctx->sess.req = req;
+  ctx->spec = ctx->sess.spec = spec;
+
+  hreq->_ws_data = ctx;
+  hreq->on_request_dispose = _on_request_dispose;
+  hreq->on_response_completed = _sess_transfer_io_events;
+
+  if (iwn_http_response_write(hreq, 101, "", 0, 0, 0)) {
+    rv = 1;
   }
 
 finish:
   if (rc) {
+    _ctx_destroy(ctx);
     iwlog_ecode_error3(rc);
     return -1;
   }
