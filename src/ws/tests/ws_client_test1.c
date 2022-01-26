@@ -1,7 +1,7 @@
 
 #include "utils/tests.h"
 #include "proc.h"
-#include "ws/ws.h"
+#include "ws/ws_client.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -9,25 +9,25 @@
 #include <signal.h>
 
 static struct iwn_poller *poller;
-static struct iwn_ws *ws;
+static struct iwn_ws_client *ws;
 static int cnt;
 static int ws_server_pid;
 
-static void on_connected(const struct iwn_ws_ctx *ctx) {
-  iwrc rc = iwn_ws_write_text(ctx->ws, "Test", sizeof("Test") - 1);
+static void on_connected(const struct iwn_ws_client_ctx *ctx) {
+  iwrc rc = iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1);
   IWN_ASSERT(rc == 0);
   if (rc) {
     iwlog_ecode_error3(rc);
   }
 }
 
-static void on_message(const char *buf, size_t buf_len, const struct iwn_ws_ctx *ctx) {
+static void on_message(const char *buf, size_t buf_len, const struct iwn_ws_client_ctx *ctx) {
   iwrc rc = 0;
   fprintf(stderr, "on_message %.*s\n", (int) buf_len, buf);
   if (cnt++ < 3) {
-    rc = iwn_ws_write_text(ctx->ws, "Test", sizeof("Test") - 1);
+    rc = iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1);
   } else {
-    iwn_ws_close(ctx->ws);
+    iwn_ws_client_close(ctx->ws);
   }
   IWN_ASSERT(rc == 0);
   if (rc) {
@@ -40,7 +40,7 @@ static void _on_ws_server_exit(const struct iwn_proc_ctx *ctx) {
   iwn_poller_shutdown_request(poller);
 }
 
-static void on_dispose(const struct iwn_ws_ctx *ctx) {
+static void on_dispose(const struct iwn_ws_client_ctx *ctx) {
   ws = 0;
   fprintf(stderr, "Killing ws server: %d\n", ws_server_pid);
   iwn_proc_kill(ws_server_pid, SIGINT);
@@ -52,7 +52,7 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
   if (!strstr(buf, "0542a108-ff0f-47ef-86e3-495fd898a8ee")) {
     return;
   }
-  iwrc rc = iwn_ws_open(&(struct iwn_ws_spec) {
+  iwrc rc = iwn_ws_client_open(&(struct iwn_ws_client_spec) {
     .url = "ws://localhost:7771",
     .poller = poller,
     .on_connected = on_connected,

@@ -1,4 +1,4 @@
-#include "ws.h"
+#include "ws_client.h"
 
 #include "poller.h"
 #include "poller/direct_poller_adapter.h"
@@ -30,9 +30,9 @@
 #define _STATE_HANDSHAKE_SEND 0x01U
 #define _STATE_HANDSHAKE_RECV 0x02U
 
-struct iwn_ws {
-  struct iwn_ws_ctx  ctx;
-  struct iwn_ws_spec spec;
+struct iwn_ws_client {
+  struct iwn_ws_client_ctx   ctx;
+  struct iwn_ws_client_spec  spec;
   struct iwn_poller_adapter *poller_adapter;
   CURLU *url;
   char  *host;
@@ -69,7 +69,7 @@ IW_INLINE iwrc _wslayrc(enum wslay_error err) {
   }
 }
 
-static void _destroy(struct iwn_ws *ws) {
+static void _destroy(struct iwn_ws_client *ws) {
   if (!ws) {
     return;
   }
@@ -164,7 +164,7 @@ static iwrc _make_tcp_nodelay(int fd) {
 }
 
 static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
-  struct iwn_ws *ws = user_data;
+  struct iwn_ws_client *ws = user_data;
   if (__sync_bool_compare_and_swap(&ws->dispose_cas, false, true)) {
     pthread_mutex_lock(&ws->mtx);
     ws->fd = -1;
@@ -200,7 +200,7 @@ finish:
   return rc;
 }
 
-static iwrc _handshake_output_fill(struct iwn_ws *ws) {
+static iwrc _handshake_output_fill(struct iwn_ws_client *ws) {
   iwxstr_clear(ws->output);
   iwrc rc = RCR(_handshake_write_client_key_b64(ws->client_key));
   RCR(iwxstr_printf(
@@ -218,7 +218,7 @@ static iwrc _handshake_output_fill(struct iwn_ws *ws) {
   return rc;
 }
 
-static bool _handshake_validate_accept_key(struct iwn_ws *ws, const char *accept_key, size_t accept_key_len) {
+static bool _handshake_validate_accept_key(struct iwn_ws_client *ws, const char *accept_key, size_t accept_key_len) {
   size_t len = strlen(ws->client_key);
   unsigned char buf[len + 36];
   unsigned char sbuf[br_sha1_SIZE];
@@ -241,7 +241,7 @@ static bool _handshake_validate_accept_key(struct iwn_ws *ws, const char *accept
 static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   iwrc rc = 0;
   int64_t ret = 0;
-  struct iwn_ws *ws = user_data;
+  struct iwn_ws_client *ws = user_data;
 
   if (!(ws->state & _STATE_HANDSHAKE_SEND)) {
     ret = IWN_POLLOUT;
@@ -322,7 +322,7 @@ finish:
 }
 
 static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
-  struct iwn_ws *ws = user_data;
+  struct iwn_ws_client *ws = user_data;
   int64_t ret = -1;
 
   pthread_mutex_lock(&ws->mtx);
@@ -361,10 +361,10 @@ static ssize_t _wslay_event_recv_callback(
   uint8_t                *buf,
   size_t                  len,
   int                     flags,
-  void                   *user_data) {
-
+  void                   *user_data
+  ) {
   ssize_t rci = -1;
-  struct iwn_ws *ws = user_data;
+  struct iwn_ws_client *ws = user_data;
   struct iwn_poller_adapter *pa = ws->poller_adapter;
   if (!pa) {
     iwlog_ecode_error2(IW_ERROR_ASSERTION, "ws->poller_adapter == 0");
@@ -395,10 +395,10 @@ static ssize_t _wslay_event_send_callback(
   const uint8_t          *buf,
   size_t                  len,
   int                     flags,
-  void                   *user_data) {
-
+  void                   *user_data
+  ) {
   ssize_t rci = -1;
-  struct iwn_ws *ws = user_data;
+  struct iwn_ws_client *ws = user_data;
   struct iwn_poller_adapter *pa = ws->poller_adapter;
   if (!pa) {
     iwlog_ecode_error2(IW_ERROR_ASSERTION, "ws->poller_adapter == 0");
@@ -427,9 +427,9 @@ again:
 static void _wslay_event_on_msg_recv_callback(
   wslay_event_context_ptr                   ctx,
   const struct wslay_event_on_msg_recv_arg *arg,
-  void                                     *user_data) {
-
-  struct iwn_ws *ws = user_data;
+  void                                     *user_data
+  ) {
+  struct iwn_ws_client *ws = user_data;
   if (wslay_is_ctrl_frame(arg->opcode)) {
     return;
   }
@@ -440,8 +440,8 @@ static void _wslay_event_on_msg_recv_callback(
 
 static int _wslay_genmask_callback(
   wslay_event_context_ptr ctx, uint8_t *buf, size_t len,
-  void *user_data) {
-
+  void *user_data
+  ) {
   size_t tow = len;
   while (tow > 0) {
     uint32_t rn = iwu_rand_u32();
@@ -453,7 +453,7 @@ static int _wslay_genmask_callback(
   return 0;
 }
 
-iwrc iwn_ws_write_text(struct iwn_ws *ws, const void *buf, size_t buf_len) {
+iwrc iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
   if (!ws || !buf) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -473,7 +473,7 @@ iwrc iwn_ws_write_text(struct iwn_ws *ws, const void *buf, size_t buf_len) {
   return rc;
 }
 
-iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
+iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_client **out_ws) {
   if (__sync_bool_compare_and_swap(&_initialized, false, true)) {
     RCR(iwlog_register_ecodefn(_ecodefn));
   }
@@ -487,7 +487,7 @@ iwrc iwn_ws_open(const struct iwn_ws_spec *spec, struct iwn_ws **out_ws) {
   iwrc rc = 0;
   char *ptr;
 
-  struct iwn_ws *ws = calloc(1, sizeof(*ws));
+  struct iwn_ws_client *ws = calloc(1, sizeof(*ws));
   if (!ws) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -580,7 +580,7 @@ finish:
   return rc;
 }
 
-void iwn_ws_close(struct iwn_ws *ws) {
+void iwn_ws_client_close(struct iwn_ws_client *ws) {
   iwn_poller_remove(ws->spec.poller, ws->fd);
 }
 
