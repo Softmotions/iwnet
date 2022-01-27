@@ -91,7 +91,7 @@ struct client {
   struct iwn_http_req request;
   iwn_http_server_request_chunk_handler chunk_cb;
   IWPOOL *pool;
-  iwn_on_poller_adapter_event injected_poller_eh;
+  iwn_on_poller_adapter_event injected_poller_evh;
   struct iwn_poller_adapter  *pa;
   struct server    *server;
   struct tokens_buf tokens;
@@ -889,8 +889,8 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
   if (client->pa != pa) {
     client->pa = pa;
   }
-  if (client->injected_poller_eh) {
-    return client->injected_poller_eh(pa, &client->request, events);
+  if (client->injected_poller_evh) {
+    return client->injected_poller_evh(pa, &client->request, events);
   }
 
   iwrc rc = 0;
@@ -920,9 +920,9 @@ finish:
   return resp;
 }
 
-void iwn_http_inject_poller_event_handler(struct iwn_http_req *request, iwn_on_poller_adapter_event eh) {
+void iwn_http_inject_poller_events_handler(struct iwn_http_req *request, iwn_on_poller_adapter_event eh) {
   struct client *client = (void*) request;
-  client->injected_poller_eh = eh;
+  client->injected_poller_evh = eh;
 }
 
 static void _client_on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {

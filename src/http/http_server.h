@@ -147,6 +147,6 @@ IW_EXPORT iwrc iwn_http_response_chunk_write(
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
 
-IW_EXPORT void iwn_http_inject_poller_event_handler(struct iwn_http_req*, iwn_on_poller_adapter_event eh);
+IW_EXPORT void iwn_http_inject_poller_events_handler(struct iwn_http_req*, iwn_on_poller_adapter_event eh);
 
 IW_EXTERN_C_END

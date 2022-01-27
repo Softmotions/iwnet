@@ -323,7 +323,7 @@ finish:
 
 static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   struct iwn_ws_client *ws = user_data;
-  int64_t ret = -1;
+  int64_t ret = 0;
 
   if (ws->pa != pa) {
     ws->pa = pa;
@@ -342,20 +342,16 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
     goto finish;
   }
 
-  ret = 0;
   if (wslay_event_want_read(ws->wc)) {
     ret |= IWN_POLLIN;
   }
   if (wslay_event_want_write(ws->wc)) {
     ret |= IWN_POLLOUT;
   }
-  if (ret == 0) {
-    ret = -1;
-  }
 
 finish:
   pthread_mutex_unlock(&ws->mtx);
-  return ret;
+  return ret == 0 ? -1 : ret;
 }
 
 static ssize_t _wslay_event_recv_callback(
