@@ -27,15 +27,14 @@ struct ctx {
   struct iwn_ws_sess   sess;
   struct iwn_http_req *hreq;
   struct iwn_ws_handler_spec *spec;
-  struct iwn_poller_adapter  *pa;
-  struct msg *messages;
+  struct msg *msgs;
   wslay_event_context_ptr wc;
   pthread_mutex_t mtx;
 };
 
 static void _ctx_destroy(struct ctx *ctx) {
   if (ctx) {
-    for (struct msg *m = ctx->messages; m; ) {
+    for (struct msg *m = ctx->msgs; m; ) {
       struct msg *n = m->next;
       free(m->buf);
       free(m);
@@ -72,8 +71,7 @@ static ssize_t _wslay_recv_callback(
   ) {
   ssize_t rci = -1;
   struct ctx *ctx = user_data;
-  struct iwn_poller_adapter *pa = ctx->pa;
-  assert(pa);
+  struct iwn_poller_adapter *pa = ctx->hreq->poller_adapter;
 
 again:
   rci = pa->read(pa, buf, len);
@@ -102,7 +100,7 @@ static ssize_t _wslay_send_callback(
   ) {
   ssize_t rci = -1;
   struct ctx *ctx = user_data;
-  struct iwn_poller_adapter *pa = ctx->pa;
+  struct iwn_poller_adapter *pa = ctx->hreq->poller_adapter;
   assert(pa);
 
 again:
@@ -131,10 +129,6 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
   int64_t ret = 0;
   struct msg *m = 0;
 
-  if (ctx->pa != pa) {
-    ctx->pa = pa;
-  }
-
   pthread_mutex_lock(&ctx->mtx);
 
   if (wslay_event_want_write(ctx->wc) && wslay_event_send(ctx->wc) < 0) {
@@ -151,9 +145,9 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
     ret |= IWN_POLLOUT;
   }
 
-  if (ctx->messages) {
-    m = ctx->messages;
-    ctx->messages = 0; // Transfer ownership
+  if (ctx->msgs) {
+    m = ctx->msgs;
+    ctx->msgs = 0; // Transfer ownership
   }
 
 finish:
@@ -162,7 +156,7 @@ finish:
   // In order to avoid deadlocks process message handlers out of `ctx->mtx`
   while (m) {
     struct msg *n = m->next;
-    if (ret != -1 && !ctx->spec->msg_handler(&ctx->sess, m->buf, m->buf_len)) {
+    if (ret != -1 && !ctx->spec->handler(&ctx->sess, m->buf, m->buf_len)) {
       ret = -1;
     }
     free(m->buf);
@@ -181,7 +175,7 @@ static void _wslay_msg_recv_callback(
   struct ctx *ctx = user_data;
   struct msg *m = 0;
 
-  if (wslay_is_ctrl_frame(arg->opcode) || arg->msg_length == 0 || !ctx->spec->msg_handler) {
+  if (wslay_is_ctrl_frame(arg->opcode) || arg->msg_length == 0 || !ctx->spec->handler) {
     return;
   }
 
@@ -198,12 +192,12 @@ static void _wslay_msg_recv_callback(
   memcpy(m->buf, arg->msg, m->buf_len);
   m->buf[m->buf_len] = '\0';
 
-  struct msg *mm = ctx->messages;
+  struct msg *mm = ctx->msgs;
   if (mm) {
     while (mm->next) mm = m->next;
     mm->next = m;
   } else {
-    ctx->messages = m;
+    ctx->msgs = m;
   }
 
   return;
@@ -228,10 +222,10 @@ static bool _on_response_completed(struct iwn_http_req *hreq) {
   }, ctx)) {
     return false;
   }
-  if (setsockopt(hreq->fd, IPPROTO_TCP, TCP_NODELAY, &lv, (socklen_t) sizeof(lv)) == -1) {
+  if (setsockopt(hreq->poller_adapter->fd, IPPROTO_TCP, TCP_NODELAY, &lv, (socklen_t) sizeof(lv)) == -1) {
     return false;
   }
-  iwn_poller_set_timeout(ctx->pa->poller, ctx->pa->fd, 0);
+  iwn_poller_set_timeout(ctx->hreq->poller_adapter->poller, ctx->hreq->poller_adapter->fd, 0);
   iwn_http_inject_poller_events_handler(hreq, _on_poller_adapter_event);
   return true;
 }
@@ -261,10 +255,9 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
 
   RCC(rc, finish, iwn_http_response_header_set(hreq, "upgrade", "websocket", IW_LLEN("websocket")));
 
-  struct iwn_val ws_protocol
-    = iwn_http_request_header_get(hreq, "sec-websocket-protocol", IW_LLEN("sec-websocket-protocol"));
-  if (ws_protocol.len) {
-    RCC(rc, finish, iwn_http_response_header_set(hreq, "sec-websocket-protocol", ws_protocol.buf, ws_protocol.len));
+  val = iwn_http_request_header_get(hreq, "sec-websocket-protocol", IW_LLEN("sec-websocket-protocol"));
+  if (val.len) {
+    RCC(rc, finish, iwn_http_response_header_set(hreq, "sec-websocket-protocol", val.buf, val.len));
   }
 
   {
@@ -312,7 +305,7 @@ finish:
   return rv;
 }
 
-void iwn_ws_server_route_attach(struct iwn_wf_route *route, const struct iwn_ws_handler_spec *spec_) {
+struct iwn_wf_route* iwn_ws_server_route_attach(struct iwn_wf_route *route, const struct iwn_ws_handler_spec *spec_) {
   assert(route && spec_);
   struct iwn_ws_handler_spec *spec = malloc(sizeof(*spec));
   if (spec) {
@@ -321,6 +314,7 @@ void iwn_ws_server_route_attach(struct iwn_wf_route *route, const struct iwn_ws_
     route->handler_dispose = _route_handler_dispose;
     route->user_data = spec;
   }
+  return route;
 }
 
 bool iwn_ws_server_write_text(struct iwn_ws_sess *sess, const char *buf, size_t buf_len) {
@@ -340,7 +334,9 @@ bool iwn_ws_server_write_text(struct iwn_ws_sess *sess, const char *buf, size_t 
     pthread_mutex_unlock(&ctx->mtx);
     return false;
   }
-  bool ret = 0 == iwn_poller_arm_events(ctx->pa->poller, ctx->pa->fd, IWN_POLLOUT | IWN_POLLET);
+  bool ret = 0 == iwn_poller_arm_events(ctx->hreq->poller_adapter->poller,
+                                        ctx->hreq->poller_adapter->fd,
+                                        IWN_POLLOUT | IWN_POLLET);
   pthread_mutex_unlock(&ctx->mtx);
   return ret;
 }

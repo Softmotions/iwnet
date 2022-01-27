@@ -1,5 +1,5 @@
-cd ./build/src/http/tests
-file ./server2
+cd ./build/src/ws/tests
+file ./ws_server1
 #file ./wf_test1
 #set args --ssl
 

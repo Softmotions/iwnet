@@ -15,11 +15,11 @@ struct iwn_http_server {
 };
 
 struct iwn_http_req {
-  void     *request_user_data;                           ///< Request specific user data.
-  void     *server_user_data;                            ///< User data specified in `iwn_http_server_spec`
-  void      (*on_request_dispose)(struct iwn_http_req*); ///< Request dispose handler.
-  bool      (*on_response_completed)(struct iwn_http_req*);
-  const int fd;                                              ///< HTTP Request socket file descriptor
+  void *request_user_data;                               ///< Request specific user data.
+  void *server_user_data;                                ///< User data specified in `iwn_http_server_spec`
+  void  (*on_request_dispose)(struct iwn_http_req*);     ///< Request dispose handler.
+  bool  (*on_response_completed)(struct iwn_http_req*);
+  struct iwn_poller_adapter *poller_adapter;
 
   // Web-framework implementation hooks (do not use in apps)
   void *_wf_data;

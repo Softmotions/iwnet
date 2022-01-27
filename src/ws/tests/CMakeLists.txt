@@ -17,6 +17,8 @@ add_custom_command(OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/node_modules
 
 add_custom_target(ws_tests DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/node_modules)
 
+add_executable(ws_server1 ws_server1.c)
+
 foreach(TN IN ITEMS ${TESTS})
   add_executable(${TN} ${TN}.c)
   add_dependencies(${TN} ws_tests)

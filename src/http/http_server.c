@@ -92,7 +92,6 @@ struct client {
   iwn_http_server_request_chunk_handler chunk_cb;
   IWPOOL *pool;
   iwn_on_poller_adapter_event injected_poller_evh;
-  struct iwn_poller_adapter  *pa;
   struct server    *server;
   struct tokens_buf tokens;
   struct stream     stream;
@@ -527,7 +526,7 @@ finish:
 }
 
 static bool _client_write_bytes(struct client *client) {
-  struct iwn_poller_adapter *pa = client->pa;
+  struct iwn_poller_adapter *pa = client->request.poller_adapter;
   struct stream *stream = &client->stream;
   ssize_t bytes = pa->write(pa,
                             (uint8_t*) stream->buf + stream->bytes_total,
@@ -560,14 +559,13 @@ static void _client_write(struct client *client) {
     }
   } else {
     bool (*on_response_completed)(struct iwn_http_req*) = client->request.on_response_completed;
-    if (on_response_completed) {
+    if (IW_UNLIKELY(on_response_completed)) {
       client->request.on_response_completed = 0;
       if (!on_response_completed(&client->request)) {
         client->flags |= HTTP_END_SESSION;
         return;
       }
-    }
-    if (client->flags & HTTP_KEEP_ALIVE) {
+    } else if (client->flags & HTTP_KEEP_ALIVE) {
       if (client->server->spec.request_timeout_keepalive_sec > 0) {
         iwn_poller_set_timeout(client->server->spec.poller, client->fd,
                                client->server->spec.request_timeout_keepalive_sec);
@@ -587,7 +585,7 @@ finish:
 }
 
 static bool _client_read_bytes(struct client *client) {
-  struct iwn_poller_adapter *pa = client->pa;
+  struct iwn_poller_adapter *pa = client->request.poller_adapter;
   struct stream *stream = &client->stream;
   struct server *server = client->server;
   if (stream->index < stream->length) {
@@ -886,8 +884,8 @@ static void _client_read(struct client *client) {
 static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   struct client *client = user_data;
 
-  if (client->pa != pa) {
-    client->pa = pa;
+  if (client->request.poller_adapter != pa) {
+    client->request.poller_adapter = pa;
   }
   if (client->injected_poller_evh) {
     return client->injected_poller_evh(pa, &client->request, events);
@@ -946,10 +944,7 @@ static iwrc _client_accept(struct server *server, int fd) {
   client->pool = pool;
   client->fd = fd;
   RCC(rc, finish, _server_ref(server, &client->server));
-  memcpy(&client->request, &(struct iwn_http_req) {
-    .fd = fd,
-    .server_user_data = client->server->spec.user_data
-  }, sizeof(client->request));
+  client->request.server_user_data = client->server->spec.user_data;
 
   int flags = fcntl(fd, F_GETFL, 0);
   RCN(finish, flags);
