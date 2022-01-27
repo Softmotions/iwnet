@@ -17,17 +17,30 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 
+struct msg {
+  char       *buf;
+  size_t      buf_len;
+  struct msg *next;
+};
+
 struct ctx {
   struct iwn_ws_sess   sess;
   struct iwn_http_req *hreq;
   struct iwn_ws_handler_spec *spec;
   struct iwn_poller_adapter  *pa;
-  wslay_event_context_ptr     wc;
+  struct msg *messages;
+  wslay_event_context_ptr wc;
   pthread_mutex_t mtx;
 };
 
 static void _ctx_destroy(struct ctx *ctx) {
   if (ctx) {
+    for (struct msg *m = ctx->messages; m; ) {
+      struct msg *n = m->next;
+      free(m->buf);
+      free(m);
+      m = n;
+    }
     if (ctx->hreq && ctx->hreq->_ws_data == ctx) {
       ctx->hreq->_ws_data = 0;
     }
@@ -48,22 +61,6 @@ static void _route_handler_dispose(struct iwn_wf_ctx *ctx, void *user_data) {
 static void _on_request_dispose(struct iwn_http_req *hreq) {
   struct ctx *ctx = hreq->_ws_data;
   _ctx_destroy(ctx);
-}
-
-static void _wslay_msg_recv_callback(
-  wslay_event_context_ptr                   wctx,
-  const struct wslay_event_on_msg_recv_arg *arg,
-  void                                     *user_data
-  ) {
-  struct ctx *ctx = user_data;
-  if (wslay_is_ctrl_frame(arg->opcode)) {
-    return;
-  }
-  if (arg->msg_length && ctx->spec->msg_handler) {
-    if (!ctx->spec->msg_handler(&ctx->sess, (void*) arg->msg, arg->msg_length)) {
-      iwn_poller_remove(ctx->pa->poller, ctx->pa->fd);
-    }
-  }
 }
 
 static ssize_t _wslay_recv_callback(
@@ -132,6 +129,7 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
   struct ctx *ctx = hreq->_ws_data;
   assert(ctx);
   int64_t ret = 0;
+  struct msg *m = 0;
 
   if (ctx->pa != pa) {
     ctx->pa = pa;
@@ -153,9 +151,68 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
     ret |= IWN_POLLOUT;
   }
 
+  if (ctx->messages) {
+    m = ctx->messages;
+    ctx->messages = 0; // Transfer ownership
+  }
+
 finish:
   pthread_mutex_unlock(&ctx->mtx);
+
+  // In order to avoid deadlocks process message handlers out of `ctx->mtx`
+  while (m) {
+    struct msg *n = m->next;
+    if (ret != -1 && !ctx->spec->msg_handler(&ctx->sess, m->buf, m->buf_len)) {
+      ret = -1;
+    }
+    free(m->buf);
+    free(m);
+    m = n;
+  }
+
   return ret == 0 ? -1 : ret;
+}
+
+static void _wslay_msg_recv_callback(
+  wslay_event_context_ptr                   wctx,
+  const struct wslay_event_on_msg_recv_arg *arg,
+  void                                     *user_data
+  ) {
+  struct ctx *ctx = user_data;
+  struct msg *m = 0;
+
+  if (wslay_is_ctrl_frame(arg->opcode) || arg->msg_length == 0 || !ctx->spec->msg_handler) {
+    return;
+  }
+
+  m = malloc(sizeof(*m));
+  if (!m) {
+    goto error;
+  }
+  m->next = 0;
+  m->buf_len = arg->msg_length;
+  m->buf = malloc(m->buf_len + 1);
+  if (!m->buf) {
+    goto error;
+  }
+  memcpy(m->buf, arg->msg, m->buf_len);
+  m->buf[m->buf_len] = '\0';
+
+  struct msg *mm = ctx->messages;
+  if (mm) {
+    while (mm->next) mm = m->next;
+    mm->next = m;
+  } else {
+    ctx->messages = m;
+  }
+
+  return;
+
+error:
+  if (m) {
+    free(m);
+    free(m->buf);
+  }
 }
 
 static bool _on_response_completed(struct iwn_http_req *hreq) {
