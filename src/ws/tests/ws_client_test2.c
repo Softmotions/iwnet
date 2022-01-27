@@ -45,7 +45,7 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     return;
   }
   iwrc rc = iwn_ws_client_open(&(struct iwn_ws_client_spec) {
-    .url = "wss://localhost:7772",
+    .url = "wss://localhost:9292/ws",
     .poller = poller,
     .on_connected = on_connected,
     .on_message = on_message,
@@ -65,8 +65,8 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, iwn_poller_create(1, 1, &poller));
   RCC(rc, finish, iwn_proc_spawn(&(struct iwn_proc_spec) {
     .poller = poller,
-    .path = "/usr/bin/node",
-    .args = (const char*[]) { "wss.js", "7772", 0 },
+    .path = "./ws_server1",
+    .args = (const char*[]) { "--ssl", 0 },
     .on_stdout = _on_ws_server_output,
     .on_stderr = _on_ws_server_output,
     .on_exit = _on_ws_server_exit

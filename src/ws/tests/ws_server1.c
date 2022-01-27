@@ -7,6 +7,10 @@
 #include <signal.h>
 #include <errno.h>
 
+#define S_SESSION_INIT    0x01U
+#define S_SESSION_DISPOSE 0x02U
+
+static uint32_t state;
 static struct iwn_poller *poller;
 static struct iwn_wf_ctx *ctx;
 
@@ -23,20 +27,24 @@ static int _handle_root(struct iwn_wf_req *req, void *user_data) {
 static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_len) {
   IWN_ASSERT_FATAL(sess && msg && msg_len);
   IWN_ASSERT(sess->spec->user_data == ctx);
-  fprintf(stderr, "Got message %s\n", msg);
+  fprintf(stderr, "message: %s\n", msg);
+  char buf[64 + msg_len];
+  int len = snprintf(buf, sizeof(buf), "echo: %s", msg);
+  return iwn_ws_server_write_text(sess, buf, len);
+}
+
+static bool _on_ws_session_init(struct iwn_ws_sess *sess) {
+  fprintf(stderr, "New client\n");
+  state |= S_SESSION_INIT;
+  IWN_ASSERT_FATAL(sess);
+  IWN_ASSERT(sess->spec->user_data == ctx);
   return true;
 }
 
-static void _on_ws_session_init(struct iwn_ws_sess *sess) {
-  IWN_ASSERT_FATAL(sess);
-  IWN_ASSERT(sess->spec->user_data == ctx);
-  fprintf(stderr, "Session init\n");
-}
-
 static void _on_ws_session_dispose(struct iwn_ws_sess *sess) {
+  state |= S_SESSION_DISPOSE;
   IWN_ASSERT_FATAL(sess);
   IWN_ASSERT(sess->spec->user_data == ctx);
-  fprintf(stderr, "Session dispose\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -86,8 +94,9 @@ int main(int argc, char *argv[]) {
     .on_session_init = _on_ws_session_init,
     .on_session_dispose = _on_ws_session_dispose,
   }), 0));
-  
+
   // Start the server
+
   RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));
 
   struct iwn_wf_server_spec spec = {
@@ -106,10 +115,14 @@ int main(int argc, char *argv[]) {
   }
 
   RCC(rc, finish, iwn_wf_server(&spec, ctx));
-
+  
+  fprintf(stderr, "0542a108-ff0f-47ef-86e3-495fd898a8ee\n");
   iwn_poller_poll(poller);
 
 finish:
   IWN_ASSERT(rc == 0);
+  IWN_ASSERT(state & S_SESSION_INIT);
+  IWN_ASSERT(state & S_SESSION_DISPOSE);
+  iwn_poller_destroy(&poller);
   return iwn_assertions_failed > 0 ?: 0;
 }

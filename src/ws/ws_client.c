@@ -459,9 +459,8 @@ bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t 
     pthread_mutex_unlock(&ws->mtx);
     return false;
   }
-  bool ret = 0 == iwn_poller_arm_events(ws->pa->poller, ws->fd, IWN_POLLOUT | IWN_POLLET);
   pthread_mutex_unlock(&ws->mtx);
-  return ret;
+  return 0 == iwn_poller_arm_events(ws->pa->poller, ws->fd, IWN_POLLOUT | IWN_POLLET);
 }
 
 iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_client **out_ws) {

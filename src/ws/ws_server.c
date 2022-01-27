@@ -227,7 +227,12 @@ static bool _on_response_completed(struct iwn_http_req *hreq) {
   }
   iwn_poller_set_timeout(ctx->hreq->poller_adapter->poller, ctx->hreq->poller_adapter->fd, 0);
   iwn_http_inject_poller_events_handler(hreq, _on_poller_adapter_event);
-  return true;
+
+  if (ctx->spec->on_session_init) {
+    return ctx->spec->on_session_init(&ctx->sess);
+  } else {
+    return true;
+  }
 }
 
 static int _route_handler(struct iwn_wf_req *req, void *user_data) {
@@ -334,9 +339,9 @@ bool iwn_ws_server_write_text(struct iwn_ws_sess *sess, const char *buf, size_t 
     pthread_mutex_unlock(&ctx->mtx);
     return false;
   }
-  bool ret = 0 == iwn_poller_arm_events(ctx->hreq->poller_adapter->poller,
-                                        ctx->hreq->poller_adapter->fd,
-                                        IWN_POLLOUT | IWN_POLLET);
   pthread_mutex_unlock(&ctx->mtx);
-  return ret;
+
+  return 0 == iwn_poller_arm_events(ctx->hreq->poller_adapter->poller,
+                                    ctx->hreq->poller_adapter->fd,
+                                    IWN_POLLOUT | IWN_POLLET);
 }
