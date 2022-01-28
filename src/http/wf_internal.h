@@ -1,17 +1,20 @@
 #pragma once
 
 #include "wf.h"
+#include "http_server_internal.h"
 
 #include <iowow/iwre.h>
 #include <iowow/iwpool.h>
 #include <iowow/iwlog.h>
 
 #include <stdio.h>
+#include <pthread.h>
 
 struct route;
 
 struct ctx {
-  struct iwn_wf_ctx  base;
+  struct iwn_wf_ctx base;
+  struct iwn_wf_session_store sst;
   struct route      *root;
   struct iwn_poller *poller;
 
@@ -48,12 +51,14 @@ struct request {
   struct route_iter it; ///< Routes matching iterator
   IWPOOL     *pool;
   FILE       *stream_file;
-  char       *boundary; ///< Current multipart form boundary
+  const char *boundary; ///< Current multipart form boundary
   const char *stream_file_path;
   size_t      streamed_bytes;
   size_t      path_len;
   size_t      boundary_len;
-  uint8_t     flags;
+  pthread_mutex_t mtx;
+  char    sid[IWN_WF_SESSION_ID_LEN + 1];    //< Session id
+  uint8_t flags;
 };
 
 #ifdef IW_TESTS

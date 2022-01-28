@@ -1,9 +1,11 @@
 #include "wf_internal.h"
+#include "sst_inmem.h"
 #include "utils/codec.h"
 
 #include <iowow/iwp.h>
 
 #include <assert.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -69,6 +71,9 @@ static void _route_destroy_deep(struct route *route) {
 static void _ctx_destroy(struct ctx *ctx) {
   if (!ctx) {
     return;
+  }
+  if (ctx->sst.dispose) {
+    ctx->sst.dispose(&ctx->sst);
   }
   if (ctx->root) {
     _route_destroy_deep(ctx->root);
@@ -246,6 +251,7 @@ static void _request_stream_destroy(struct request *req) {
 static void _request_destroy(struct request *req) {
   if (req) {
     _request_stream_destroy(req);
+    pthread_mutex_destroy(&req->mtx);
     if (req->pool) {
       iwpool_destroy(req->pool);
     }
@@ -253,14 +259,21 @@ static void _request_destroy(struct request *req) {
 }
 
 static void _request_on_dispose(struct iwn_http_req *hreq) {
-  struct request *req = hreq->_wf_data;
+  struct request *req = iwn_http_request_wf_data(hreq);
   if (req) {
-    hreq->_wf_data = 0;
     _request_destroy(req);
   }
 }
 
-static iwrc _request_parse_target(struct request *req) {
+static void _response_headers_write(struct iwn_http_req *hreq) {
+  if (iwn_http_connection_is_upgrade(hreq)) {
+    // Do not write any extra headers on upgrade
+    return;
+  }
+  // TODO: Writes cookie headers
+}
+
+static iwrc _request_target_parse(struct request *req) {
   iwrc rc = 0;
   char *p;
   size_t i;
@@ -291,7 +304,7 @@ finish:
   return rc;
 }
 
-static iwrc _request_parse_method(struct request *req) {
+static iwrc _request_method_parse(struct request *req) {
   struct iwn_val val = iwn_http_request_method(req->base.http);
   if (!val.len) {
     return IW_ERROR_ASSERTION;
@@ -386,6 +399,9 @@ static const char* _header_parse_skip_name(const char *rp, const char *ep) {
 
 static const char* _header_parse_next_parameter(const char *rp, const char *ep, struct iwn_pair *kv) {
   memset(kv, 0, sizeof(*kv));
+  if (rp == 0) {
+    return 0;
+  }
   bool header_value = *rp == ':'; // Start if header value
   if (!header_value) {
     for ( ; rp < ep && *rp != ';'; ++rp) {
@@ -485,7 +501,39 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
   }
 }
 
-static iwrc _request_parse_headers(struct request *req) {
+const char* iwn_wf_header_val_part_next(const char *ptr, const char *end, struct iwn_pair *out) {
+  return _header_parse_next_parameter(ptr, end, out);
+}
+
+struct iwn_pair iwn_wf_header_val_part_find(const char *ptr, const char *end, const char *name) {
+  struct iwn_pair kv;
+  size_t nlen = strlen(name);
+  while (ptr) {
+    ptr = _header_parse_next_parameter(ptr, end, &kv);
+    if (ptr && kv.key_len == nlen && strncmp(kv.key, name, nlen) == 0) {
+      return kv;
+    }
+  }
+  return (struct iwn_pair) {};
+}
+
+struct iwn_pair iwn_wf_header_part_find(struct iwn_wf_req *req, const char *header_name, const char *part_name) {
+  struct iwn_val val = iwn_http_request_header_get(req->http, header_name, -1);
+  if (!val.len) {
+    return (struct iwn_pair) {};
+  }
+  return iwn_wf_header_val_part_find(val.buf, val.buf + val.len, part_name);
+}
+
+IW_INLINE void _request_headers_cookie_parse(struct request *req) {
+  struct iwn_pair pair = iwn_wf_header_part_find(&req->base, "cookie", IWN_WF_SESSION_COOKIE_KEY);
+  if (pair.val && pair.val_len == IWN_WF_SESSION_ID_LEN) {
+    memcpy(req->sid, pair.val, IWN_WF_SESSION_ID_LEN);
+    atomic_thread_fence(memory_order_release);
+  }
+}
+
+static iwrc _request_headers_parse(struct request *req) {
   #define _HN_UEC "application/x-www-form-urlencoded"
   #define _HN_MFD "multipart/form-data"
 
@@ -511,6 +559,8 @@ static iwrc _request_parse_headers(struct request *req) {
       req->base.flags |= IWN_WF_FORM_MULTIPART;
     }
   }
+
+  _request_headers_cookie_parse(req);
   return rc;
 
   #undef _HN_UEC
@@ -654,19 +704,19 @@ static iwrc _request_create(struct iwn_http_req *hreq) {
   }
   RCA(req = iwpool_calloc(sizeof(*req), pool), finish);
   req->pool = pool;
+  memcpy(&req->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(req->mtx));
   req->base.ctx = &ctx->base;
   req->base.http = hreq;
 
-  RCC(rc, finish, _request_parse_target(req));
-  RCC(rc, finish, _request_parse_method(req));
-  RCC(rc, finish, _request_parse_headers(req));
+  RCC(rc, finish, _request_target_parse(req));
+  RCC(rc, finish, _request_method_parse(req));
+  RCC(rc, finish, _request_headers_parse(req));
 
   // Scroll to the first matched route
   _route_iter_init(req, &req->it);
   _route_iter_next(&req->it);
 
-  hreq->_wf_data = req;
-  hreq->_wf_on_request_dispose = _request_on_dispose;
+  iwn_http_request_wf_set(hreq, req, _request_on_dispose, _response_headers_write);
 
 finish:
   if (rc) {
@@ -961,22 +1011,21 @@ finish:
 }
 
 static bool _request_stream_chunk_next(struct iwn_http_req *hreq) {
-  struct request *req = hreq->_wf_data;
-  assert(req);
+  struct request *req = iwn_http_request_wf_data(hreq);
   return _request_stream_chunk_process(req);
 }
 
 static bool _request_handler(struct iwn_http_req *hreq) {
   struct ctx *ctx = hreq->server_user_data;
   assert(ctx);
-  struct request *req = hreq->_wf_data;
+  struct request *req = iwn_http_request_wf_data(hreq);
   if (!req) {
     iwrc rc = _request_create(hreq);
     if (rc) {
       iwlog_ecode_error3(rc);
       return false;
     }
-    req = hreq->_wf_data;
+    req = iwn_http_request_wf_data(hreq);
   }
   if (!_route_iter_current(&req->it)) {
     // No routes found.
@@ -994,6 +1043,49 @@ static bool _request_handler(struct iwn_http_req *hreq) {
   } else {
     return _request_process(req);
   }
+}
+
+static iwrc _request_sid_fill(char fout[IWN_WF_SESSION_ID_LEN]) {
+  static const char cset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  FILE *f = fopen("/dev/urandom", "r");
+  if (!f) {
+    return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+  }
+  if (fread(fout, IWN_WF_SESSION_ID_LEN, 1, f) != 1) {
+    fclose(f);
+    return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+  }
+  fclose(f);
+  for (int i = 0; i < IWN_WF_SESSION_ID_LEN; ++i) {
+    fout[i] = cset[fout[i] % (sizeof(cset) - 1)];
+  }
+  return 0;
+}
+
+IW_INLINE bool _request_sid_exists(struct request *req) {
+  atomic_thread_fence(memory_order_acquire);
+  return req->sid[0] != 0;
+}
+
+static iwrc _request_sid_ensure(struct request *req) {
+  if (_request_sid_exists(req)) {
+    return 0;
+  }
+  pthread_mutex_lock(&req->mtx);
+  if (_request_sid_exists(req)) {
+    pthread_mutex_unlock(&req->mtx);
+    return 0;
+  }
+  char buf[IWN_WF_SESSION_ID_LEN + 1];
+  iwrc rc = _request_sid_fill(buf);
+  if (!rc) {
+    buf[sizeof(buf) - 1] = 0;
+    memcpy(req->sid, buf, sizeof(buf));
+  } else {
+    req->sid[0] = 0;
+  }
+  pthread_mutex_unlock(&req->mtx);
+  return rc;
 }
 
 iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
@@ -1056,6 +1148,41 @@ struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx) {
   return ((struct ctx*) ctx)->poller;
 }
 
+const char* iwn_wf_request_session_get(struct iwn_wf_req *req_, const char *key) {
+  struct request *req = (void*) req_;
+  struct ctx *ctx = (void*) &req->base.ctx;
+  if (_request_sid_exists(req)) {
+    return ctx->sst.get(&ctx->sst, req->sid, key);
+  } else {
+    return 0;
+  }
+}
+
+iwrc iwn_wf_session_put(struct iwn_wf_req *req_, const char *key, const char *data) {
+  struct request *req = (void*) req_;
+  struct ctx *ctx = (void*) &req->base.ctx;
+  RCR(_request_sid_ensure(req));
+  return ctx->sst.put(&ctx->sst, req->sid, key, data);
+}
+
+void iwn_wf_session_del(struct iwn_wf_req *req_, const char *key) {
+  struct request *req = (void*) req_;
+  struct ctx *ctx = (void*) &req->base.ctx;
+  if (_request_sid_exists(req)) {
+    ctx->sst.del(&ctx->sst, req->sid, key);
+  }
+}
+
+void iwn_wf_session_clear(struct iwn_wf_req *req_) {
+  struct request *req = (void*) req_;
+  struct ctx *ctx = (void*) &req->base.ctx;
+  if (_request_sid_exists(req)) {
+    req->sid[0] = 0;
+    atomic_thread_fence(memory_order_release);
+    ctx->sst.clear(&ctx->sst, req->sid);
+  }
+}
+
 iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {
   struct ctx *ctx = (void*) ctx_;
   struct iwn_wf_server_spec spec;
@@ -1088,6 +1215,20 @@ iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ct
   http.request_timeout_sec = spec.request_timeout_sec;
   http.request_token_max_len = spec.request_token_max_len;
   http.request_max_headers_count = spec.request_max_headers_count;
+
+  struct iwn_wf_session_store *sst = &spec.session_store;
+  if (memcmp(sst, &(struct iwn_wf_session_store) {}, sizeof(*sst)) == 0) {
+    sst_inmem_create(sst);
+  }
+  if (  !sst->clear
+     || !sst->del
+     || !sst->get
+     || !sst->put
+     || !sst->dispose) {
+    iwlog_ecode_error2(IW_ERROR_INVALID_ARGS, "(struct iwn_wf_server_spec).session_store is not initialized");
+    return IW_ERROR_INVALID_ARGS;
+  }
+  ctx->sst = *sst;
 
   return iwn_http_server_create(&http, &ctx->server_fd);
 }

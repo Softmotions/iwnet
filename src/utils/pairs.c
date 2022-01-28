@@ -4,6 +4,14 @@
 
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
+
+void iwn_val_buf_free(struct iwn_val *val) {
+  if (val) {
+    free(val->buf);
+    val->buf = 0;
+  }
+}
 
 void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p) {
   p->next = 0;

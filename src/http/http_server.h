@@ -18,13 +18,9 @@ struct iwn_http_req {
   void *request_user_data;                               ///< Request specific user data.
   void *server_user_data;                                ///< User data specified in `iwn_http_server_spec`
   void  (*on_request_dispose)(struct iwn_http_req*);     ///< Request dispose handler.
+  void  (*on_response_headers_write)(struct iwn_http_req*);
   bool  (*on_response_completed)(struct iwn_http_req*);
   struct iwn_poller_adapter *poller_adapter;
-
-  // Web-framework implementation hooks (do not use in apps)
-  void *_wf_data;
-  void *_ws_data;
-  void  (*_wf_on_request_dispose)(struct iwn_http_req*);
 };
 
 typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
@@ -105,6 +101,14 @@ IW_EXPORT iwrc iwn_http_response_header_set(
   const char *header_name,
   const char *header_value,
   ssize_t     header_value_len);
+
+IW_EXPORT iwrc iwn_http_response_header_add(
+  struct iwn_http_req*,
+  const char *header_name,
+  const char *header_value,
+  ssize_t     header_value_len);
+
+IW_EXPORT void iwn_http_response_header_exclude(struct iwn_http_req*, const char *header_name);
 
 IW_EXPORT struct iwn_val iwn_http_response_header_get(struct iwn_http_req*, const char *header_name);
 

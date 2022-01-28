@@ -2,7 +2,7 @@
  * HTTP protocol parser is based on https://github.com/jeremycw/httpserver.h MIT code.
  */
 
-#include "http_server.h"
+#include "http_server_internal.h"
 #include "poller_adapter.h"
 #include "poller/direct_poller_adapter.h"
 #include "ssl/brssl_poller_adapter.h"
@@ -76,6 +76,7 @@ struct header {
   char *name;
   char *value;
   struct header *next;
+  bool exclude;
 };
 
 struct response {
@@ -97,6 +98,14 @@ struct client {
   struct stream     stream;
   struct parser     parser;
   struct response   response;
+
+  // Web-framework implementation hooks (do not use these in app)
+  // TODO: Review it
+  void *_ws_data;
+  void *_wf_data;
+  void  (*_wf_on_request_dispose)(struct iwn_http_req*);
+  void  (*_wf_on_response_headers_write)(struct iwn_http_req*);
+
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
@@ -374,15 +383,16 @@ IW_INLINE void _tokens_free_buffer(struct client *client) {
 }
 
 IW_INLINE void _request_data_free(struct client *client) {
-  if (client->request._wf_on_request_dispose) {
-    client->request._wf_on_request_dispose(&client->request);
-    client->request._wf_on_request_dispose = 0;
+  if (client->_wf_on_request_dispose) {
+    client->_wf_on_request_dispose(&client->request);
+    client->_wf_on_request_dispose = 0;
   }
   if (client->request.on_request_dispose) {
     client->request.on_request_dispose(&client->request);
     client->request.on_request_dispose = 0;
   }
-  client->request._wf_data = 0;
+  client->_wf_data = 0;
+  client->_ws_data = 0;
   client->request.request_user_data = 0;
 }
 
@@ -1166,6 +1176,36 @@ struct iwn_val iwn_http_response_header_get(struct iwn_http_req *request, const 
   return (struct iwn_val) {};
 }
 
+iwrc iwn_http_response_header_add(
+  struct iwn_http_req *request,
+  const char          *header_name,
+  const char          *header_value,
+  ssize_t              header_value_len
+  ) {
+  iwrc rc = 0;
+  struct client *client = (void*) request;
+  struct response *response = &client->response;
+  struct header *header = 0;
+
+  if (header_value_len < 0) {
+    header_value_len = strlen(header_value);
+  }
+  if (!response->pool) {
+    RCA(response->pool = iwpool_create_empty(), finish);
+  }
+  RCA(header = iwpool_alloc(sizeof(*header), response->pool), finish);
+  RCA(header->name = iwpool_strdup2(response->pool, header_name), finish);
+  for (char *p = header->name; *p != '\0'; ++p) {
+    *p = (char) tolower((unsigned char) *p);
+  }
+  RCA(header->value = iwpool_strndup2(response->pool, header_value, header_value_len), finish);
+  header->next = response->headers;
+  response->headers = header;
+
+finish:
+  return rc;
+}
+
 iwrc iwn_http_response_header_set(
   struct iwn_http_req *request,
   const char          *header_name,
@@ -1205,6 +1245,16 @@ iwrc iwn_http_response_header_set(
 
 finish:
   return rc;
+}
+
+void iwn_http_response_header_exclude(struct iwn_http_req *request, const char *header_name) {
+  struct client *client = (void*) request;
+  struct response *response = &client->response;
+  for (struct header *h = response->headers; h; h = h->next) {
+    if (header_name[0] == '\0' || strcasecmp(h->name, header_name) == 0) {
+      h->exclude = true;
+    }
+  }
 }
 
 void iwn_http_response_body_clear(struct iwn_http_req *request) {
@@ -1271,6 +1321,14 @@ static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *x
   if (client->flags & HTTP_AUTOMATIC) {
     _client_autodetect_keep_alive(client);
   }
+
+  if (client->request.on_response_headers_write) {
+    client->request.on_response_headers_write(&client->request);
+  }
+  if (client->_wf_on_response_headers_write) {
+    client->_wf_on_response_headers_write(&client->request);
+  }
+
   if (IW_UNLIKELY(client->flags & HTTP_UPGRADE)) {
     iwn_http_response_header_set(&client->request, "connection", "upgrade", IW_LLEN("upgrade"));
   } else if (client->flags & HTTP_KEEP_ALIVE) {
@@ -1278,6 +1336,7 @@ static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *x
   } else {
     iwn_http_response_header_set(&client->request, "connection", "close", IW_LLEN("close"));
   }
+
   if (client->response.code == 0) {
     client->response.code = 200;
   }
@@ -1528,6 +1587,32 @@ static void _server_unref(struct server *server) {
 static void _server_on_dispose(const struct iwn_poller_task *t) {
   struct server *server = t->user_data;
   _server_unref(server);
+}
+
+void iwn_http_request_wf_set(
+  struct iwn_http_req *request, void *user_data,
+  void (*wf_on_request_dispose)(struct iwn_http_req*),
+  void (*wf_on_response_headers_write)(struct iwn_http_req*)
+  ) {
+  struct client *client = (void*) request;
+  client->_wf_data = user_data;
+  client->_wf_on_request_dispose = wf_on_request_dispose;
+  client->_wf_on_response_headers_write = wf_on_response_headers_write;
+}
+
+void* iwn_http_request_wf_data(struct iwn_http_req *request) {
+  struct client *client = (void*) request;
+  return client->_wf_data;
+}
+
+void iwn_http_request_ws_set(struct iwn_http_req *request, void *user_data) {
+  struct client *client = (void*) request;
+  client->_ws_data = user_data;
+}
+
+void* iwn_http_request_ws_data(struct iwn_http_req *request) {
+  struct client *client = (void*) request;
+  return client->_ws_data;
 }
 
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_fd) {

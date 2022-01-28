@@ -32,18 +32,21 @@ struct iwn_pairs {
   struct iwn_pair *last;
 };
 
-void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p);
+IW_EXPORT void iwn_val_buf_free(struct iwn_val *val);
 
-struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
+IW_EXPORT void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p);
 
-struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
+IW_EXPORT struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
 
-iwrc iwn_pair_add_pool(
+IW_EXPORT struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
+
+IW_EXPORT iwrc iwn_pair_add_pool(
   IWPOOL           *pool,
   struct iwn_pairs *pairs,
   const char       *key,
   ssize_t           key_len,
   char             *val,
   ssize_t           val_len);
+
 
 IW_EXTERN_C_END;

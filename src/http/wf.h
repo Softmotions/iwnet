@@ -30,6 +30,9 @@ typedef enum {
   _WF_ERROR_END,
 } iwn_wf_ecode_e;
 
+#define IWN_WF_SESSION_ID_LEN     32
+#define IWN_WF_SESSION_COOKIE_KEY "sessionid"
+
 #define  IWN_WF_RES_NOT_PROCESSED    0
 #define  IWN_WF_RES_PROCESSED        1
 #define  IWN_WF_RES_CONNECTION_CLOSE -1
@@ -70,6 +73,7 @@ struct route_re_submatch {          ///< Route regexp submatch node
   struct route_re_submatch  *next;
 };
 
+/// HTTP request object.
 struct iwn_wf_req {
   struct iwn_wf_ctx   *ctx;
   struct iwn_http_req *http;
@@ -85,6 +89,7 @@ struct iwn_wf_req {
   uint32_t flags;             ///< Request method, form flags.
 };
 
+/// Route specification.
 struct iwn_wf_route {
   struct iwn_wf_ctx   *ctx;
   struct iwn_wf_route *parent;
@@ -96,8 +101,20 @@ struct iwn_wf_route {
   const char *tag;
 };
 
+struct iwn_wf_session_store {
+  /// Gets session value under the specified key.
+  /// Returned value should be freed by `free()`
+  char* (*get)(struct iwn_wf_session_store *store, const char *sid, const char *key);
+  iwrc  (*put)(struct iwn_wf_session_store *store, const char *sid, const char *key, const char *val);
+  void  (*del)(struct iwn_wf_session_store *store, const char *sid, const char *key);
+  void  (*clear)(struct iwn_wf_session_store *store, const char *sid);
+  void  (*dispose)(struct iwn_wf_session_store *store);
+  void *user_data;
+};
+
 struct iwn_wf_server_spec {
   struct iwn_poller *poller;                       ///< Required poller reference.
+  struct iwn_wf_session_store session_store;
   const char *listen;
   const char *certs;
   ssize_t     certs_len;
@@ -130,11 +147,28 @@ IW_EXPORT WUR iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec, struct i
 
 IW_EXPORT struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx);
 
-IW_EXPORT const char* iwn_wf_request_session_get(struct iwn_wf_req*, const char *name);
+IW_EXPORT const char* iwn_wf_header_val_part_next(
+  const char      *header_val,
+  const char      *header_val_end,
+  struct iwn_pair *out);
 
-IW_EXPORT iwrc iwn_wf_session_put(struct iwn_wf_req*, const char *name, const char *data);
+IW_EXPORT struct iwn_pair iwn_wf_header_val_part_find(
+  const char *header_val,
+  const char *header_val_end,
+  const char *part_name);
 
-IW_EXPORT void iwn_wf_session_remove(struct iwn_wf_req*, const char *name);
+IW_EXPORT struct iwn_pair iwn_wf_header_part_find(
+  struct iwn_wf_req*,
+  const char *header_name,
+  const char *part_name);
+
+IW_EXPORT const char* iwn_wf_request_session_get(struct iwn_wf_req*, const char *key);
+
+IW_EXPORT iwrc iwn_wf_session_put(struct iwn_wf_req*, const char *key, const char *data);
+
+IW_EXPORT void iwn_wf_session_del(struct iwn_wf_req*, const char *key);
+
+IW_EXPORT void iwn_wf_session_clear(struct iwn_wf_req*);
 
 IW_EXPORT void iwn_wf_destroy(struct iwn_wf_ctx *ctx);
 

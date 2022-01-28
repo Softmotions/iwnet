@@ -1,4 +1,5 @@
 #include "ws_server.h"
+#include "http_server_internal.h"
 #include "utils/base64.h"
 
 #include <iowow/iwlog.h>
@@ -40,9 +41,6 @@ static void _ctx_destroy(struct ctx *ctx) {
       free(m);
       m = n;
     }
-    if (ctx->hreq && ctx->hreq->_ws_data == ctx) {
-      ctx->hreq->_ws_data = 0;
-    }
     if (ctx->spec && ctx->spec->on_session_dispose) {
       ctx->spec->on_session_dispose(&ctx->sess);
     }
@@ -58,7 +56,7 @@ static void _route_handler_dispose(struct iwn_wf_ctx *ctx, void *user_data) {
 }
 
 static void _on_request_dispose(struct iwn_http_req *hreq) {
-  struct ctx *ctx = hreq->_ws_data;
+  struct ctx *ctx = iwn_http_request_ws_data(hreq);
   _ctx_destroy(ctx);
 }
 
@@ -122,10 +120,9 @@ again:
 }
 
 static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
-  assert(user_data);
   struct iwn_http_req *hreq = user_data;
-  struct ctx *ctx = hreq->_ws_data;
-  assert(ctx);
+  struct ctx *ctx = iwn_http_request_ws_data(hreq);
+
   int64_t ret = 0;
   struct msg *m = 0;
 
@@ -175,7 +172,9 @@ static void _wslay_msg_recv_callback(
   struct ctx *ctx = user_data;
   struct msg *m = 0;
 
-  if (wslay_is_ctrl_frame(arg->opcode) || arg->msg_length == 0 || !ctx->spec->handler) {
+  if (  wslay_is_ctrl_frame(arg->opcode)
+     || arg->msg_length == 0
+     || !ctx->spec->handler) {
     return;
   }
 
@@ -211,7 +210,7 @@ error:
 
 static bool _on_response_completed(struct iwn_http_req *hreq) {
   int lv = 1;
-  struct ctx *ctx = hreq->_ws_data;
+  struct ctx *ctx = iwn_http_request_ws_data(hreq);
   if (!ctx) {
     return false;
   }
@@ -290,7 +289,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
   ctx->spec = ctx->sess.spec = spec;
   memcpy(&ctx->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(ctx->mtx));
 
-  hreq->_ws_data = ctx;
+  iwn_http_request_ws_set(hreq, ctx);
   hreq->on_request_dispose = _on_request_dispose;
   hreq->on_response_completed = _on_response_completed;
 
