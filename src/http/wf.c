@@ -542,7 +542,8 @@ static iwrc _request_headers_parse(struct request *req) {
   if (val.len > 0) {
     if (val.len >= sizeof(_HN_UEC) - 1 && strncasecmp(val.buf, _HN_UEC, sizeof(_HN_UEC) - 1) == 0) {
       req->base.flags |= IWN_WF_FORM_URL_ENCODED;
-    } else if (val.len > sizeof(_HN_MFD) - 1 && strncasecmp(val.buf, _HN_MFD, sizeof(_HN_MFD) - 1) == 0) {
+    } else if (  val.len > sizeof(_HN_MFD) - 1
+              && strncasecmp(val.buf, _HN_MFD, sizeof(_HN_MFD) - 1) == 0) {
       char *ep = val.buf + val.len;
       const char *rp = val.buf += sizeof(_HN_MFD) - 1;
       struct iwn_pair p;

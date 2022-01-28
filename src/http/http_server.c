@@ -1293,8 +1293,8 @@ static void _client_autodetect_keep_alive(struct client *client) {
     return;
   }
   int version = val.buf[val.len - 1] == '1';
-  val = iwn_http_request_header_get(&client->request, "connection", sizeof("connection") - 1);
-  if (  (val.len == 5 && strncasecmp(val.buf, "close", 5) == 0)
+  val = iwn_http_request_header_get(&client->request, "connection", IW_LLEN("connection"));
+  if (  (val.len == IW_LLEN("close") && strncasecmp(val.buf, "close", IW_LLEN("close")) == 0)
      || (val.len == 0 && version == HTTP_1_0)) {
     client->flags &= ~HTTP_KEEP_ALIVE;
   } else {
