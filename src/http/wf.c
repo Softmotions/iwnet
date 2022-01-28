@@ -367,7 +367,7 @@ IW_INLINE bool _c_is_blank(char c) {
   return _c_is_space(c) || _c_is_lsep(c);
 }
 
-static char* _header_parse_skip_name(char *rp, const char *ep) {
+static const char* _header_parse_skip_name(const char *rp, const char *ep) {
   const char *sp = rp;
   while (rp < ep) {
     if (*rp == ':') {
@@ -384,7 +384,7 @@ static char* _header_parse_skip_name(char *rp, const char *ep) {
   return rp;
 }
 
-static char* _header_parse_next_parameter(char *rp, const char *ep, struct iwn_pair *kv) {
+static const char* _header_parse_next_parameter(const char *rp, const char *ep, struct iwn_pair *kv) {
   memset(kv, 0, sizeof(*kv));
   bool header_value = *rp == ':'; // Start if header value
   if (!header_value) {
@@ -398,12 +398,15 @@ static char* _header_parse_next_parameter(char *rp, const char *ep, struct iwn_p
 
   bool in_quote = false, in_key = true, expect_eq = false, val_escaped = false;
   const char *ks = rp, *ke = ks;
-  char *vs, *ve = 0;
+  const char *vs, *ve = 0;
 
   while (rp < ep) {
     if (in_key) {
       if (header_value) {
-        if (_c_is_space(*rp)) {
+        if (*rp == '=') {
+          in_key = false;
+          vs = ++rp;
+        } else if (_c_is_space(*rp)) {
           if (ke == ks) {
             ++ks;
             ke = ks;
@@ -471,7 +474,7 @@ static char* _header_parse_next_parameter(char *rp, const char *ep, struct iwn_p
   if (ve) {
     kv->key = ks;
     kv->key_len = ke - ks;
-    kv->val = vs;
+    kv->val = (char*) vs;
     kv->val_len = ve - vs;
     if (val_escaped) {
       kv->val_len = iwn_unescape_backslashes_inplace(kv->val, kv->val_len);
@@ -493,7 +496,7 @@ static iwrc _request_parse_headers(struct request *req) {
       req->base.flags |= IWN_WF_FORM_URL_ENCODED;
     } else if (val.len > sizeof(_HN_MFD) - 1 && strncasecmp(val.buf, _HN_MFD, sizeof(_HN_MFD) - 1) == 0) {
       char *ep = val.buf + val.len;
-      char *rp = val.buf += sizeof(_HN_MFD) - 1;
+      const char *rp = val.buf += sizeof(_HN_MFD) - 1;
       struct iwn_pair p;
       while ((rp = _header_parse_next_parameter(rp, ep, &p))) {
         if (strncasecmp(p.key, "boundary", sizeof("boundary") - 1) == 0) {
@@ -676,11 +679,11 @@ finish:
   return rc;
 }
 
-static char* _multipart_parse_next(
+static const char* _multipart_parse_next(
   IWPOOL           *pool,
   const char       *boundary,
   size_t            boundary_len,
-  char             *rp,
+  const char       *rp,
   const char* const ep,
   struct iwn_pairs *parts,
   bool             *eof
@@ -719,15 +722,15 @@ static char* _multipart_parse_next(
     }
     rp += 2;
 
-    char *hs = rp;
-    char *he = _header_parse_skip_name(hs, ep);
+    const char *hs = rp;
+    const char *he = _header_parse_skip_name(hs, ep);
     if (!he) {
       break; // No more headers
     }
     rp = he;
     if (he - hs == _HL_CDIS && strncasecmp(hs, "content-disposition", _HL_CDIS) == 0) {
       int i = 0;
-      for (char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
+      for (const char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
            rp = pp,
            pp = _header_parse_next_parameter(pp, ep, &kv),
            ++i) {
@@ -746,7 +749,7 @@ static char* _multipart_parse_next(
       }
     } else if (he - hs == _HL_CTYPE && strncasecmp(hs, "content-type", _HL_CTYPE) == 0) {
       int i = 0;
-      for (char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
+      for (const char *pp = _header_parse_next_parameter(rp, ep, &kv); pp;
            rp = pp,
            pp = _header_parse_next_parameter(pp, ep, &kv),
            ++i) {
@@ -816,11 +819,11 @@ finish:
 
 #ifdef IW_TESTS
 
-char* dbg_multipart_parse_next(
+const char* dbg_multipart_parse_next(
   IWPOOL           *pool,
   const char       *boundary,
   size_t            boundary_len,
-  char             *rp,
+  const char       *rp,
   const char* const ep,
   struct iwn_pairs *parts,
   bool             *eof
@@ -832,7 +835,7 @@ char* dbg_multipart_parse_next(
 
 static bool _request_form_multipart_parse(struct request *req) {
   bool eof;
-  char *cp = (char*) req->base.body;
+  const char *cp = (char*) req->base.body;
   const char *ep = cp + req->base.body_len;
   while ((cp = _multipart_parse_next(req->pool,
                                      req->boundary, req->boundary_len,

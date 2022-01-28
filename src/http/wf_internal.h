@@ -61,11 +61,11 @@ struct request {
 void dbg_request_destroy(struct request *req);
 void dbg_route_iter_init(struct request *req, struct route_iter *it);
 struct route* dbg_route_iter_next(struct route_iter *it);
-char* dbg_multipart_parse_next(
+const char* dbg_multipart_parse_next(
   IWPOOL           *pool,
   const char       *boundary,
   size_t            boundary_len,
-  char             *rp,
+  const char       *rp,
   const char* const ep,
   struct iwn_pairs *bp,
   bool             *eof);

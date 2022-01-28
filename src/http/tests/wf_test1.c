@@ -217,7 +217,7 @@ static void _multipart_parsing3(IWPOOL *pool) {
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   IWN_ASSERT(cp);
   IWN_ASSERT(!eof);
-  
+
   memset(&parts, 0, sizeof(parts));
   free(rp);
   rp
@@ -328,8 +328,7 @@ static void _multipart_parsing2(IWPOOL *pool) {
   bool eof = false;
   struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
-
-  char *cp = dbg_multipart_parse_next(pool, "", 0, rp, ep, &parts, &eof);
+  const char *cp = dbg_multipart_parse_next(pool, "", 0, rp, ep, &parts, &eof);
   IWN_ASSERT_FATAL(cp);
   IWN_ASSERT(!eof);
   IWN_ASSERT(_ensure_multipart(&parts, "", 0, 0, 0));
@@ -357,7 +356,7 @@ static void _multipart_parsing1(IWPOOL *pool) {
   bool eof = false;
   struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
-  char *cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
+  const char *cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
   IWN_ASSERT_FATAL(cp);
   IWN_ASSERT(!eof);
   IWN_ASSERT(_ensure_multipart(&parts, "name", 0, "text/plain;charset=UTF-8", "John"));
