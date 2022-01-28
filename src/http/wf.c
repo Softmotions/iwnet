@@ -5,7 +5,6 @@
 #include <iowow/iwp.h>
 
 #include <assert.h>
-#include <stdatomic.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
@@ -251,7 +250,6 @@ static void _request_stream_destroy(struct request *req) {
 static void _request_destroy(struct request *req) {
   if (req) {
     _request_stream_destroy(req);
-    pthread_mutex_destroy(&req->mtx);
     if (req->pool) {
       iwpool_destroy(req->pool);
     }
@@ -529,7 +527,6 @@ IW_INLINE void _request_headers_cookie_parse(struct request *req) {
   struct iwn_pair pair = iwn_wf_header_part_find(&req->base, "cookie", IWN_WF_SESSION_COOKIE_KEY);
   if (pair.val && pair.val_len == IWN_WF_SESSION_ID_LEN) {
     memcpy(req->sid, pair.val, IWN_WF_SESSION_ID_LEN);
-    atomic_thread_fence(memory_order_release);
   }
 }
 
@@ -705,7 +702,6 @@ static iwrc _request_create(struct iwn_http_req *hreq) {
   }
   RCA(req = iwpool_calloc(sizeof(*req), pool), finish);
   req->pool = pool;
-  memcpy(&req->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(req->mtx));
   req->base.ctx = &ctx->base;
   req->base.http = hreq;
 
@@ -1064,17 +1060,11 @@ static iwrc _request_sid_fill(char fout[IWN_WF_SESSION_ID_LEN]) {
 }
 
 IW_INLINE bool _request_sid_exists(struct request *req) {
-  atomic_thread_fence(memory_order_acquire);
   return req->sid[0] != 0;
 }
 
 static iwrc _request_sid_ensure(struct request *req) {
   if (_request_sid_exists(req)) {
-    return 0;
-  }
-  pthread_mutex_lock(&req->mtx);
-  if (_request_sid_exists(req)) {
-    pthread_mutex_unlock(&req->mtx);
     return 0;
   }
   char buf[IWN_WF_SESSION_ID_LEN + 1];
@@ -1085,7 +1075,6 @@ static iwrc _request_sid_ensure(struct request *req) {
   } else {
     req->sid[0] = 0;
   }
-  pthread_mutex_unlock(&req->mtx);
   return rc;
 }
 
@@ -1179,7 +1168,6 @@ void iwn_wf_session_clear(struct iwn_wf_req *req_) {
   struct ctx *ctx = (void*) &req->base.ctx;
   if (_request_sid_exists(req)) {
     req->sid[0] = 0;
-    atomic_thread_fence(memory_order_release);
     ctx->sst.clear(&ctx->sst, req->sid);
   }
 }

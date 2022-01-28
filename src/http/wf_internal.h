@@ -8,7 +8,6 @@
 #include <iowow/iwlog.h>
 
 #include <stdio.h>
-#include <pthread.h>
 
 struct route;
 
@@ -56,7 +55,6 @@ struct request {
   size_t      streamed_bytes;
   size_t      path_len;
   size_t      boundary_len;
-  pthread_mutex_t mtx;
   char    sid[IWN_WF_SESSION_ID_LEN + 1];    //< Session id
   uint8_t flags;
 };
