@@ -170,6 +170,20 @@ IW_EXPORT void iwn_wf_session_del(struct iwn_wf_req*, const char *key);
 
 IW_EXPORT void iwn_wf_session_clear(struct iwn_wf_req*);
 
+struct iwn_wf_cookie_opts {
+  const char *path;
+  const char *domain;
+  int  validity_sec;
+  bool httponly;
+  bool secure;
+};
+
+IW_EXPORT iwrc iwn_wf_cookie_add(
+  struct iwn_wf_req*,
+  const char                      *name,
+  const char                      *value,
+  const struct iwn_wf_cookie_opts opts);
+
 IW_EXPORT void iwn_wf_destroy(struct iwn_wf_ctx *ctx);
 
 IW_EXTERN_C_END;

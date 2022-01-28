@@ -15,11 +15,12 @@ struct iwn_http_server {
 };
 
 struct iwn_http_req {
-  void *request_user_data;                               ///< Request specific user data.
-  void *server_user_data;                                ///< User data specified in `iwn_http_server_spec`
-  void  (*on_request_dispose)(struct iwn_http_req*);     ///< Request dispose handler.
-  void  (*on_response_headers_write)(struct iwn_http_req*);
-  bool  (*on_response_completed)(struct iwn_http_req*);
+  void       *request_user_data;                         ///< Request specific user data.
+  void       *server_user_data;                          ///< User data specified in `iwn_http_server_spec`
+  const char *session_cookie_params;                     ///< Optional params used to store session cookie. Default: lax
+  void (*on_request_dispose)(struct iwn_http_req*);      ///< Request dispose handler.
+  void (*on_response_headers_write)(struct iwn_http_req*);
+  bool (*on_response_completed)(struct iwn_http_req*);
   struct iwn_poller_adapter *poller_adapter;
 };
 

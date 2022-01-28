@@ -3,6 +3,7 @@
 #include "utils/codec.h"
 
 #include <iowow/iwp.h>
+#include <iowow/iwxstr.h>
 
 #include <assert.h>
 #include <stdlib.h>
@@ -17,6 +18,7 @@
 static int _aunit;
 
 static const char* _ecodefn(locale_t, uint32_t);
+static void _response_headers_write(struct iwn_http_req *hreq);
 
 IW_INLINE iwrc _init(void) {
   static bool _initialized;
@@ -261,14 +263,6 @@ static void _request_on_dispose(struct iwn_http_req *hreq) {
   if (req) {
     _request_destroy(req);
   }
-}
-
-static void _response_headers_write(struct iwn_http_req *hreq) {
-  if (iwn_http_connection_is_upgrade(hreq)) {
-    // Do not write any extra headers on upgrade
-    return;
-  }
-  // TODO: Writes cookie headers
 }
 
 static iwrc _request_target_parse(struct request *req) {
@@ -1078,6 +1072,25 @@ static iwrc _request_sid_ensure(struct request *req) {
   return rc;
 }
 
+static void _response_headers_write(struct iwn_http_req *hreq) {
+  if (iwn_http_connection_is_upgrade(hreq)) {
+    // Do not write any extra headers on upgrade
+    return;
+  }
+  iwrc rc = 0;
+  IWXSTR *xstr = 0;
+  struct request *req = iwn_http_request_wf_data(hreq);
+  if (_request_sid_exists(req)) {
+    RCA(xstr = iwxstr_new(), finish);
+    RCC(rc, finish, iwxstr_printf(xstr, IWN_WF_SESSION_COOKIE_KEY "=%s; httponly; %s; Path=/",
+                                  req->sid,
+                                  hreq->session_cookie_params ? hreq->session_cookie_params : "samesite=lax"));
+  }
+
+finish:
+  iwxstr_destroy(xstr);
+}
+
 iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
   struct route *route;
   if (out_route) {
@@ -1170,6 +1183,31 @@ void iwn_wf_session_clear(struct iwn_wf_req *req_) {
     req->sid[0] = 0;
     ctx->sst.clear(&ctx->sst, req->sid);
   }
+}
+
+iwrc iwn_wf_cookie_add(
+  struct iwn_wf_req              *req,
+  const char                     *name,
+  const char                     *value,
+  const struct iwn_wf_cookie_opts opts
+  ) {
+  iwrc rc = 0;
+  IWXSTR *xstr;
+
+  RCA(xstr = iwxstr_new(), finish);
+  RCC(rc, finish, iwxstr_printf(xstr, "%s=%s", name, value));
+  if (opts.validity_sec < 0) {
+    RCC(rc, finish, iwxstr_cat2(xstr, "; expires=Thu, 01 Jan 1970 00:00:00 GMT"));
+  } else if (opts.validity_sec > 0) {
+    // TODO:
+  }
+
+
+
+
+finish:
+  iwxstr_destroy(xstr);
+  return rc;
 }
 
 iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {
