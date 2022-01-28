@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 #if defined(__FreeBSD__) || defined(__APPLE__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define IWN_KQUEUE
@@ -56,4 +56,4 @@ IW_EXPORT void iwn_poller_poll(struct iwn_poller *p);
 
 IW_EXPORT bool iwn_poller_alive(struct iwn_poller *p);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

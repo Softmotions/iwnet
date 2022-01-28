@@ -2,7 +2,7 @@
 
 #include "poller_adapter.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 typedef enum {
   _BRS_ERROR_START = (IW_ERROR_START + 204000UL),
@@ -49,4 +49,4 @@ struct iwn_brssl_server_poller_adapter_spec {
 
 IW_EXPORT iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapter_spec *spec);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

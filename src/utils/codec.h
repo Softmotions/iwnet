@@ -3,7 +3,7 @@
 #include <iowow/basedefs.h>
 #include "base64.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 IW_EXPORT IW_ALLOC char* iwn_url_encode_new(const char *src, ssize_t src_len);
 
@@ -15,4 +15,4 @@ IW_EXPORT void iwn_url_decode_inplace(char *str);
 
 IW_EXPORT size_t iwn_unescape_backslashes_inplace(char *str, ssize_t str_len);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

@@ -2,7 +2,7 @@
 
 #include "poller.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 struct iwn_proc_ctx {
 
@@ -61,4 +61,4 @@ IW_EXPORT void iwn_proc_kill_all(int signum);
 
 IW_EXPORT void iwn_proc_dispose(void);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

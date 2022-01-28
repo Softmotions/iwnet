@@ -1,6 +1,6 @@
 #include "ws.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 struct iwn_ws_client;
 
@@ -32,4 +32,4 @@ IW_EXPORT void iwn_ws_client_close(struct iwn_ws_client *ws);
 
 IW_EXPORT bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t buf_len);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

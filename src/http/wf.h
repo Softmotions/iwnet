@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 typedef enum {
   _WF_ERROR_START = (IW_ERROR_START + 205000UL),
@@ -138,4 +138,4 @@ IW_EXPORT void iwn_wf_session_remove(struct iwn_wf_req*, const char *name);
 
 IW_EXPORT void iwn_wf_destroy(struct iwn_wf_ctx *ctx);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

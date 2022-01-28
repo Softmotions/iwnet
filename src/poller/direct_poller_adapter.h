@@ -2,7 +2,7 @@
 
 #include "poller_adapter.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 IW_EXPORT iwrc iwn_direct_poller_adapter(
   struct iwn_poller            *p,
@@ -14,4 +14,4 @@ IW_EXPORT iwrc iwn_direct_poller_adapter(
   uint32_t                      events_mod,
   long                          timeout_sec);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

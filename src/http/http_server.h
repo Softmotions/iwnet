@@ -5,7 +5,7 @@
 
 #include <stdarg.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 struct iwn_http_server {
   const char *listen;
@@ -149,4 +149,4 @@ IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
 
 IW_EXPORT void iwn_http_inject_poller_events_handler(struct iwn_http_req*, iwn_on_poller_adapter_event eh);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;
