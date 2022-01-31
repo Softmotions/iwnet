@@ -389,21 +389,10 @@ static const char* _header_parse_skip_name(const char *rp, const char *ep) {
   return rp;
 }
 
-static const char* _header_parse_next_parameter(const char *rp, const char *ep, struct iwn_pair *kv) {
-  memset(kv, 0, sizeof(*kv));
-  if (rp == 0) {
-    return 0;
-  }
-  bool header_value = *rp == ':'; // Start if header value
-  if (!header_value) {
-    for ( ; rp < ep && *rp != ';'; ++rp) {
-      if (_c_is_lsep(*rp)) {
-        return 0;
-      }
-    }
-  }
-  ++rp;
-
+static const char* _header_parse_next_parameter2(
+  bool header_value, const char *rp, const char *ep,
+  struct iwn_pair *kv
+  ) {
   bool in_quote = false, in_key = true, expect_eq = false, val_escaped = false;
   const char *ks = rp, *ke = ks;
   const char *vs, *ve = 0;
@@ -493,15 +482,36 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
   }
 }
 
-const char* iwn_wf_header_val_part_next(const char *ptr, const char *end, struct iwn_pair *out) {
-  return _header_parse_next_parameter(ptr, end, out);
+static const char* _header_parse_next_parameter(const char *rp, const char *ep, struct iwn_pair *kv) {
+  memset(kv, 0, sizeof(*kv));
+  if (rp == 0) {
+    return 0;
+  }
+  bool header_value = *rp == ':'; // Start if header value
+  if (!header_value) {
+    for ( ; rp < ep && *rp != ';'; ++rp) {
+      if (_c_is_lsep(*rp)) {
+        return 0;
+      }
+    }
+  }
+  ++rp;
+  return _header_parse_next_parameter2(header_value, rp, ep, kv);
+}
+
+const char* iwn_wf_header_val_part_next(
+  const char *header_val, const char *ptr, const char *end,
+  struct iwn_pair *out
+  ) {
+  return _header_parse_next_parameter2(ptr == header_val, ptr, end, out);
 }
 
 struct iwn_pair iwn_wf_header_val_part_find(const char *ptr, const char *end, const char *name) {
   struct iwn_pair kv;
   size_t nlen = strlen(name);
+  const char *header_val = ptr;
   while (ptr) {
-    ptr = _header_parse_next_parameter(ptr, end, &kv);
+    ptr = _header_parse_next_parameter2(ptr == header_val, ptr, end, &kv);
     if (ptr && kv.key_len == nlen && strncmp(kv.key, name, nlen) == 0) {
       return kv;
     }
@@ -1077,18 +1087,14 @@ static void _response_headers_write(struct iwn_http_req *hreq) {
     // Do not write any extra headers on upgrade
     return;
   }
-  iwrc rc = 0;
-  IWXSTR *xstr = 0;
   struct request *req = iwn_http_request_wf_data(hreq);
   if (_request_sid_exists(req)) {
-    RCA(xstr = iwxstr_new(), finish);
-    RCC(rc, finish, iwxstr_printf(xstr, IWN_WF_SESSION_COOKIE_KEY "=%s; httponly; %s; Path=/",
-                                  req->sid,
-                                  hreq->session_cookie_params ? hreq->session_cookie_params : "samesite=lax"));
+    iwn_wf_cookie_add(&req->base, IWN_WF_SESSION_COOKIE_KEY, req->sid, (struct iwn_wf_cookie_opts) {
+      .path = "/",
+      .httponly = true,
+      .extra = hreq->session_cookie_params ? hreq->session_cookie_params : "; samesite=lax"
+    });
   }
-
-finish:
-  iwxstr_destroy(xstr);
 }
 
 iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
@@ -1151,9 +1157,9 @@ struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx) {
   return ((struct ctx*) ctx)->poller;
 }
 
-const char* iwn_wf_request_session_get(struct iwn_wf_req *req_, const char *key) {
+char* iwn_wf_session_get(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
-  struct ctx *ctx = (void*) &req->base.ctx;
+  struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {
     return ctx->sst.get(&ctx->sst, req->sid, key);
   } else {
@@ -1163,14 +1169,14 @@ const char* iwn_wf_request_session_get(struct iwn_wf_req *req_, const char *key)
 
 iwrc iwn_wf_session_put(struct iwn_wf_req *req_, const char *key, const char *data) {
   struct request *req = (void*) req_;
-  struct ctx *ctx = (void*) &req->base.ctx;
+  struct ctx *ctx = (void*) req->base.ctx;
   RCR(_request_sid_ensure(req));
   return ctx->sst.put(&ctx->sst, req->sid, key, data);
 }
 
 void iwn_wf_session_del(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
-  struct ctx *ctx = (void*) &req->base.ctx;
+  struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {
     ctx->sst.del(&ctx->sst, req->sid, key);
   }
@@ -1178,7 +1184,7 @@ void iwn_wf_session_del(struct iwn_wf_req *req_, const char *key) {
 
 void iwn_wf_session_clear(struct iwn_wf_req *req_) {
   struct request *req = (void*) req_;
-  struct ctx *ctx = (void*) &req->base.ctx;
+  struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {
     req->sid[0] = 0;
     ctx->sst.clear(&ctx->sst, req->sid);
@@ -1195,15 +1201,37 @@ iwrc iwn_wf_cookie_add(
   IWXSTR *xstr;
 
   RCA(xstr = iwxstr_new(), finish);
-  RCC(rc, finish, iwxstr_printf(xstr, "%s=%s", name, value));
+  RCC(rc, finish, iwxstr_printf(xstr, "%s=\"%s\"", name, value));
   if (opts.validity_sec < 0) {
     RCC(rc, finish, iwxstr_cat2(xstr, "; expires=Thu, 01 Jan 1970 00:00:00 GMT"));
   } else if (opts.validity_sec > 0) {
-    // TODO:
+    char buf[32];
+    time_t time = opts.validity_sec;
+    struct tm *timeinfo = gmtime(&time);
+    if (!timeinfo) {
+      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+      goto finish;
+    }
+    strftime(buf, sizeof(buf), "; expires=%a, %d %b %Y %T %Z", timeinfo);
+    RCC(rc, finish, iwxstr_cat2(xstr, buf));
+  }
+  if (opts.path) {
+    RCC(rc, finish, iwxstr_printf(xstr, "; path=\"%s\"", opts.path));
+  }
+  if (opts.domain) {
+    RCC(rc, finish, iwxstr_printf(xstr, "; domain=\"%s\"", opts.domain));
+  }
+  if (opts.httponly) {
+    RCC(rc, finish, iwxstr_cat(xstr, "; HttpOnly", IW_LLEN("; HttpOnly")));
+  }
+  if (opts.secure) {
+    RCC(rc, finish, iwxstr_cat(xstr, "; Secure", IW_LLEN("; Secure")));
+  }
+  if (opts.extra) {
+    RCC(rc, finish, iwxstr_cat2(xstr, opts.extra));
   }
 
-
-
+  rc = iwn_http_response_header_add(req->http, "set-cookie", iwxstr_ptr(xstr), iwxstr_size(xstr));
 
 finish:
   iwxstr_destroy(xstr);

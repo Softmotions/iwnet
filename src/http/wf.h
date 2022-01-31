@@ -149,6 +149,7 @@ IW_EXPORT struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx);
 
 IW_EXPORT const char* iwn_wf_header_val_part_next(
   const char      *header_val,
+  const char      *ptr,
   const char      *header_val_end,
   struct iwn_pair *out);
 
@@ -162,7 +163,7 @@ IW_EXPORT struct iwn_pair iwn_wf_header_part_find(
   const char *header_name,
   const char *part_name);
 
-IW_EXPORT const char* iwn_wf_request_session_get(struct iwn_wf_req*, const char *key);
+IW_EXPORT IW_ALLOC char* iwn_wf_session_get(struct iwn_wf_req*, const char *key);
 
 IW_EXPORT iwrc iwn_wf_session_put(struct iwn_wf_req*, const char *key, const char *data);
 
@@ -173,15 +174,17 @@ IW_EXPORT void iwn_wf_session_clear(struct iwn_wf_req*);
 struct iwn_wf_cookie_opts {
   const char *path;
   const char *domain;
+  const char *extra;
   int  validity_sec;
   bool httponly;
   bool secure;
 };
 
+/// `",;/` in `value` must be escaped.
 IW_EXPORT iwrc iwn_wf_cookie_add(
   struct iwn_wf_req*,
-  const char                      *name,
-  const char                      *value,
+  const char                     *name,
+  const char                     *value,
   const struct iwn_wf_cookie_opts opts);
 
 IW_EXPORT void iwn_wf_destroy(struct iwn_wf_ctx *ctx);

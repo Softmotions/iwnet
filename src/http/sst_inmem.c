@@ -76,13 +76,16 @@ static void _del(struct iwn_wf_session_store *sst, const char *sid, const char *
   pthread_mutex_unlock(&impl->mtx);
 }
 
-static char* _get(struct iwn_wf_session_store *sst, const char *sid, const char *key) {
+IW_ALLOC static char* _get(struct iwn_wf_session_store *sst, const char *sid, const char *key) {
   char *ret = 0;
   struct impl *impl = sst->user_data;
   pthread_mutex_lock(&impl->mtx);
   IWHMAP *map = iwhmap_get(impl->sidmap, sid);
   if (map) {
     ret = iwhmap_get(map, key);
+    if (ret) {
+      ret = strdup(ret);
+    }
   }
   pthread_mutex_unlock(&impl->mtx);
   return ret;

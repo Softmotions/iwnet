@@ -113,6 +113,23 @@ static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
   }
 }
 
+static int _handle_session_put(struct iwn_wf_req *req, void *user_data) {
+  IWN_ASSERT(iwn_wf_session_put(req, "mykey", "70b2a86f-025b-4805-b267-871f3e1bc170") == 0);
+  return 200;
+}
+
+static int _handle_session_get(struct iwn_wf_req *req, void *user_data) {
+  char *val = iwn_wf_session_get(req, "mykey");
+  if (val) {
+    bool ret = iwn_http_response_write(req->http, 200, "text/plan", val, strlen(val), 0);
+    IWN_ASSERT(ret);
+    free(val);
+    return 1;
+  } else {
+    return 500;
+  }
+}
+
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();
@@ -217,8 +234,19 @@ int main(int argc, char *argv[]) {
     .flags = IWN_WF_POST
   }, 0));
 
-  // Start the server:
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "/session/put",
+    .handler = _handle_session_put,
+  }, 0));
 
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "/session/get",
+    .handler = _handle_session_get,
+  }, 0));
+
+  // Start the server:
   RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));
 
   struct iwn_wf_server_spec spec = {

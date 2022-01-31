@@ -45,7 +45,7 @@ run() {
   sleep 1
 
   BASE="${PROTO}://localhost:${PORT}"
-  FILTER='sed -r /(date|user-agent|trying|tcp)|^\*/Id'
+  FILTER='sed -r /(date|user-agent|trying|tcp|sessionid)|^\*/Id'
 
   echo "\n\nGet empty:"
   curl -isk ${BASE}/get/empty | ${FILTER}
@@ -76,6 +76,12 @@ run() {
   echo "\n\nPost multipart:"
   curl -sk -XPOST -H'Expect:' -F 'foo=bar' -F 'baz=a%40z' -F 'bigparam=@test.dat;type=text/plain' \
     ${BASE}/post/multipart | ${FILTER}
+
+  echo "\n\nSession put:"
+  curl -isk -c ./cookie.jar ${BASE}/session/put | ${FILTER}
+
+  echo "\n\nSession get:"
+  curl -isk -b ./cookie.jar ${BASE}/session/get | ${FILTER}
 }
 
 if [ -n "${VALGRIND}" ]; then

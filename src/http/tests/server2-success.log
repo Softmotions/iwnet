@@ -49,3 +49,19 @@ Post chunked:
 
 Post multipart:
 OK
+
+Session put:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: text/plain
+content-length: 2
+
+OK
+
+Session get:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: text/plan
+content-length: 36
+
+70b2a86f-025b-4805-b267-871f3e1bc170

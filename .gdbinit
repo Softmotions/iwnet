@@ -1,6 +1,5 @@
-cd ./build/src/ws/tests
-file ./ws_server1
-#file ./wf_test1
+cd ./build/src/http/tests
+file ./server2
 #set args --ssl
 
 set confirm off

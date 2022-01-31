@@ -362,7 +362,11 @@ static void _server_time(struct server *server, char out_buf[32]) {
   if (server->stime != rawtime) {
     server->stime = rawtime;
     struct tm *timeinfo = gmtime(&rawtime);
-    strftime(server->stime_text, sizeof(server->stime_text), "%a, %d %b %Y %T GMT", timeinfo);
+    if (timeinfo) {
+      strftime(server->stime_text, sizeof(server->stime_text), "%a, %d %b %Y %T %Z", timeinfo);
+    } else {
+      out_buf[0] = '\0';
+    }
   }
   memcpy(out_buf, server->stime_text, sizeof(server->stime_text));
   pthread_mutex_unlock(&server->mtx);
@@ -1342,7 +1346,7 @@ static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *x
   }
   char dbuf[32];
   _server_time(client->server, dbuf);
-  RCC(rc, finish, iwxstr_printf(xstr, "HTTP/1.1 %d %s\r\nDate: %s\r\n",
+  RCC(rc, finish, iwxstr_printf(xstr, "HTTP/1.1 %d %s\r\ndate: %s\r\n",
                                 client->response.code,
                                 _status_text[client->response.code],
                                 dbuf));
