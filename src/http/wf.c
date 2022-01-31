@@ -405,8 +405,7 @@ static const char* _header_parse_next_parameter2(
           vs = ++rp;
         } else if (_c_is_space(*rp)) {
           if (ke == ks) {
-            ++ks;
-            ke = ks;
+            ke = ++ks;
           }
           ++rp;
         } else if (*rp == ';' || _c_is_lsep(*rp)) {

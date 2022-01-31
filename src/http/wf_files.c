@@ -9,11 +9,12 @@
 #include <errno.h>
 
 #define BOUNDARY_LEN 32
+#define CTYPE_LEN    128
 
 struct range {
-  int start;
-  int end;
-  int pos; // Position winin a range
+  int64_t       start;
+  int64_t       end;
+  int64_t       pos; // Position winin a range
   struct range *next;
 };
 
@@ -22,7 +23,7 @@ struct ctx {
   struct range *ranges;
   IWP_FILE_STAT fs;
   char boundary[BOUNDARY_LEN];
-  char ctype[128];
+  char ctype[CTYPE_LEN];
 };
 
 static void _ctx_destroy(struct ctx *ctx) {
@@ -39,8 +40,57 @@ static void _ctx_destroy(struct ctx *ctx) {
   }
 }
 
+static const char* _ranges_parse_next(const char *rp, const char *ep, struct range *range) {
+  range->start = range->end = INT64_MAX;
+  int64_t *rv = &range->start;
+  while (rp < ep) {
+    switch (*rp) {
+      case ' ':
+        ++rp;
+        if (*rv != INT64_MAX) {
+          range->start = range->end = INT64_MIN; // invalid
+          return 0;
+        }
+        break;
+      case ',':
+        return ++rp;
+      case '-':
+        ++rp;
+        if (rv == &range->start) {
+          rv = &range->end;
+          break;
+        } else {
+          range->start = range->end = INT64_MIN; // invalid
+          return 0;
+        }
+      case '0':
+      case '1':
+      case '2':
+      case '3':
+      case '4':
+      case '5':
+      case '6':
+      case '7':
+      case '8':
+      case '9':
+        if (*rv == INT64_MAX) {
+          *rv = 0;
+        }
+        *rv = *rv * 10 + *rp - '0';
+        ++rp;
+        break;
+      default:
+        range->start = range->end = INT64_MIN; // invalid
+        break;
+    }
+  }
+  return 0;
+}
+
 static iwrc _ranges_parse(struct ctx *ctx, const char *ranges, const char *ep) {
   iwrc rc = 0;
+
+  // TODO:
 
   return rc;
 }
@@ -87,7 +137,7 @@ int iwn_wf_files_serve(struct iwn_wf_req *req, const char *ctype, const char *pa
     RCC(rc, finish, _ranges_parse(ctx, val.buf, val.buf + val.len));
   }
   if (ctype) {
-    strncpy(ctx->ctype, ctype, strlen(ctype));
+    strncpy(ctx->ctype, ctype, sizeof(ctx->ctype));
     ctx->ctype[sizeof(ctx->ctype) - 1] = '\0';
   }
 
