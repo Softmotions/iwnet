@@ -4,8 +4,6 @@
 #include <iowow/iwp.h>
 #include <iowow/iwutils.h>
 
-IW_EXTERN_C_START;
-
 static bool iwn_is_zero(void *p, size_t len) {
   for (size_t i = 0; i < len; ++i) {
     if (*((char*) p + i) != 0) {
@@ -38,4 +36,3 @@ static iwrc iwn_ts(int64_t *out) {
   }
 }
 
-IW_EXTERN_C_END;

@@ -149,14 +149,14 @@ IW_EXPORT iwrc iwn_http_response_chunk_write(
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
 
-IW_EXPORT void iwn_http_response_raw_write(
+IW_EXPORT void iwn_http_response_stream_write(
   struct iwn_http_req          *request,
   char                         *buf,
   ssize_t                       buf_len,
   void (                       *buf_free )(void*),
   iwn_http_server_chunk_handler chunk_cb);
 
-IW_EXPORT void iwn_http_response_raw_end(struct iwn_http_req *request);
+IW_EXPORT void iwn_http_response_stream_end(struct iwn_http_req *request);
 
 IW_EXPORT void iwn_http_inject_poller_events_handler(struct iwn_http_req*, iwn_on_poller_adapter_event eh);
 
