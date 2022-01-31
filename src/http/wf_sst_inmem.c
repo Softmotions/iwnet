@@ -1,4 +1,4 @@
-#include "sst_inmem.h"
+#include "wf_sst_inmem.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwhmap.h>

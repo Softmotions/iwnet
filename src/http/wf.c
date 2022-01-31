@@ -1,5 +1,5 @@
 #include "wf_internal.h"
-#include "sst_inmem.h"
+#include "wf_sst_inmem.h"
 #include "utils/codec.h"
 
 #include <iowow/iwp.h>
@@ -1098,6 +1098,9 @@ static void _response_headers_write(struct iwn_http_req *hreq) {
 }
 
 iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route) {
+  if (!spec) {
+    return IW_ERROR_INVALID_ARGS;
+  }
   struct route *route;
   if (out_route) {
     *out_route = 0;

@@ -310,14 +310,17 @@ finish:
 }
 
 struct iwn_wf_route* iwn_ws_server_route_attach(struct iwn_wf_route *route, const struct iwn_ws_handler_spec *spec_) {
-  assert(route && spec_);
-  struct iwn_ws_handler_spec *spec = malloc(sizeof(*spec));
-  if (spec) {
-    memcpy(spec, spec_, sizeof(*spec));
-    route->handler = _route_handler;
-    route->handler_dispose = _route_handler_dispose;
-    route->user_data = spec;
+  if (!route || !spec_) {
+    return 0;
   }
+  struct iwn_ws_handler_spec *spec = malloc(sizeof(*spec));
+  if (!spec) {
+    return 0;
+  }
+  memcpy(spec, spec_, sizeof(*spec));
+  route->handler = _route_handler;
+  route->handler_dispose = _route_handler_dispose;
+  route->user_data = spec;
   return route;
 }
 
