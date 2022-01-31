@@ -29,7 +29,7 @@ typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
 /// Request handler.
 /// Returns `false` if client connection shold be removed from poller (terminated).
 typedef bool (*iwn_http_server_request_handler)(struct iwn_http_req*);
-typedef iwn_http_server_request_handler iwn_http_server_request_chunk_handler;
+typedef iwn_http_server_request_handler iwn_http_server_chunk_handler;
 
 struct iwn_http_server_spec {
   iwn_http_server_request_handler request_handler; ///< Required request handler.
@@ -43,7 +43,6 @@ struct iwn_http_server_spec {
   ssize_t     private_key_len;
   int  port;                          ///< Default: 8080 http, 8443 https
   int  socket_queue_size;             ///< Default: 64
-  int  response_buf_size;             ///< Default: 1024
   int  request_buf_max_size;          ///< Default: 8Mb
   int  request_buf_size;              ///< Default: 1024
   int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 Use default timeout: 120sec
@@ -58,7 +57,7 @@ IW_EXPORT WUR iwrc iwn_http_server_create(
   const struct iwn_http_server_spec*,
   int *out_fd);
 
-IW_EXPORT void iwn_http_request_chunk_next(struct iwn_http_req*, iwn_http_server_request_chunk_handler);
+IW_EXPORT void iwn_http_request_chunk_next(struct iwn_http_req*, iwn_http_server_chunk_handler);
 
 IW_EXPORT struct iwn_val iwn_http_request_chunk_get(struct iwn_http_req*);
 
@@ -130,8 +129,7 @@ IW_EXPORT bool iwn_http_response_write(
   int         status_code,
   const char *content_type,
   const char *body,
-  ssize_t     body_len,
-  void (     *body_free )(void*));
+  ssize_t     body_len);
 
 IW_EXPORT bool iwn_http_response_printf(
   struct iwn_http_req*,
@@ -147,10 +145,18 @@ IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_req*,
   char *body,
   ssize_t body_len,
-  void (*body_free)(void*),
-  iwn_http_server_request_chunk_handler);
+  iwn_http_server_chunk_handler);
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
+
+IW_EXPORT void iwn_http_response_raw_write(
+  struct iwn_http_req          *request,
+  char                         *buf,
+  ssize_t                       buf_len,
+  void (                       *buf_free )(void*),
+  iwn_http_server_chunk_handler chunk_cb);
+
+IW_EXPORT void iwn_http_response_raw_end(struct iwn_http_req *request);
 
 IW_EXPORT void iwn_http_inject_poller_events_handler(struct iwn_http_req*, iwn_on_poller_adapter_event eh);
 

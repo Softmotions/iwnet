@@ -294,7 +294,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
   hreq->on_response_completed = _on_response_completed;
 
   iwn_http_connection_set_upgrade(hreq);
-  if (iwn_http_response_write(hreq, 101, "", 0, 0, 0)) {
+  if (iwn_http_response_write(hreq, 101, "", 0, 0)) {
     rv = 1;
   }
 

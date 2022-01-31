@@ -130,7 +130,6 @@ struct iwn_wf_server_spec {
   int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 Use default timeout: 120sec
   int  request_timeout_sec;           ///< -1 Disable timeout, 0 Use default timeout: 20sec
   int  request_token_max_len;         ///< Default: 8192
-  int  response_buf_size;             ///< Default: 1024
   bool certs_in_buffer;               ///< true if `certs_data` specified as data buffer rather a file name.
   bool private_key_in_buffer;         ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };

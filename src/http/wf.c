@@ -1266,7 +1266,6 @@ iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ct
   http.private_key_in_buffer = spec.private_key_in_buffer;
   http.private_key_len = spec.private_key_len;
   http.socket_queue_size = spec.socket_queue_size;
-  http.response_buf_size = spec.response_buf_size;
   http.request_buf_max_size = spec.request_buf_max_size;
   http.request_buf_size = spec.request_buf_size;
   http.request_timeout_keepalive_sec = spec.request_timeout_keepalive_sec;

@@ -54,6 +54,7 @@ struct tokens_buf {
 
 struct stream {
   char *buf;
+  void  (*buf_free)(void*);
   struct token token;
   ssize_t      bytes_total;
   ssize_t      capacity;
@@ -90,7 +91,7 @@ struct response {
 
 struct client {
   struct iwn_http_req request;
-  iwn_http_server_request_chunk_handler chunk_cb;
+  iwn_http_server_chunk_handler chunk_cb;
   IWPOOL *pool;
   iwn_on_poller_adapter_event injected_poller_evh;
   struct server    *server;
@@ -133,7 +134,8 @@ struct client {
 #define HTTP_END_SESSION      0x04U
 #define HTTP_AUTOMATIC        0x08U
 #define HTTP_CHUNKED_RESPONSE 0x10U
-#define HTTP_UPGRADE          0x20U
+#define HTTP_RAW_RESPONSE     0x20U
+#define HTTP_UPGRADE          0x40U
 
 // http version indicators
 #define HTTP_1_0 0
@@ -373,7 +375,9 @@ static void _server_time(struct server *server, char out_buf[32]) {
 }
 
 IW_INLINE void _stream_free_buffer(struct client *client) {
-  if (client->stream.buf) {
+  if (IW_UNLIKELY(client->stream.buf_free)) {
+    client->stream.buf_free(client->stream.buf);
+  } else {
     free(client->stream.buf);
   }
   memset(&client->stream, 0, sizeof(client->stream));
@@ -477,12 +481,7 @@ static ssize_t _stream_jumpall(struct stream *stream) {
 //								              Client                                   //
 ///////////////////////////////////////////////////////////////////////////
 
-IW_INLINE void _response_free(struct client *client) {
-  struct response *response = &client->response;
-  if (response->pool) {
-    iwpool_destroy(response->pool);
-    response->pool = 0;
-  }
+IW_INLINE void _response_body_free(struct response *response) {
   if (response->body) {
     if (response->body_free) {
       response->body_free((void*) response->body);
@@ -490,12 +489,21 @@ IW_INLINE void _response_free(struct client *client) {
     }
     response->body = 0;
   }
+}
+
+IW_INLINE void _response_free(struct client *client) {
+  struct response *response = &client->response;
+  if (response->pool) {
+    iwpool_destroy(response->pool);
+    response->pool = 0;
+  }
+  _response_body_free(response);
   response->headers = 0;
   response->code = 200;
 }
 
 static bool _client_response_error(struct client *client, int code, char *response) {
-  return iwn_http_response_write(&client->request, code, "text/plain", response, -1, 0);
+  return iwn_http_response_write(&client->request, code, "text/plain", response, -1);
 }
 
 static void _client_reset(struct client *client) {
@@ -561,7 +569,7 @@ static void _client_write(struct client *client) {
   if (stream->bytes_total != stream->length) {
     RCC(rc, finish, iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT));
     client->state = HTTP_SESSION_WRITE;
-  } else if (client->flags & HTTP_CHUNKED_RESPONSE) {
+  } else if (client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_RAW_RESPONSE)) {
     client->state = HTTP_SESSION_WRITE;
     _stream_free_buffer(client);
     if (client->server->spec.request_timeout_sec > 0) {
@@ -1040,7 +1048,7 @@ struct iwn_val iwn_http_request_body(struct iwn_http_req *request) {
   return _token_get_string((void*) request, HS_TOK_BODY);
 }
 
-void iwn_http_request_chunk_next(struct iwn_http_req *request, iwn_http_server_request_chunk_handler chunk_cb) {
+void iwn_http_request_chunk_next(struct iwn_http_req *request, iwn_http_server_chunk_handler chunk_cb) {
   struct client *client = (void*) request;
   client->chunk_cb = chunk_cb;
   _client_read(client);
@@ -1311,7 +1319,7 @@ static iwrc _client_response_headers_write(struct client *client, IWXSTR *xstr) 
   for (struct header *h = client->response.headers; h; h = h->next) {
     RCC(rc, finish, iwxstr_printf(xstr, "%s: %s\r\n", h->name, h->value));
   }
-  if (!(client->flags & HTTP_CHUNKED_RESPONSE)) {
+  if (!(client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_RAW_RESPONSE))) {
     RCC(rc, finish, iwxstr_printf(xstr, "content-length: %d\r\n", (int) client->response.body_len));
   }
   rc = iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1);
@@ -1357,15 +1365,26 @@ finish:
   return rc;
 }
 
-static void _client_response_write(struct client *client, IWXSTR *xstr) {
+IW_INLINE void _client_response_write(struct client *client, IWXSTR *xstr) {
   _stream_free_buffer(client);
   struct stream *s = &client->stream;
-  s->length = iwxstr_size(xstr);
-  s->capacity = iwxstr_asize(xstr);
   s->buf = iwxstr_ptr(xstr);
-  s->bytes_total = 0;
+  s->length = iwxstr_size(xstr);
+  s->capacity = s->length;
   client->state = HTTP_SESSION_WRITE;
   iwxstr_destroy_keep_ptr(xstr);
+  _response_free(client);
+  _client_write(client);
+}
+
+IW_INLINE void _client_response_write2(struct client *client, char *buf, ssize_t buf_len, void (*buf_free)(void*)) {
+  _stream_free_buffer(client);
+  struct stream *s = &client->stream;
+  s->buf = buf;
+  s->buf_free = buf_free;
+  s->length = buf_len;
+  s->capacity = s->length;
+  client->state = HTTP_SESSION_WRITE;
   _response_free(client);
   _client_write(client);
 }
@@ -1374,7 +1393,7 @@ iwrc iwn_http_response_end(struct iwn_http_req *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
-  IWXSTR *xstr = iwxstr_new2(client->server->spec.response_buf_size);
+  IWXSTR *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -1382,6 +1401,7 @@ iwrc iwn_http_response_end(struct iwn_http_req *request) {
   if (response->body) {
     RCC(rc, finish, iwxstr_cat(xstr, response->body, response->body_len));
   }
+
   _client_response_write(client, xstr);
 
 finish:
@@ -1391,29 +1411,79 @@ finish:
   return rc;
 }
 
-iwrc iwn_http_response_chunk_write(
-  struct iwn_http_req                  *request,
-  char                                 *body,
-  ssize_t                               body_len,
-  void (                               *body_free )(void*),
-  iwn_http_server_request_chunk_handler chunk_cb
+iwrc iwn_http_respose_raw_start(
+  struct iwn_http_req          *request,
+  iwn_http_server_chunk_handler chunk_cb
   ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
-  IWXSTR *xstr = iwxstr_new2(client->server->spec.response_buf_size);
+  IWXSTR *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
+  client->chunk_cb = chunk_cb;
+  if (!(client->flags & HTTP_RAW_RESPONSE)) {
+    client->flags |= HTTP_RAW_RESPONSE;
+    RCC(rc, finish, _client_response_headers_write_http(client, xstr));
+  }
+
+  _client_response_write(client, xstr);
+
+finish:
+  if (rc) {
+    iwxstr_destroy(xstr);
+  }
+  return rc;
+}
+
+void iwn_http_response_raw_write(
+  struct iwn_http_req          *request,
+  char                         *buf,
+  ssize_t                       buf_len,
+  void (                       *buf_free )(void*),
+  iwn_http_server_chunk_handler chunk_cb
+  ) {
+  if (buf_len < 0) {
+    buf_len = strlen(buf);
+  }
+  struct client *client = (void*) request;
+  if (chunk_cb) {
+    client->chunk_cb = chunk_cb;
+  } else {
+    client->flags &= ~HTTP_RAW_RESPONSE;
+  }
+  _client_response_write2(client, buf, buf_len, buf_free);
+}
+
+void iwn_http_response_raw_end(struct iwn_http_req *request) {
+  iwn_http_response_raw_write(request, 0, 0, 0, 0);
+}
+
+iwrc iwn_http_response_chunk_write(
+  struct iwn_http_req          *request,
+  char                         *body,
+  ssize_t                       body_len,
+  iwn_http_server_chunk_handler chunk_cb
+  ) {
+  iwrc rc = 0;
+  struct client *client = (void*) request;
+  struct response *response = &client->response;
+  if (body_len < 0) {
+    body_len = strlen(body);
+  }
+  IWXSTR *xstr = iwxstr_new();
+  if (!xstr) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  client->chunk_cb = chunk_cb;
   if (!(client->flags & HTTP_CHUNKED_RESPONSE)) {
     client->flags |= HTTP_CHUNKED_RESPONSE;
     iwn_http_response_header_set(request, "transfer-encoding", "chunked", IW_LLEN("chunked"));
     RCC(rc, finish, _client_response_headers_write_http(client, xstr));
   }
-  iwn_http_response_body_set(request, body, body_len, body_free);
-  client->chunk_cb = chunk_cb;
-  RCC(rc, finish, iwxstr_printf(xstr, "%X\r\n", response->body_len));
-  RCC(rc, finish, iwxstr_cat(xstr, response->body, response->body_len));
+  RCC(rc, finish, iwxstr_printf(xstr, "%X\r\n", body_len));
+  RCC(rc, finish, iwxstr_cat(xstr, body, body_len));
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
 
   _client_response_write(client, xstr);
@@ -1436,6 +1506,7 @@ iwrc iwn_http_response_chunk_end(struct iwn_http_req *request) {
   RCC(rc, finish, _client_response_headers_write(client, xstr));
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
   client->flags &= ~HTTP_CHUNKED_RESPONSE;
+
   _client_response_write(client, xstr);
 
 finish:
@@ -1450,8 +1521,7 @@ bool iwn_http_response_write(
   int                  status_code,
   const char          *content_type,
   const char          *body,
-  ssize_t              body_len,
-  void (              *body_free )(void*)
+  ssize_t              body_len
   ) {
   iwrc rc = 0;
   RCC(rc, finish, iwn_http_response_code_set(request, status_code));
@@ -1462,7 +1532,7 @@ bool iwn_http_response_write(
     // Content-type header disabled if empty
     RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type, IW_LLEN("content-type")));
   }
-  iwn_http_response_body_set(request, body, body_len, body_free);
+  iwn_http_response_body_set(request, body, body_len, 0);
   rc = iwn_http_response_end(request);
 
 finish:
@@ -1475,7 +1545,7 @@ finish:
 
 bool iwn_http_response_by_code(struct iwn_http_req *request, int code) {
   const char *text = _status_text[code];
-  return iwn_http_response_write(request, code, "text/plain", text, -1, 0);
+  return iwn_http_response_write(request, code, "text/plain", text, -1);
 }
 
 IW_INLINE int _printf_estimate_size(const char *format, va_list ap) {
@@ -1511,7 +1581,9 @@ bool iwn_http_response_printf_va(
     free(buf);
     return false;
   }
-  return iwn_http_response_write(req, status_code, content_type, buf, size, free);
+  bool ret = iwn_http_response_write(req, status_code, content_type, buf, size);
+  free(buf);
+  return ret;
 }
 
 bool iwn_http_response_printf(
@@ -1669,9 +1741,6 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   }
   if (spec->request_buf_max_size < 1024 * 1024) {
     spec->request_buf_max_size = 8 * 1024 * 1024;
-  }
-  if (spec->response_buf_size < 1) {
-    spec->response_buf_size = 1024;
   }
 
   server->https = spec->certs && spec->certs_len && spec->private_key && spec->private_key_len;

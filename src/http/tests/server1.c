@@ -62,7 +62,7 @@ static bool _chunk_resp_cb(struct iwn_http_req *req) {
       break;
   }
   if (cdata) {
-    iwrc rc = iwn_http_response_chunk_write(req, cdata, -1, 0, _chunk_resp_cb);
+    iwrc rc = iwn_http_response_chunk_write(req, cdata, -1, _chunk_resp_cb);
     IWN_ASSERT(rc == 0);
   } else {
     iwrc rc = iwn_http_response_chunk_end(req);
@@ -101,7 +101,7 @@ static bool _request_handler(struct iwn_http_req *req) {
   } else if (iwn_http_request_target_is(req, "/chunked", -1)) {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain", -1));
     RCC(rc, finish, iwn_http_response_chunk_write(req, "\n4cd009fb-dceb-4907-a6be-dd05c3f052b3",
-                                                  -1, 0, _chunk_resp_cb));
+                                                  -1, _chunk_resp_cb));
     goto finish;
   } else {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain", -1));

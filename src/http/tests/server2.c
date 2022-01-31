@@ -28,7 +28,7 @@ static void _on_root_dispose(struct iwn_wf_ctx *ctx, void *data) {
 
 static int _handle_root(struct iwn_wf_req *req, void *user_data) {
   ++_handle_root_cnt;
-  if (!iwn_http_response_write(req->http, 404, "text/plain", "Not found from root", -1, 0)) {
+  if (!iwn_http_response_write(req->http, 404, "text/plain", "Not found from root", -1)) {
     return -1;
   } else {
     return 1;
@@ -76,7 +76,7 @@ static int _handle_post_urlencoded(struct iwn_wf_req *req, void *user_data) {
 
 static int _handle_put_data(struct iwn_wf_req *req, void *user_data) {
   IWN_ASSERT(req->body && req->body_len);
-  bool ret = iwn_http_response_write(req->http, 200, "text/plan", req->body, req->body_len, 0);
+  bool ret = iwn_http_response_write(req->http, 200, "text/plan", req->body, req->body_len);
   IWN_ASSERT(ret);
   return 1;
 }
@@ -84,7 +84,7 @@ static int _handle_put_data(struct iwn_wf_req *req, void *user_data) {
 static int _handle_post_bigparam(struct iwn_wf_req *req, void *user_data) {
   struct iwn_val bigparam = iwn_pair_find_val(&req->form_params, "bigparam", -1);
   IWN_ASSERT(bigparam.len && bigparam.buf);
-  bool ret = iwn_http_response_write(req->http, 200, "text/plain", bigparam.buf, bigparam.len, 0);
+  bool ret = iwn_http_response_write(req->http, 200, "text/plain", bigparam.buf, bigparam.len);
   IWN_ASSERT(ret)
   return 1;
 }
@@ -121,7 +121,7 @@ static int _handle_session_put(struct iwn_wf_req *req, void *user_data) {
 static int _handle_session_get(struct iwn_wf_req *req, void *user_data) {
   char *val = iwn_wf_session_get(req, "mykey");
   if (val) {
-    bool ret = iwn_http_response_write(req->http, 200, "text/plan", val, strlen(val), 0);
+    bool ret = iwn_http_response_write(req->http, 200, "text/plan", val, strlen(val));
     IWN_ASSERT(ret);
     free(val);
     return 1;
