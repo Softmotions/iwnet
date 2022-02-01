@@ -333,12 +333,9 @@ static bool _file_serve_norange_cb(struct iwn_http_req *req) {
 
 static iwrc _file_serve_norange(struct ctx *ctx) {
   iwrc rc = 0;
-  long lv;
   RCC(rc, finish, iwn_http_response_header_set(ctx->req->http, "content-type", ctx->ctype, -1));
-  RCN(finish, fseek(ctx->file, 0, SEEK_END));
-  RCN(finish, lv = ftell(ctx->file));
-  RCN(finish, fseek(ctx->file, 0, SEEK_SET));
-  RCC(rc, finish, iwn_http_response_header_i64_set(ctx->req->http, "content-length", lv));
+  RCC(rc, finish, iwn_http_response_header_i64_set(ctx->req->http, "content-length", ctx->fs.size));
+
   rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_norange_cb);
 
 finish:
