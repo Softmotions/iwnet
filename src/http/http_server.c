@@ -357,6 +357,10 @@ static char const *_status_text[] = {
 static iwrc _server_ref(struct server *server, struct server **out);
 static void _server_unref(struct server *server);
 
+static void _noop_free(void *ptr) {
+  ;
+}
+
 static void _server_time(struct server *server, char out_buf[32]) {
   static_assert(sizeof(server->stime_text) == 32, "sizeof(server->stime) == 32");
   time_t rawtime;
@@ -392,13 +396,13 @@ IW_INLINE void _tokens_free_buffer(struct client *client) {
 }
 
 IW_INLINE void _request_data_free(struct client *client) {
-  if (client->_wf_on_request_dispose) {
-    client->_wf_on_request_dispose(&client->request);
-    client->_wf_on_request_dispose = 0;
-  }
   if (client->request.on_request_dispose) {
     client->request.on_request_dispose(&client->request);
     client->request.on_request_dispose = 0;
+  }
+  if (client->_wf_on_request_dispose) {
+    client->_wf_on_request_dispose(&client->request);
+    client->_wf_on_request_dispose = 0;
   }
   client->_wf_data = 0;
   client->_ws_data = 0;
@@ -1510,6 +1514,9 @@ void iwn_http_response_stream_write(
   void (                       *buf_free )(void*),
   iwn_http_server_chunk_handler chunk_cb
   ) {
+  if (!buf_free) {
+    buf_free = _noop_free;
+  }
   if (buf_len < 0) {
     buf_len = strlen(buf);
   }

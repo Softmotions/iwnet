@@ -45,7 +45,7 @@ run() {
   sleep 1
 
   BASE="${PROTO}://localhost:${PORT}"
-  FILTER='sed -r /(date|user-agent|trying|tcp|sessionid)|^\*/Id'
+  FILTER='sed -r /(date|user-agent|trying|tcp|sessionid|etag)|^\*/Id'
 
   echo "\n\nGet empty:"
   curl -isk ${BASE}/get/empty | ${FILTER}
@@ -71,7 +71,9 @@ run() {
   curl -sk -XPOST -H'Expect:' -H'Transfer-Encoding: chunked' --data-urlencode bigparam@test.dat -o r1.dat \
     ${BASE}/post/bigparam 
 
-  diff ./test.dat ./r1.dat 
+  if ! cmp -s ./test.dat ./r1.dat; then
+    echo "./test.dat and ./r1.dat differs"
+  fi
   
   echo "\n\nPost multipart:"
   curl -sk -XPOST -H'Expect:' -F 'foo=bar' -F 'baz=a%40z' -F 'bigparam=@test.dat;type=text/plain' \
@@ -82,6 +84,34 @@ run() {
 
   echo "\n\nSession get:"
   curl -isk -b ./cookie.jar ${BASE}/session/get | ${FILTER}
+
+  echo "\n\nFile get:"
+  curl -sk ${BASE}/file/test.dat -o r1.dat | ${FILTER}
+  
+  if ! cmp -s ./test.dat ./r1.dat; then
+    echo "./test.dat and ./r1.dat differs"
+  fi
+
+  echo -n "ae0150d3-c811-4313-b5d5-89fcfc29f8c6" > chunks.txt
+
+  echo "\n\nRange1:"
+  curl -isk -H'Range: bytes=0-7' ${BASE}/file/chunks.txt | ${FILTER}
+
+  echo "\n\nRange2:"
+  curl -isk -H'Range: bytes=0-0' ${BASE}/file/chunks.txt | ${FILTER}
+
+  echo "\n\nRange3:"
+  curl -isk -H'Range: bytes=-1' ${BASE}/file/chunks.txt | ${FILTER}
+
+  echo "\n\nRange4:"
+  curl -isk -H'Range: bytes=-1111' ${BASE}/file/chunks.txt | ${FILTER}
+
+  echo "\n\nRange5:"
+  curl -isk -H'Range: bytes=' ${BASE}/file/chunks.txt | ${FILTER}
+
+  echo "\n\nRange6:"
+  curl -isk -H'Range: bytes=1' ${BASE}/file/chunks.txt | ${FILTER}
+
 }
 
 if [ -n "${VALGRIND}" ]; then

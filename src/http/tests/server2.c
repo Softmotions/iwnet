@@ -1,5 +1,6 @@
 #include "utils/tests.h"
 #include "wf.h"
+#include "wf_files.h"
 
 #include <iowow/iwconv.h>
 
@@ -130,6 +131,12 @@ static int _handle_session_get(struct iwn_wf_req *req, void *user_data) {
   }
 }
 
+static int _handle_file_get(struct iwn_wf_req *req, void *user_data) {
+  const char *path = req->path_unmatched;
+  while (*path == '/') ++path;
+  return iwn_wf_file_serve(req, 0, path);
+}
+
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();
@@ -244,6 +251,13 @@ int main(int argc, char *argv[]) {
     .ctx = ctx,
     .pattern = "/session/get",
     .handler = _handle_session_get,
+  }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "/file",
+    .handler = _handle_file_get,
+    .flags = IWN_WF_MATCH_PREFIX,
   }, 0));
 
   // Start the server:
