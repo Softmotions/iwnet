@@ -26,7 +26,6 @@ struct ctx {
   struct iwn_wf_req *req;
   FILE *file;
   struct range *ranges;
-  int http_code;
   IWP_FILE_STAT fs;
   bool range_processed;
   char boundary[BOUNDARY_MAX];
@@ -339,7 +338,7 @@ finish:
 static iwrc _file_serve(struct ctx *ctx) {
   ctx->req->http->request_user_data = ctx;
   ctx->req->http->on_request_dispose = _on_request_dispose;
-  if (IW_UNLIKELY(ctx->ranges && ctx->fs.size > 0)) {
+  if (IW_UNLIKELY(ctx->ranges)) {
     if (IW_UNLIKELY(ctx->ranges->next)) {
       return _file_serve_ranges_multiple(ctx);
     } else {
@@ -362,7 +361,7 @@ int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *pat
     goto finish;
   }
 
-  if (ctype) {
+  if (ctype && *ctype != '\0') {
     strncpy(ctx->ctype, ctype, sizeof(ctx->ctype));
     ctx->ctype[sizeof(ctx->ctype) - 1] = '\0';
   } else {
@@ -370,7 +369,7 @@ int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *pat
   }
 
   struct iwn_val val = iwn_http_request_header_get(req->http, "range", IW_LLEN("range"));
-  if (ctx->fs.size > 0 && val.len) {
+  if (ctx->fs.size > 0 && val.len) { // Use ranges only for non-empty files
     if (!_ranges_parse(ctx, val.buf, val.buf + val.len)) {
       ret = 416; // Bad ranges
       goto finish;
@@ -396,26 +395,11 @@ int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *pat
   ret = 1; // We handled this request
 
 finish:
-  if (ret == 0) {
-    if (ctx) {
-      ret = ctx->http_code;
-    }
-    if (rc && ret == 0) {
-      ret = -1;
-    }
+  if (rc && ret == 0) {
+    ret = -1;
   }
   if (ret != 1) {
     _ctx_destroy(ctx);
   }
   return ret;
-}
-
-struct iwn_wf_route* iwn_wf_files_attach(
-  struct iwn_wf_route            *route,
-  const struct iwn_wf_files_spec *spec_
-  ) {
-  // TODO:
-
-
-  return route;
 }
