@@ -229,8 +229,7 @@ static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req) {
     RCC(rc, finish, iwxstr_printf(xstr, "--%s\r\n", ctx->boundary));
     RCC(rc, finish, iwxstr_printf(xstr, "content-type: %s\r\n", ctx->ctype));
     RCC(rc, finish, iwxstr_printf(xstr, "content-range: "
-                                  "bytes %" PRId64 "-%" PRId64 "/%\r\n" PRId64, start, end, ctx->fs.size));
-    RCC(rc, finish, iwxstr_cat(xstr, "\r\n", IW_LLEN("\r\n")));
+                                  "bytes %" PRId64 "-%" PRId64 "/%\r\n\r\n" PRId64, start, end, ctx->fs.size));
 
     ch = _file_serve_ranges_multiple_part_body;
   } else {
