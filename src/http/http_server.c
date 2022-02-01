@@ -1411,7 +1411,7 @@ finish:
   return rc;
 }
 
-iwrc iwn_http_respose_raw_start(
+iwrc iwn_http_respose_stream_start(
   struct iwn_http_req          *request,
   iwn_http_server_chunk_handler chunk_cb
   ) {
