@@ -2,32 +2,42 @@
 
 #include <iowow/iwp.h>
 #include <iowow/iwlog.h>
+#include <iowow/iwxstr.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
+#include <inttypes.h>
 
-#define BOUNDARY_LEN 32
-#define CTYPE_LEN    128
+#define BOUNDARY_MAX 32
+#define CTYPE_MAX    128
+#define ETAG_MAX     64
 
 struct range {
   int64_t       start;
   int64_t       end;
-  int64_t       pos; // Position winin a range
+  int64_t       to_read;
   struct range *next;
 };
 
 struct ctx {
+  struct iwn_wf_req *req;
   FILE *file;
   struct range *ranges;
+  int http_code;
   IWP_FILE_STAT fs;
-  char boundary[BOUNDARY_LEN];
-  char ctype[CTYPE_LEN];
+  bool range_processed;
+  char boundary[BOUNDARY_MAX];
+  char ctype[CTYPE_MAX];
+  char buf[4096];
 };
 
 static void _ctx_destroy(struct ctx *ctx) {
   if (ctx) {
+    ctx->req->http->request_user_data = 0;
+    ctx->req->http->on_request_dispose = 0;
     if (ctx->file) {
       fclose(ctx->file);
     }
@@ -40,8 +50,16 @@ static void _ctx_destroy(struct ctx *ctx) {
   }
 }
 
+static void _on_request_dispose(struct iwn_http_req *req) {
+  struct ctx *ctx = req->request_user_data;
+  _ctx_destroy(ctx);
+}
+
 static const char* _ranges_parse_next(const char *rp, const char *ep, struct range *range) {
+  range->next = 0;
+  range->to_read = INT64_MAX;
   range->start = range->end = INT64_MAX;
+
   int64_t *rv = &range->start;
   while (rp < ep) {
     switch (*rp) {
@@ -87,84 +105,307 @@ static const char* _ranges_parse_next(const char *rp, const char *ep, struct ran
   return 0;
 }
 
-static iwrc _ranges_parse(struct ctx *ctx, const char *ranges, const char *ep) {
-  iwrc rc = 0;
-
-  // TODO:
-
-  return rc;
+static bool _ranges_parse(struct ctx *ctx, const char *rp, const char *ep) {
+  struct range range;
+  while (rp) {
+    rp = _ranges_parse_next(rp, ep, &range);
+    if (  (range.start == INT64_MIN || range.end == INT64_MIN)
+       || (range.start == INT64_MAX && range.end == INT64_MAX)) {
+      return false;
+    }
+    if (  range.start != INT64_MAX && range.end != INT64_MAX
+       && (range.start > range.end || range.start < 0 || range.end < 0)) {
+      return false;
+    }
+    if (range.start == INT64_MAX && range.end < 1) {
+      return false;
+    }
+    struct range *nr = malloc(sizeof(*nr));
+    if (!nr) {
+      return false;
+    }
+    *nr = range;
+    struct range *r = ctx->ranges;
+    while (r && r->next) {
+      r = r->next;
+    }
+    if (r) {
+      r->next = nr;
+    } else {
+      ctx->ranges = nr;
+    }
+  }
+  return true;
 }
 
-static iwrc _boundary_fill(char fout[BOUNDARY_LEN]) {
+static iwrc _boundary_fill(char fout[BOUNDARY_MAX]) {
   static const char cset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   FILE *f = fopen("/dev/urandom", "r");
   if (!f) {
     return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
   }
-  if (fread(fout, BOUNDARY_LEN, 1, f) != 1) {
+  if (fread(fout, BOUNDARY_MAX, 1, f) != 1) {
     fclose(f);
     return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
   }
   fclose(f);
-  for (int i = 0; i < BOUNDARY_LEN; ++i) {
+  for (int i = 0; i < BOUNDARY_MAX; ++i) {
     fout[i] = cset[fout[i] % (sizeof(cset) - 1)];
   }
   return 0;
 }
 
-IW_INLINE void _etag_fill(struct ctx *ctx, char fount[64]) {
-  snprintf(fount, 64, "%04X-%04X",
-           (int32_t) ctx->fs.size, (int32_t) ctx->fs.mtime);
+IW_INLINE size_t _etag_fill(struct ctx *ctx, char fout[64]) {
+  return snprintf(fout, 64, "%04X-%04X",
+                  (int32_t) ctx->fs.size, (int32_t) ctx->fs.mtime);
 }
 
-int iwn_wf_files_serve(struct iwn_wf_req *req, const char *ctype, const char *path) {
+static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req);
+
+static bool _file_serve_ranges_multiple_part_body(struct iwn_http_req *req) {
+  struct ctx *ctx = req->request_user_data;
+  struct range *r = ctx->ranges;
+
+  ctx->range_processed = r != 0;
+
+  size_t to_read = MIN(sizeof(ctx->buf), r->to_read);
+  size_t len = fread(ctx->buf, 1, to_read, ctx->file);
+  bool stop = len == 0 || len != to_read;
+
+  r->to_read -= len;
+
+  if (stop) {
+    //  Move to the next part
+    ctx->ranges = r->next;
+    free(r);
+  }
+
+  iwn_http_response_stream_write(
+    req, ctx->buf, len, 0,
+    stop ? _file_serve_ranges_multiple_part : _file_serve_ranges_multiple_part_body);
+
+  return true;
+}
+
+static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req) {
+  iwrc rc = 0;
+
+  struct ctx *ctx = req->request_user_data;
+  struct range *r = ctx->ranges;
+
+  char *buf = 0;
+  size_t buf_len = 0;
+  iwn_http_server_chunk_handler ch = 0;
+
+  IWXSTR *xstr = iwxstr_new();
+  if (!xstr) {
+    return false;
+  }
+
+  if (ctx->range_processed) {
+    RCC(rc, finish, iwxstr_printf(xstr, "\r\n", ctx->boundary));
+  }
+
+  if (r) {
+    int64_t start = 0, end = ctx->fs.size - 1;
+    if (r->start == INT64_MAX) {
+      RCN(finish, fseek(ctx->file, -r->end, SEEK_END));
+      start = ctx->fs.size - r->end;
+      end = r->end - 1;
+      r->to_read = end - start + 1;
+    } else {
+      start = r->start;
+      RCN(finish, fseek(ctx->file, r->start, IWP_SEEK_SET));
+      if (r->end != INT64_MAX) {
+        end = r->end;
+        r->to_read = r->end - r->start + 1;
+      }
+    }
+
+    if (start < 0 || end < 0 || start > end) {
+      rc = IW_ERROR_FAIL; // Current range is invalid
+      goto finish;
+    }
+    RCC(rc, finish, iwxstr_printf(xstr, "--%s\r\n", ctx->boundary));
+    RCC(rc, finish, iwxstr_printf(xstr, "content-type: %s\r\n", ctx->ctype));
+    RCC(rc, finish, iwxstr_printf(xstr, "content-range: "
+                                  "bytes %" PRId64 "-%" PRId64 "/%\r\n" PRId64, start, end, ctx->fs.size));
+    RCC(rc, finish, iwxstr_cat(xstr, "\r\n", IW_LLEN("\r\n")));
+
+    ch = _file_serve_ranges_multiple_part_body;
+  } else {
+    RCC(rc, finish, iwxstr_printf(xstr, "--%s--\r\n", ctx->boundary));
+  }
+
+  buf_len = iwxstr_size(xstr);
+  buf = iwxstr_ptr(xstr);
+  iwxstr_destroy_keep_ptr(xstr);
+  xstr = 0;
+
+  iwn_http_response_stream_write(req, buf, buf_len, free, ch);
+
+finish:
+  if (rc) {
+    free(buf);
+    iwxstr_destroy(xstr);
+    return false;
+  }
+  return true;
+}
+
+static iwrc _file_serve_ranges_multiple(struct ctx *ctx) {
+  iwrc rc = 0;
+  RCC(rc, finish, _boundary_fill(ctx->boundary));
+  RCC(rc, finish, iwn_http_response_code_set(ctx->req->http, 206));
+  RCC(rc, finish, iwn_http_response_header_printf(
+        ctx->req->http, "content-type", "multipart/byteranges; boundary=\"%s\"", ctx->boundary));
+  rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_ranges_multiple_part);
+
+finish:
+  return rc;
+}
+
+static bool _file_serve_range_single_cb(struct iwn_http_req *req) {
+  struct ctx *ctx = req->request_user_data;
+  struct range *r = ctx->ranges;
+
+  size_t to_read = MIN(sizeof(ctx->buf), r->to_read);
+  size_t len = fread(ctx->buf, 1, to_read, ctx->file);
+  bool stop = len == 0 || len != to_read;
+
+  r->to_read -= len;
+
+  iwn_http_response_stream_write(req, ctx->buf, len, 0, stop ? 0 : _file_serve_range_single_cb);
+
+  return true;
+}
+
+static iwrc _file_serve_range_single(struct ctx *ctx) {
+  iwrc rc = 0;
+  struct range *r = ctx->ranges;
+  int64_t start = 0, end = ctx->fs.size - 1;
+
+  if (r->start == INT64_MAX) {
+    RCN(finish, fseek(ctx->file, -r->end, SEEK_END));
+    start = ctx->fs.size - r->end;
+    end = r->end - 1;
+    r->to_read = end - start + 1;
+  } else {
+    start = r->start;
+    RCN(finish, fseek(ctx->file, r->start, IWP_SEEK_SET));
+    if (r->end != INT64_MAX) {
+      end = r->end;
+      r->to_read = r->end - r->start + 1;
+    }
+  }
+
+  if (start < 0 || end < 0 || start > end) {
+    iwn_http_response_by_code(ctx->req->http, 416);
+    goto finish;
+  }
+
+  RCC(rc, finish, iwn_http_response_header_set(ctx->req->http, "content-type", ctx->ctype, -1));
+  RCC(rc, finish, iwn_http_response_code_set(ctx->req->http, 206)); // Partial content
+  RCC(rc, finish, iwn_http_response_header_printf(
+        ctx->req->http, "content-range",
+        "bytes %" PRId64 "-%" PRId64 "/%" PRIu64, start, end, ctx->fs.size));
+
+  rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_range_single_cb);
+
+finish:
+  return rc;
+}
+
+static bool _file_serve_norange_cb(struct iwn_http_req *req) {
+  struct ctx *ctx = req->request_user_data;
+  size_t len = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->file);
+  iwn_http_response_stream_write(req, ctx->buf, len, 0, len != sizeof(ctx->buf) ? 0 : _file_serve_norange_cb);
+  return true;
+}
+
+static iwrc _file_serve_norange(struct ctx *ctx) {
+  iwrc rc = 0;
+  long lv;
+  RCC(rc, finish, iwn_http_response_header_set(ctx->req->http, "content-type", ctx->ctype, -1));
+  RCN(finish, fseek(ctx->file, 0, SEEK_END));
+  RCN(finish, lv = ftell(ctx->file));
+  RCN(finish, fseek(ctx->file, 0, SEEK_SET));
+  RCC(rc, finish, iwn_http_response_header_i64_set(ctx->req->http, "content-length", lv));
+  rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_norange_cb);
+
+finish:
+  return rc;
+}
+
+static iwrc _file_serve(struct ctx *ctx) {
+  ctx->req->http->request_user_data = ctx;
+  ctx->req->http->on_request_dispose = _on_request_dispose;
+  if (IW_UNLIKELY(ctx->ranges && ctx->fs.size > 0)) {
+    if (IW_UNLIKELY(ctx->ranges->next)) {
+      return _file_serve_ranges_multiple(ctx);
+    } else {
+      return _file_serve_range_single(ctx);
+    }
+  } else {
+    return _file_serve_norange(ctx);
+  }
+}
+
+int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *path) {
   iwrc rc = 0;
   int ret = 0;
-
-  char etag[64];
   struct ctx *ctx;
 
   RCA(ctx = calloc(1, sizeof(*ctx)), finish);
+  ctx->req = req;
   rc = iwp_fstat(path, &ctx->fs);
   if (rc || ctx->fs.ftype != IWP_TYPE_FILE) {
     goto finish;
   }
-  _etag_fill(ctx, etag);
-  size_t etag_len = strlen(etag);
 
-  struct iwn_val val = iwn_http_request_header_get(req->http, "range", IW_LLEN("range"));
-  if (val.len) {
-    RCC(rc, finish, _ranges_parse(ctx, val.buf, val.buf + val.len));
-  }
   if (ctype) {
     strncpy(ctx->ctype, ctype, sizeof(ctx->ctype));
     ctx->ctype[sizeof(ctx->ctype) - 1] = '\0';
+  } else {
+    memcpy(ctx->ctype, "application/octet-stream", sizeof("application/octet-stream"));
   }
 
-  RCC(rc, finish, iwn_http_response_header_set(req->http, "accept-ranges", "bytes", IW_LLEN("bytes")));
-  RCC(rc, finish, iwn_http_response_header_set(req->http, "etag", etag, etag_len));
-
-  if (ctx->ranges == 0) {
+  struct iwn_val val = iwn_http_request_header_get(req->http, "range", IW_LLEN("range"));
+  if (ctx->fs.size > 0 && val.len) {
+    if (!_ranges_parse(ctx, val.buf, val.buf + val.len)) {
+      ret = 416; // Bad ranges
+      goto finish;
+    }
+  } else {
+    char etag[64];
+    size_t etag_len = _etag_fill(ctx, etag);
+    RCC(rc, finish, iwn_http_response_header_set(req->http, "etag", etag, etag_len));
     val = iwn_http_request_header_get(req->http, "if-none-match", IW_LLEN("if-none-match"));
     if (val.len == etag_len && strncmp(val.buf, etag, etag_len) == 0) {
-      _ctx_destroy(ctx);
-      if (iwn_http_response_write(req->http, 304, ctx->ctype, 0, 0)) {
-        return 1;
-      } else {
-        return -1;
-      }
+      ret = 304; // Not modified
+      goto finish;
     }
-  } else if (ctx->ranges->next) { // We have multiple ranges
-    RCC(rc, finish, _boundary_fill(ctx->boundary));
   }
+  RCC(rc, finish, iwn_http_response_header_set(req->http, "accept-ranges", "bytes", IW_LLEN("bytes")));
 
   ctx->file = fopen(path, "r");
   if (!ctx->file) {
     goto finish;
   }
 
+  RCC(rc, finish, _file_serve(ctx));
+  ret = 1; // We handled this request
+
 finish:
-  if (rc || ret == 0) {
+  if (ret == 0) {
+    if (ctx) {
+      ret = ctx->http_code;
+    }
+    if (rc && ret == 0) {
+      ret = -1;
+    }
+  }
+  if (ret != 1) {
     _ctx_destroy(ctx);
   }
   return ret;

@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <unistd.h>
 
-struct _pa {
+struct pa {
   struct iwn_poller_adapter     b;
   iwn_on_poller_adapter_event   on_event;
   iwn_on_poller_adapter_dispose on_dispose;
@@ -21,17 +21,17 @@ static ssize_t _write(struct iwn_poller_adapter *a, const uint8_t *buf, size_t l
   return write(a->fd, buf, len);
 }
 
-IW_INLINE void _destroy(struct _pa *a) {
+IW_INLINE void _destroy(struct pa *a) {
   free(a);
 }
 
 static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t events) {
-  struct _pa *a = t->user_data;
+  struct pa *a = t->user_data;
   return a->on_event((void*) a, a->user_data, events);
 }
 
 static void _on_dispose(const struct iwn_poller_task *t) {
-  struct _pa *a = t->user_data;
+  struct pa *a = t->user_data;
   a->on_dispose((void*) a, a->user_data);
   _destroy(a);
 }
@@ -44,10 +44,10 @@ iwrc iwn_direct_poller_adapter(
   void                         *user_data,
   uint32_t                      events,
   uint32_t                      events_mod,
-  long                          timeout_sec) {
-
+  long                          timeout_sec
+  ) {
   iwrc rc = 0;
-  struct _pa *a = calloc(1, sizeof(*a));
+  struct pa *a = calloc(1, sizeof(*a));
   if (!a) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }

@@ -3,6 +3,8 @@
 #include "poller_adapter.h"
 #include "utils/pairs.h"
 
+#include <iowow/iwxstr.h>
+
 #include <stdarg.h>
 
 IW_EXTERN_C_START;
@@ -102,11 +104,31 @@ IW_EXPORT iwrc iwn_http_response_header_set(
   const char *header_value,
   ssize_t     header_value_len);
 
+IW_EXPORT iwrc iwn_http_response_header_i64_set(
+  struct iwn_http_req*,
+  const char *header_name,
+  int64_t     header_value);
+
+
+IW_EXPORT iwrc iwn_http_response_header_printf_va(
+  struct iwn_http_req *req,
+  const char          *header_name,
+  const char          *format,
+  va_list              va);
+
+IW_EXPORT iwrc iwn_http_response_header_printf(
+  struct iwn_http_req *req,
+  const char          *header_name,
+  const char          *format,
+  ...);
+
 IW_EXPORT iwrc iwn_http_response_header_add(
   struct iwn_http_req*,
   const char *header_name,
   const char *header_value,
   ssize_t     header_value_len);
+
+IW_EXPORT iwrc iwn_http_response_headers_flush_into(struct iwn_http_req *request, IWXSTR *xstr);
 
 IW_EXPORT void iwn_http_response_header_exclude(struct iwn_http_req*, const char *header_name);
 
@@ -149,7 +171,7 @@ IW_EXPORT iwrc iwn_http_response_chunk_write(
 
 IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
 
-IW_EXPORT iwrc iwn_http_respose_stream_start(struct iwn_http_req*, iwn_http_server_chunk_handler chunk_cb);
+IW_EXPORT iwrc iwn_http_response_stream_start(struct iwn_http_req*, iwn_http_server_chunk_handler chunk_cb);
 
 IW_EXPORT void iwn_http_response_stream_write(
   struct iwn_http_req          *request,

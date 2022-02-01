@@ -27,6 +27,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 struct server {
   struct iwn_http_server      server;
@@ -575,7 +576,7 @@ static void _client_write(struct client *client) {
     if (client->server->spec.request_timeout_sec > 0) {
       iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
     }
-    if (client->chunk_cb && !client->chunk_cb((void*) client)) {
+    if (!client->chunk_cb || !client->chunk_cb((void*) client)) {
       client->flags |= HTTP_END_SESSION;
       return;
     }
@@ -1259,6 +1260,66 @@ finish:
   return rc;
 }
 
+iwrc iwn_http_response_header_i64_set(
+  struct iwn_http_req *req,
+  const char          *header_name,
+  int64_t              header_value
+  ) {
+  char buf[64];
+  int len = snprintf(buf, sizeof(buf), "%" PRId64, header_value);
+  return iwn_http_response_header_set(req, header_name, buf, len);
+}
+
+iwrc iwn_http_response_header_printf_va(
+  struct iwn_http_req *req,
+  const char          *header_name,
+  const char          *format,
+  va_list              va
+  ) {
+  iwrc rc = 0;
+  char buf[1024];
+  char *wp = buf;
+
+  va_list cva;
+  va_copy(cva, va);
+
+  int size = vsnprintf(wp, sizeof(buf), format, va);
+  if (size < 0) {
+    rc = IW_ERROR_FAIL;
+    goto finish;
+  }
+  if (size >= sizeof(buf)) {
+    RCA(wp = malloc(size + 1), finish);
+    size = vsnprintf(wp, size + 1, format, cva);
+    if (size < 0) {
+      rc = IW_ERROR_FAIL;
+      goto finish;
+    }
+  }
+
+  rc = iwn_http_response_header_set(req, header_name, wp, size);
+
+finish:
+  va_end(cva);
+  if (wp != buf) {
+    free(wp);
+  }
+  return rc;
+}
+
+iwrc iwn_http_response_header_printf(
+  struct iwn_http_req *req,
+  const char          *header_name,
+  const char          *format,
+  ...
+  ) {
+  va_list va;
+  va_start(va, format);
+  iwrc rc = iwn_http_response_header_printf_va(req, header_name, format, va);
+  va_end(va);
+  return rc;
+}
+
 void iwn_http_response_header_exclude(struct iwn_http_req *request, const char *header_name) {
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -1365,6 +1426,11 @@ finish:
   return rc;
 }
 
+iwrc iwn_http_response_headers_flush_into(struct iwn_http_req *request, IWXSTR *xstr) {
+  struct client *client = (void*) request;
+  return _client_response_headers_write_http(client, xstr);
+}
+
 IW_INLINE void _client_response_write(struct client *client, IWXSTR *xstr) {
   _stream_free_buffer(client);
   struct stream *s = &client->stream;
@@ -1411,7 +1477,7 @@ finish:
   return rc;
 }
 
-iwrc iwn_http_respose_stream_start(
+iwrc iwn_http_response_stream_start(
   struct iwn_http_req          *request,
   iwn_http_server_chunk_handler chunk_cb
   ) {
@@ -1591,10 +1657,10 @@ bool iwn_http_response_printf(
   int status_code, const char *content_type,
   const char *body_fmt, ...
   ) {
-  va_list ap;
-  va_start(ap, body_fmt);
-  bool res = iwn_http_response_printf_va(req, status_code, content_type, body_fmt, ap);
-  va_end(ap);
+  va_list va;
+  va_start(va, body_fmt);
+  bool res = iwn_http_response_printf_va(req, status_code, content_type, body_fmt, va);
+  va_end(va);
   return res;
 }
 

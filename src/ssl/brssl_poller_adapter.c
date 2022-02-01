@@ -17,7 +17,7 @@ struct x509_client_context {
   bool verifypeer;
 };
 
-struct _pa {
+struct pa {
   struct iwn_poller_adapter     b;
   iwn_on_poller_adapter_event   on_event;
   iwn_on_poller_adapter_dispose on_dispose;
@@ -65,7 +65,7 @@ static void _init(void) {
 }
 
 static ssize_t _read(struct iwn_poller_adapter *pa, uint8_t *data, size_t len) {
-  struct _pa *a = (void*) pa;
+  struct pa *a = (void*) pa;
   br_ssl_engine_context *cc = a->eng;
   size_t tor = len;
   while (tor > 0 && (br_ssl_engine_current_state(cc) & BR_SSL_RECVAPP)) {
@@ -88,7 +88,7 @@ static ssize_t _read(struct iwn_poller_adapter *pa, uint8_t *data, size_t len) {
 }
 
 static ssize_t _write(struct iwn_poller_adapter *pa, const uint8_t *data, size_t len) {
-  struct _pa *a = (void*) pa;
+  struct pa *a = (void*) pa;
   br_ssl_engine_context *cc = a->eng;
   size_t tow = len;
   while (tow > 0 && (br_ssl_engine_current_state(cc) & BR_SSL_SENDAPP)) {
@@ -111,7 +111,7 @@ static ssize_t _write(struct iwn_poller_adapter *pa, const uint8_t *data, size_t
   }
 }
 
-IW_INLINE void _destroy(struct _pa *a) {
+IW_INLINE void _destroy(struct pa *a) {
   if (a->is_client) {
     VEC_CLEAREXT(a->client.anchors, &free_ta_contents);
   } else {
@@ -124,14 +124,14 @@ IW_INLINE void _destroy(struct _pa *a) {
 }
 
 static void _on_dispose(const struct iwn_poller_task *t) {
-  struct _pa *a = t->user_data;
+  struct pa *a = t->user_data;
   if (a->on_dispose) {
     a->on_dispose((void*) a, a->user_data);
   }
   _destroy(a);
 }
 
-static int _write_fd(struct _pa *a, const unsigned char *buf, size_t len) {
+static int _write_fd(struct pa *a, const unsigned char *buf, size_t len) {
   while (1) {
     ssize_t wlen = write(a->b.fd, buf, len);
     if (wlen < 0 && errno == EINTR) {
@@ -141,7 +141,7 @@ static int _write_fd(struct _pa *a, const unsigned char *buf, size_t len) {
   }
 }
 
-static int _read_fd(struct _pa *a, unsigned char *buf, size_t len) {
+static int _read_fd(struct pa *a, unsigned char *buf, size_t len) {
   while (1) {
     ssize_t rlen = read(a->b.fd, buf, len);
     if (rlen < 0 && errno == EINTR) {
@@ -170,7 +170,7 @@ static inline int64_t _next_poll(br_ssl_engine_context *cc) {
 }
 
 static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
-  struct _pa *a = t->user_data;
+  struct pa *a = t->user_data;
   br_ssl_engine_context *cc = a->eng;
   bool done = !(flags & IWN_POLLIN);
   bool locked = false;
@@ -356,7 +356,7 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
 
   _init();
 
-  struct _pa *a = calloc(1, sizeof(*a));
+  struct pa *a = calloc(1, sizeof(*a));
   if (!a) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -464,7 +464,7 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
 
   _init();
 
-  struct _pa *a = calloc(1, sizeof(*a));
+  struct pa *a = calloc(1, sizeof(*a));
   if (!a) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }

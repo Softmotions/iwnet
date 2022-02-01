@@ -21,7 +21,7 @@
 #define FDS_STDERR 1
 #define FDS_STDIN  2
 
-struct _proc {
+struct proc {
   int   pid;
   int   wstatus;
   void *user_data;
@@ -48,7 +48,7 @@ static struct  {
   .cond = PTHREAD_COND_INITIALIZER
 };
 
-static void _proc_destroy(struct _proc *proc) {
+static void _proc_destroy(struct proc *proc) {
   if (!proc) {
     return;
   }
@@ -80,7 +80,7 @@ finish:
   return rc;
 }
 
-static iwrc _proc_add(struct _proc *proc) {
+static iwrc _proc_add(struct proc *proc) {
   iwrc rc = 0;
   pthread_mutex_lock(&cc.mtx);
   RCC(rc, finish, _init());
@@ -92,8 +92,8 @@ finish:
   return rc;
 }
 
-static struct _proc* _proc_ref(pid_t pid) {
-  struct _proc *proc;
+static struct proc* _proc_ref(pid_t pid) {
+  struct proc *proc;
   pthread_mutex_lock(&cc.mtx);
   proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
   if (proc) {
@@ -108,7 +108,7 @@ static struct _proc* _proc_ref(pid_t pid) {
 }
 
 static void _proc_unref(pid_t pid, int wstatus) {
-  struct _proc *proc = 0;
+  struct proc *proc = 0;
   pthread_mutex_lock(&cc.mtx);
   proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
   if (!proc || proc->refs == 0) {
@@ -154,12 +154,12 @@ static void _proc_wait_worker(void *arg) {
   }
 }
 
-static struct _proc* _proc_create(const struct iwn_proc_spec *spec) {
-  IWPOOL *pool = iwpool_create(sizeof(struct _proc));
+static struct proc* _proc_create(const struct iwn_proc_spec *spec) {
+  IWPOOL *pool = iwpool_create(sizeof(struct proc));
   if (!pool) {
     return 0;
   }
-  struct _proc *proc = iwpool_calloc(sizeof(*proc), pool);
+  struct proc *proc = iwpool_calloc(sizeof(*proc), pool);
   if (!proc) {
     iwpool_destroy(pool);
     return 0;
@@ -186,7 +186,7 @@ static iwrc _make_non_blocking(int fd) {
   return 0;
 }
 
-static iwrc _proc_init(struct _proc *proc, int fds[6]) {
+static iwrc _proc_init(struct proc *proc, int fds[6]) {
   iwrc rc = 0;
   struct iwn_proc_spec *spec = &proc->spec;
   IWPOOL *pool = proc->pool;
@@ -250,7 +250,7 @@ static int64_t _on_ready(
   int64_t ret = 0;
   int fd = t->fd;
   pid_t pid = (pid_t) (intptr_t) t->user_data;
-  struct _proc *proc = _proc_ref(pid);
+  struct proc *proc = _proc_ref(pid);
 
   if (!proc) {
     return -1;
@@ -307,7 +307,7 @@ static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) 
   int64_t ret = 0;
   int fd = t->fd;
   pid_t pid = (pid_t) (intptr_t) t->user_data;
-  struct _proc *proc = _proc_ref(pid);
+  struct proc *proc = _proc_ref(pid);
   if (!proc) {
     return -1;
   }
@@ -352,7 +352,7 @@ static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) 
 
 iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close) {
   iwrc rc = 0;
-  struct _proc *proc = _proc_ref(pid);
+  struct proc *proc = _proc_ref(pid);
   if (!proc) {
     return IW_ERROR_NOT_EXISTS;
   }
@@ -380,7 +380,7 @@ iwrc iwn_proc_stdin_close(int pid) {
 
 iwrc iwn_proc_wait(int pid) {
   pthread_mutex_lock(&cc.mtx);
-  struct _proc *proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
+  struct proc *proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
   if (!proc) {
     pthread_mutex_unlock(&cc.mtx);
     return IW_ERROR_NOT_EXISTS;
@@ -438,7 +438,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
   *out_pid = -1;
 
   bool bv;
-  struct _proc *proc = 0;
+  struct proc *proc = 0;
   int fds[6] = { -1, -1, -1, -1, -1, -1 };
 
   RCB(finish, proc = _proc_create(spec));
