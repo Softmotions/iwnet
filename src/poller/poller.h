@@ -11,6 +11,7 @@ IW_EXTERN_C_START;
 #endif
 
 #ifdef __linux__
+#define IWN_EPOLL
 #include <sys/epoll.h>
 #define IWN_POLLIN  EPOLLIN
 #define IWN_POLLOUT EPOLLOUT

@@ -123,3 +123,18 @@ connection: keep-alive
 content-type: text/plain
 content-length: 0
 
+
+
+Range7:
+HTTP/1.1 206 Partial Content
+connection: close
+accept-ranges: bytes
+
+content-type: application/octet-stream
+content-range: bytes 0-7/36
+
+ae0150d3
+content-type: application/octet-stream
+content-range: bytes 35-35/36
+
+6

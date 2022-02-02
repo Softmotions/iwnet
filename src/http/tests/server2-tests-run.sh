@@ -45,7 +45,7 @@ run() {
   sleep 1
 
   BASE="${PROTO}://localhost:${PORT}"
-  FILTER='sed -r /(date|user-agent|trying|tcp|sessionid|etag)|^\*/Id'
+  FILTER='sed -r /(date|user-agent|trying|tcp|sessionid|etag|boundary|--)|^\*/Id'
 
   echo "\n\nGet empty:"
   curl -isk ${BASE}/get/empty | ${FILTER}
@@ -111,6 +111,9 @@ run() {
 
   echo "\n\nRange6:"
   curl -isk -H'Range: bytes=1' ${BASE}/file/chunks.txt | ${FILTER}
+
+  echo "\n\nRange7:"
+  curl -isk -H'Range: bytes=0-7,-1' ${BASE}/file/chunks.txt | ${FILTER}
 
 }
 

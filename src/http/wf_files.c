@@ -55,6 +55,7 @@ static void _on_request_dispose(struct iwn_http_req *req) {
 }
 
 static const char* _ranges_parse_next(const char *rp, const char *ep, struct range *range) {
+  const char *ret = 0;
   range->next = 0;
   range->to_read = INT64_MAX;
   range->start = range->end = INT64_MAX;
@@ -71,6 +72,7 @@ static const char* _ranges_parse_next(const char *rp, const char *ep, struct ran
         break;
       case ',':
         ++rp;
+        ret = rp;
         goto finish;
       case '-':
         ++rp;
@@ -107,7 +109,7 @@ finish:
   if (rv == &range->start) {
     range->start = range->end = INT64_MIN;
   }
-  return 0;
+  return ret;
 }
 
 static bool _ranges_parse(struct ctx *ctx, const char *rp, const char *ep) {
@@ -155,9 +157,11 @@ static iwrc _boundary_fill(char fout[BOUNDARY_MAX]) {
     return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
   }
   fclose(f);
-  for (int i = 0; i < BOUNDARY_MAX; ++i) {
+  int i = 0;
+  for ( ; i < BOUNDARY_MAX - 1; ++i) {
     fout[i] = cset[fout[i] % (sizeof(cset) - 1)];
   }
+  fout[i] = '\0';
   return 0;
 }
 
@@ -251,7 +255,8 @@ static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req) {
     RCC(rc, finish, iwxstr_printf(xstr, "--%s\r\n", ctx->boundary));
     RCC(rc, finish, iwxstr_printf(xstr, "content-type: %s\r\n", ctx->ctype));
     RCC(rc, finish, iwxstr_printf(xstr, "content-range: "
-                                  "bytes %" PRId64 "-%" PRId64 "/%\r\n\r\n" PRId64, start, end, ctx->fs.size));
+                                  "bytes %" PRId64 "-%" PRId64 "/%" PRId64 "\r\n\r\n",
+                                  start, end, ctx->fs.size));
 
     ch = _file_serve_ranges_multiple_part_body;
   } else {
@@ -271,13 +276,14 @@ finish:
     iwxstr_destroy(xstr);
     return false;
   }
-  return true;
+  return r != 0;
 }
 
 static iwrc _file_serve_ranges_multiple(struct ctx *ctx) {
   iwrc rc = 0;
   RCC(rc, finish, _boundary_fill(ctx->boundary));
   RCC(rc, finish, iwn_http_response_code_set(ctx->req->http, 206));
+  iwn_http_connection_set_keep_alive(ctx->req->http, false);
   RCC(rc, finish, iwn_http_response_header_printf(
         ctx->req->http, "content-type", "multipart/byteranges; boundary=\"%s\"", ctx->boundary));
   rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_ranges_multiple_part);

@@ -358,8 +358,11 @@ IW_INLINE bool _c_is_space(char c) {
   return c == ' ' || c == '\t';
 }
 
-IW_INLINE bool _c_is_token(char c) {
-  return !(c == ' ' || _c_is_ctl(c) || _c_is_tspecial(c));
+bool _c_is_token(char c, bool is_value) {
+  if (is_value && (_c_is_space(c) || c == ',')) {
+    return true;
+  }
+  return !(_c_is_ctl(c) || _c_is_tspecial(c));
 }
 
 IW_INLINE bool _c_is_lsep(char c) {
@@ -379,7 +382,7 @@ static const char* _header_parse_skip_name(const char *rp, const char *ep) {
       } else {
         return 0;
       }
-    } else if (!_c_is_token(*rp)) {
+    } else if (!_c_is_token(*rp, false)) {
       return 0;
     }
     ++rp;
@@ -409,7 +412,7 @@ static const char* _header_parse_next_parameter2(
         } else if (*rp == ';' || _c_is_lsep(*rp)) {
           vs = ve = rp;
           break;
-        } else if ((*rp == '/' && ke != ks) || _c_is_token(*rp)) { // Allow '/' in header value
+        } else if ((*rp == '/' && ke != ks) || _c_is_token(*rp, false)) { // Allow '/' in header value
           ++rp;
           ke = rp;
         } else {
@@ -427,10 +430,10 @@ static const char* _header_parse_next_parameter2(
             expect_eq = true;
           }
           ++rp;
-        } else if (*rp == ';' && !expect_eq) {
+        } else if (!expect_eq && *rp == ';') {
           vs = ve = rp;
           break;
-        } else if (_c_is_token(*rp) && !expect_eq) {
+        } else if (!expect_eq && _c_is_token(*rp, false)) {
           ++rp;
           ke = rp;
         } else {
@@ -456,7 +459,7 @@ static const char* _header_parse_next_parameter2(
       } else if (*rp == ';' || _c_is_blank(*rp)) {
         ve = rp;
         break;
-      } else if (_c_is_token(*rp)) {
+      } else if (_c_is_token(*rp, true)) {
         ++rp;
         ve = rp;
       } else {

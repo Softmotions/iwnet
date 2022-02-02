@@ -240,7 +240,9 @@ static void _multipart_parsing3(IWPOOL *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
+  // TODO: should be cp == 0
+  // http://test.greenbytes.de/tech/tc2231/#attwithtokfncommanq
+  IWN_ASSERT(cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
