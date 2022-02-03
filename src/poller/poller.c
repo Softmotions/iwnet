@@ -6,7 +6,7 @@
 #include <iowow/iwp.h>
 #include <iowow/iwtp.h>
 
-#include <time.h>
+
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -14,10 +14,16 @@
 #include <stdatomic.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 
+#ifdef IWN_KQUEUE
+#include <sys/event.h>
+#else
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <sys/eventfd.h>
+#endif
+
 #include <sys/socket.h>
 
 KHASH_MAP_INIT_INT(SLOTS, struct poller_slot*)
@@ -32,8 +38,10 @@ KHASH_MAP_INIT_INT(SLOTS, struct poller_slot*)
 
 struct iwn_poller {
   int fd;
+#ifdef IWN_EPOLL
   int event_fd;               ///< fd to signal internal changes on poller.
   int timer_fd;               ///< fd to set up timeouts
+#endif
   int fds_count;              ///< Numbver of active file descriptors
   int max_poll_events;        ///< Max wait epoll_wait fd events at once
 
@@ -69,7 +77,13 @@ struct poller_slot {
 
 IW_INLINE time_t _time_sec() {
   struct timespec t;
+#if defined(__linux__)
   clock_gettime(CLOCK_MONOTONIC_COARSE, &t);
+#elif defined(__APPLE__)
+  clock_gettime(CLOCK_MONOTONIC, &t);
+#else
+  clock_gettime(CLOCK_MONOTONIC_FAST, &t);
+#endif
   return t.tv_sec;
 }
 
@@ -88,6 +102,44 @@ static void _slot_destroy(struct poller_slot *s) {
   }
 }
 
+#ifdef IWN_KQUEUE
+
+IW_INLINE unsigned short _events_to_kflags(uint32_t events) {
+  unsigned short action = 0;
+  if (events & IWN_POLLET) {
+    action |= EV_CLEAR;
+  }
+  if (events & IWN_POLLONESHOT) {
+    action |= EV_ONESHOT;
+  }
+  return action;
+}
+
+IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
+  struct kevent ev[] = {
+    { fd, EVFILT_READ,  EV_DELETE },
+    { fd, EVFILT_WRITE, EV_DELETE },
+  };
+  kevent(pfd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0);
+}
+
+IW_INLINE void _service_fds_unsubcribe(struct iwn_poller *p) {
+  if (p->fd > -1) {
+    struct kevent ev = {
+      p->fd, EVFILT_TIMER, EV_DELETE
+    };
+    kevent(p->fd, &ev, 1, 0, 0, 0);
+  }
+}
+
+#else
+
+IW_INLINE void _socket_fd_unsubscribe(int pfd, int fd) {
+  epoll_ctl(pfd, EPOLL_CTL_DEL, fd, 0);
+}
+
+#endif
+
 static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
   struct iwn_poller *p = s->poller;
   if (!(flags & REF_LOCKED)) {
@@ -95,8 +147,8 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
   }
   bool destroy = --s->refs == 0;
   if (destroy) {
+    _rw_fd_unsubscribe(p->fd, s->fd);
     s->flags |= SLOT_REMOVED;
-    epoll_ctl(p->fd, EPOLL_CTL_DEL, s->fd, 0);
     khiter_t k = kh_get(SLOTS, p->slots, s->fd);
     if (k != kh_end(p->slots)) {
       s = kh_value(p->slots, k);
@@ -126,7 +178,7 @@ static iwrc _slot_ref(struct poller_slot *s) {
   if (s->refs++ == 0) {
     khiter_t k = kh_get(SLOTS, p->slots, s->fd);
     if (k != kh_end(p->slots)) {
-      iwlog_error("FD: %d is in the pool already", s->fd);
+      iwlog_error("FD: %d is in the poller already", s->fd);
       old = kh_val(p->slots, k);
       kh_value(p->slots, k) = s;
       old_destroy = _slot_unref(old, REF_LOCKED);
@@ -240,6 +292,8 @@ static void _destroy(struct iwn_poller *p) {
     iwn_poller_shutdown_request(p);
     iwtp_shutdown(&p->tp, true);
     _poller_cleanup(p);
+
+#if defined(IWN_EPOLL)
     if (p->fd > -1) {
       close(p->fd);
     }
@@ -249,6 +303,10 @@ static void _destroy(struct iwn_poller *p) {
     if (p->event_fd > -1) {
       close(p->event_fd);
     }
+#elif defined(IWN_KQUEUE)
+    _service_fds_unsubcribe(p);
+#endif
+
     if (p->slots) {
       kh_destroy(SLOTS, p->slots);
     }
@@ -287,8 +345,26 @@ static void _timer_ready_impl(struct iwn_poller *p) {
     }
   }
 
-  struct itimerspec next = { { 0, 0 }, { timeout_next - ctime, 0 } };
-  timerfd_settime(p->timer_fd, 0, &next, 0);
+#if defined(IWN_EPOLL)
+  {
+    struct itimerspec next = { { 0, 0 }, { timeout_next - ctime, 0 } };
+    timerfd_settime(p->timer_fd, 0, &next, 0);
+  }
+#elif defined(IWN_KQUEUE)
+  {
+    struct kevent ev = {
+      .ident  = p->fd,
+      .filter = EVFILT_TIMER,
+      .flags  = EV_ADD | EV_ONESHOT,
+      .fflags = NOTE_SECONDS,
+      .data   = timeout_next - ctime,
+    };
+    if (kevent(p->fd, &ev, 1, 0, 0, 0) == -1) {
+      iwrc rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+      iwlog_ecode_error3(rc);
+    }
+  }
+#endif
 }
 
 IW_INLINE int64_t _timer_ready(const struct iwn_poller_task *t, uint32_t events) {
@@ -306,6 +382,40 @@ IW_INLINE void _timer_check(const struct iwn_poller_task *t, time_t time_limit) 
     _timer_ready(t, 0);
   }
 }
+
+#if defined(IWN_KQUEUE)
+
+iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
+  int rci = 0;
+  struct poller_slot *s = _slot_peek_leave_locked(p, fd);
+  if (s) {
+    if (s->flags & SLOT_PROCESSING) {
+      s->events_update |= events;
+    } else {
+      events |= s->events_mod;
+      unsigned short ka = _events_to_kflags(events);
+      struct kevent ev[2];
+      if (events & IWN_POLLIN) {
+        ev[rci++] = (struct kevent) {
+          fd, EVFILT_READ, EV_ADD | ka
+        };
+      }
+      if (events & IWN_POLLOUT) {
+        ev[rci++] = (struct kevent) {
+          fd, EVFILT_WRITE, EV_ADD | ka
+        };
+      }
+      rci = kevent(p->fd, ev, rci, 0, 0, 0);
+    }
+  }
+  pthread_mutex_unlock(&p->mtx);
+  if (rci == -1) {
+    return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+  }
+  return 0;
+}
+
+#elif defined(IWN_EPOLL)
 
 iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
   int rci = 0;
@@ -328,6 +438,8 @@ iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
   return 0;
 }
 
+#endif
+
 iwrc iwn_poller_add(const struct iwn_poller_task *task) {
   if (!task || task->fd < 0 || !task->poller) {
     return IW_ERROR_INVALID_ARGS;
@@ -347,16 +459,42 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
   }
   RCC(rc, finish, _slot_ref(s));
 
-  struct epoll_event ev = { 0 };
-  ev.events = s->events | s->events_mod;
-  ev.data.fd = s->fd;
+#if defined(IWN_KQUEUE)
+  {
+    int i = 0;
+    struct kevent ev[2];
+    uint32_t events = s->events | s->events_mod;
+    unsigned short ka = _events_to_kflags(events);
 
-  if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) < 0) {
-    s->on_dispose = 0;
-    rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-    iwn_poller_remove(p, s->fd);
-    goto finish;
+    if (events & IWN_POLLIN) {
+      ev[i++] = (struct kevent) {
+        s->fd, EVFILT_READ, EV_ADD | ka
+      };
+    }
+    if (events & IWN_POLLOUT) {
+      ev[i++] = (struct kevent) {
+        s->fd, EVFILT_WRITE, EV_ADD | ka
+      };
+    }
+    if (kevent(p->fd, ev, i, 0, 0, 0) == -1) {
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      iwn_poller_remove(p, s->fd);
+      goto finish;
+    }
   }
+#elif defined(IWN_EPOLL)
+  {
+    struct epoll_event ev = { 0 };
+    ev.events = s->events | s->events_mod;
+    ev.data.fd = s->fd;
+
+    if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      iwn_poller_remove(p, s->fd);
+      goto finish;
+    }
+  }
+#endif
 
   if (s->timeout_sec > 0) {
     s->timeout_limit = _time_sec() + s->timeout_sec;
@@ -394,10 +532,23 @@ void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
 
 void iwn_poller_shutdown_request(struct iwn_poller *p) {
   if (p && __sync_bool_compare_and_swap(&p->stop, false, true)) {
+#if defined(IWN_KQUEUE)
+    {
+      struct kevent ev[] = {
+        { p->fd, EVFILT_USER, EV_ADD | EV_CLEAR | EV_ONESHOT },
+        { p->fd, EVFILT_USER, 0, NOTE_TRIGGER                }
+      };
+      if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
+        iwrc rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+        iwlog_ecode_error3(rc);
+      }
+    }
+#elif defined(IWN_EPOLL)
     if (p->event_fd > 0) {
       int64_t data = 1;
       write(p->event_fd, &data, sizeof(data));
     }
+#endif
   }
 }
 
@@ -419,18 +570,29 @@ static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **ou
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   p->fd = -1;
+#ifdef IWN_EPOLL
   p->timer_fd = -1;
   p->event_fd = -1;
+#endif
   p->max_poll_events = max_poll_events;
 
   pthread_mutex_init(&p->mtx, 0);
   RCA(p->slots = kh_init(SLOTS), finish);
   RCC(rc, finish, iwtp_start("poller-tp-", num_threads, 0, &p->tp));
-  RCN(finish, p->fd = epoll_create1(EPOLL_CLOEXEC));
-  RCN(finish, p->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
-  RCN(finish, p->event_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
-#if EFD_CLOEXEC == 0
-  RCN(finish, fcntl(p->event_fd, F_SETFD, FD_CLOEXEC));
+
+#if defined(IWN_KQUEUE)
+
+  RCN(finish, p->fd = kqueue());
+
+#elif defined(IWN_EPOLL)
+  {
+    RCN(finish, p->fd = epoll_create1(EPOLL_CLOEXEC));
+    RCN(finish, p->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
+    RCN(finish, p->event_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
+  #if EFD_CLOEXEC == 0
+    RCN(finish, fcntl(p->event_fd, F_SETFD, FD_CLOEXEC));
+  #endif
+  }
 #endif
 
 finish:
@@ -461,6 +623,7 @@ iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller *
 
   iwrc rc = RCR(_create(num_threads, max_poll_events, &p));
 
+#ifdef IWN_EPOLL
   RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = p,
     .fd = p->event_fd,
@@ -475,6 +638,8 @@ iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller *
   }));
 
 finish:
+#endif
+
   if (rc) {
     _destroy(p);
   } else {
@@ -489,14 +654,12 @@ static void _worker_fn(void *arg) {
   bool destroy = false;
   struct poller_slot *s = arg;
   struct iwn_poller *p = s->poller;
-
-  struct epoll_event ev = { 0 };
-  ev.data.fd = s->fd;
-  ev.events = s->events_processing;
+  uint32_t events = s->events_processing;
+  int fd = s->fd;
 
 start:
   if (s->on_ready) {
-    n = s->on_ready((void*) s, ev.events);
+    n = s->on_ready((void*) s, events);
   } else {
     n = 0;
   }
@@ -505,21 +668,43 @@ start:
     destroy = _slot_unref(s, REF_DESTROY_DEFER);
     goto finish;
   } else if (n > 0) {
-    ev.events = (uint32_t) n;
+    events = (uint32_t) n;
   } else {
-    ev.events = s->events;
+    events = s->events;
   }
   pthread_mutex_lock(&p->mtx);
   if (s->events_update) {
-    ev.events = s->events_update;
+    events = s->events_update;
     s->events_update = 0;
     pthread_mutex_unlock(&p->mtx);
     goto start;
   }
   s->flags &= ~SLOT_PROCESSING;
-  ev.events |= s->events_mod;
+  events |= s->events_mod;
 
+#if defined(IWN_KQUEUE)
+  {
+    unsigned short ka = _events_to_kflags(events);
+    struct kevent ev[2];
+    if (events & IWN_POLLIN) {
+      ev[rci++] = (struct kevent) {
+        fd, EVFILT_READ, EV_ADD | ka
+      };
+    }
+    if (events & IWN_POLLOUT) {
+      ev[rci++] = (struct kevent) {
+        fd, EVFILT_WRITE, EV_ADD | ka
+      };
+    }
+    rci = kevent(p->fd, ev, rci, 0, 0, 0);
+  }
+#elif defined(IWN_EPOLL)
+  struct epoll_event ev = { 0 };
+  ev.data.fd = fd;
+  ev.events = events;
   rci = epoll_ctl(p->fd, EPOLL_CTL_MOD, ev.data.fd, &ev);
+#endif
+
   destroy = _slot_unref(s, REF_LOCKED);
   pthread_mutex_unlock(&p->mtx);
 
@@ -528,7 +713,7 @@ finish:
     _slot_destroy(s);
   } else {
     if (rci < 0) {
-      iwn_poller_remove(p, ev.data.fd);
+      iwn_poller_remove(p, fd);
     } else if (s->timeout_sec > 0) {
       s->timeout_limit = _time_sec() + s->timeout_sec;
       _timer_check((void*) s, s->timeout_limit);
@@ -546,10 +731,19 @@ iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
 
 void iwn_poller_poll(struct iwn_poller *p) {
   int max_events = p->max_poll_events;
+
+#if defined(IWN_KQUEUE)
+  struct kevent event[max_events];
+#elif defined(IWN_EPOLL)
   struct epoll_event event[max_events];
+#endif
 
   for (bool active = !p->stop && p->fds_count > 0; active; active = !p->stop && p->fds_count > 0) {
+#if defined(IWN_KQUEUE)
+    int nfds = kevent(p->fd, 0, 0, event, max_events, 0);
+#elif defined(IWN_EPOLL)
     int nfds = epoll_wait(p->fd, event, max_events, -1);
+#endif
     if (nfds < 0) {
       if (errno != EINTR) {
         iwlog_ecode_error3(iwrc_set_errno(IW_ERROR_ERRNO, errno));
@@ -559,17 +753,37 @@ void iwn_poller_poll(struct iwn_poller *p) {
       }
     }
     for (int i = 0; i < nfds; ++i) {
-      int fd = event[i].data.fd;
-      if (event[i].events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
+      uint32_t events = 0;
+
+#if defined(IWN_KQUEUE)
+      int fd = event[i].ident;
+      if (event[i].flags & (EV_EOF | EV_ERROR)) {
         iwn_poller_remove(p, fd);
         continue;
       }
+      switch (event[i].filter) {
+        case EVFILT_READ:
+          events |= IWN_POLLIN;
+        case EVFILT_WRITE:
+          events |= IWN_POLLOUT;
+          break;
+      }
+
+#elif defined(IWN_EPOLL)
+      int fd = event[i].data.fd;
+      events = event[i].events;
+      if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
+        iwn_poller_remove(p, fd);
+        continue;
+      }
+#endif
+
       struct poller_slot *s = _slot_ref_id(p, fd, REF_SET_LOCKED);
       if (!s) {
         pthread_mutex_unlock(&p->mtx);
         continue;
       } else if (s->flags & SLOT_PROCESSING) {
-        s->events_update |= event[i].events;
+        s->events_update |= events;
         bool destroy = _slot_unref(s, REF_LOCKED);
         pthread_mutex_unlock(&p->mtx);
         if (destroy) {
@@ -579,7 +793,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
       } else {
         s->flags |= SLOT_PROCESSING;
         s->events_update = 0;
-        s->events_processing = event[i].events;
+        s->events_processing = events;
         s->timeout_limit = INT_MAX;
       }
       pthread_mutex_unlock(&p->mtx);

@@ -13,11 +13,15 @@ IW_EXTERN_C_START;
 #ifdef __linux__
 #define IWN_EPOLL
 #include <sys/epoll.h>
-#define IWN_POLLIN  EPOLLIN
-#define IWN_POLLOUT EPOLLOUT
-#define IWN_POLLET  EPOLLET
+#define IWN_POLLIN      EPOLLIN
+#define IWN_POLLOUT     EPOLLOUT
+#define IWN_POLLONESHOT EPOLLONESHOT
+#define IWN_POLLET      EPOLLET
 #elif defined(IWN_KQUEUE)
-#error "Kqueue is not yet supported"
+#define IWN_POLLIN      0x01U
+#define IWN_POLLOUT     0x02U
+#define IWN_POLLONESHOT 0x04U
+#define IWN_POLLET      0x08U
 #else
 #error "Unsupported operating system"
 #endif

@@ -1,12 +1,11 @@
 #pragma once
 
-#include <ejdb2/iowow/iwlog.h>
-#include <ejdb2/iowow/iwxstr.h>
-#include <ejdb2/iowow/iwarr.h>
-#include <ejdb2/iowow/iwconv.h>
-#include <ejdb2/jbl.h>
+#include <iowow/iwlog.h>
+#include <iowow/iwxstr.h>
+#include <iowow/iwarr.h>
+#include <iowow/iwconv.h>
 
-#include <curl/curl.h>
+#include <curl.h>
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
@@ -51,6 +50,10 @@ struct xcurlreq {
   uint64_t flags;
 };
 
+/*
+
+#include <ejdb2/jbl.h>
+
 struct xcurlresp {
   IWXSTR     *body;
   JBL_NODE    json;
@@ -80,6 +83,7 @@ static void xcurlresp_destroy_keep(struct xcurlresp *resp) {
     resp->ctype = 0;
   }
 }
+*/
 
 CURLcode xcurlcode(CURLUcode uc) {
   switch (uc) {
