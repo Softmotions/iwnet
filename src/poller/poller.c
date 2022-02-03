@@ -134,7 +134,7 @@ IW_INLINE void _service_fds_unsubcribe(struct iwn_poller *p) {
 
 #else
 
-IW_INLINE void _socket_fd_unsubscribe(int pfd, int fd) {
+IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
   epoll_ctl(pfd, EPOLL_CTL_DEL, fd, 0);
 }
 
