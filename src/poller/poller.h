@@ -10,6 +10,10 @@ IW_EXTERN_C_START;
 #define IWN_KQUEUE
 #endif
 
+/// Poller will do oneshot execution of `on_ready()` handler
+/// after the period of time in milliseconds specified in `(struct iwn_poller_task).timeout` field.
+#define IWN_POLLTIMEOUT (1U << 21)
+
 #ifdef __linux__
 #define IWN_EPOLL
 #include <sys/epoll.h>
@@ -35,7 +39,9 @@ struct iwn_poller_task {                                         // !!! Sync fie
   void     (*on_dispose)(const struct iwn_poller_task*);         ///< On destroy handler
   uint32_t events;                                               ///< Initial poll monitoring events
   uint32_t events_mod;                                           ///< Extra event flags added for every poll rearm
-  long     timeout_sec;                                          ///< Fd activity timeout
+  long     timeout;                                              ///< Max event channel inactivity timeout in seconds.
+                                                                 ///  Or timeout in milliseconds in IWN_POLLTIMEOUT
+                                                                 ///  mode.
   struct iwn_poller *poller;                                     ///< Poller
 };
 

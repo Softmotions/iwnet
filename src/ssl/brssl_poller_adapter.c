@@ -8,7 +8,6 @@
 #include <errno.h>
 #include <pthread.h>
 #include <unistd.h>
-#include <sys/epoll.h>
 
 struct x509_client_context {
   const br_x509_class    *vtable;
@@ -435,7 +434,7 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     .user_data = a,
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
-    .timeout_sec = spec->timeout_sec,
+    .timeout = spec->timeout_sec,
     .events = spec->events
   });
 
@@ -509,7 +508,7 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
     .user_data = a,
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
-    .timeout_sec = spec->timeout_sec,
+    .timeout = spec->timeout_sec,
     .events = spec->events
   });
 

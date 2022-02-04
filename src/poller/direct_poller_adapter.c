@@ -64,7 +64,7 @@ iwrc iwn_direct_poller_adapter(
     .user_data = a,
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
-    .timeout_sec = timeout_sec,
+    .timeout = timeout_sec,
     .poller = p,
     .events = events,
     .events_mod = events_mod

@@ -113,7 +113,7 @@ iwrc sst_inmem_create(struct iwn_wf_session_store *sst) {
   sst->get = _get;
   sst->clear = _clear;
   sst->dispose = _dispose;
-  memcpy(&impl->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(impl->mtx));
+  pthread_mutex_init(&impl->mtx, 0);
   RCA(impl->sidmap = iwhmap_create_str(_sidmap_kv_free), finish);
 
 finish:

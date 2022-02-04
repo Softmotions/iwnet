@@ -165,7 +165,7 @@ IW_EXPORT bool iwn_http_response_printf_va(
 
 IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_req*,
-  char *body,
+  char   *body,
   ssize_t body_len,
   iwn_http_server_chunk_handler);
 

@@ -3,7 +3,7 @@
 
 #include <iowow/iwxstr.h>
 
-#include <wait.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <pthread.h>
 #include <string.h>

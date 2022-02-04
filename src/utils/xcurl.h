@@ -5,7 +5,7 @@
 #include <iowow/iwarr.h>
 #include <iowow/iwconv.h>
 
-#include <curl.h>
+#include <curl/curl.h>
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>

@@ -31,18 +31,18 @@
  */
 
 /* Derived from original code by CodesInChaos */
-static char *bin2hex(
+static char* bin2hex(
   char* const                hex,
   const size_t               hex_maxlen,
   const unsigned char* const bin,
-  const size_t               bin_len) {
-
+  const size_t               bin_len
+  ) {
   size_t i = (size_t) 0U;
   unsigned int x;
   int b;
   int c;
 
-  if ((bin_len >= SIZE_MAX / 2) || (hex_maxlen <= bin_len * 2U) ) {
+  if ((bin_len >= SIZE_MAX / 2) || (hex_maxlen <= bin_len * 2U)) {
     //errx(2, "bin2hex length wrong");
     return 0;
   }
@@ -68,8 +68,8 @@ static int hex2bin(
   const size_t         hex_len,
   const char* const    ignore,
   size_t* const        bin_len,
-  const char** const   hex_end) {
-
+  const char** const   hex_end
+  ) {
   size_t bin_pos = (size_t) 0U;
   size_t hex_pos = (size_t) 0U;
   int ret = 0;
@@ -87,7 +87,7 @@ static int hex2bin(
     c_alpha = (c & ~32U) - 55U;
     c_alpha0 = ((c_alpha - 10U) ^ (c_alpha - 16U)) >> 8;
     if ((c_num0 | c_alpha0) == 0U) {
-      if ((ignore != 0) && (state == 0U) && (strchr(ignore, c) != 0) ) {
+      if ((ignore != 0) && (state == 0U) && (strchr(ignore, c) != 0)) {
         hex_pos++;
         continue;
       }
@@ -192,14 +192,14 @@ size_t iwn_base64_encoded_len(const size_t bin_len, const int variant) {
   return base64_ENCODED_LEN(bin_len, variant);
 }
 
-char *iwn_base64_encode(
+char* iwn_base64_encode(
   char* const                b64,
   const size_t               b64_maxlen,
   size_t                    *out_b64_len,
   const unsigned char* const bin,
   const size_t               bin_len,
-  const int                  variant) {
-
+  const int                  variant
+  ) {
   size_t acc_len = (size_t) 0;
   size_t b64_pos = (size_t) 0;
   size_t bin_pos = (size_t) 0;
@@ -246,7 +246,8 @@ char *iwn_base64_encode(
 static int _base642bin_skip_padding(
   const char* const b64,
   const size_t b64_len, size_t* const b64_pos_p,
-  const char* const ignore, size_t padding_len) {
+  const char* const ignore, size_t padding_len
+  ) {
   int c;
 
   while (padding_len > 0) {
@@ -257,7 +258,7 @@ static int _base642bin_skip_padding(
     c = b64[*b64_pos_p];
     if (c == '=') {
       padding_len--;
-    } else if ((ignore == 0) || (strchr(ignore, c) == 0) ) {
+    } else if ((ignore == 0) || (strchr(ignore, c) == 0)) {
       errno = EINVAL;
       return -1;
     }
@@ -270,8 +271,8 @@ int iwn_base64_decode(
   unsigned char* const bin, const size_t bin_maxlen,
   const char* const b64, const size_t b64_len,
   const char* const ignore, size_t* const bin_len,
-  const char** const b64_end, const int variant) {
-
+  const char** const b64_end, const int variant
+  ) {
   size_t acc_len = (size_t) 0;
   size_t b64_pos = (size_t) 0;
   size_t bin_pos = (size_t) 0;
@@ -294,7 +295,7 @@ int iwn_base64_decode(
       d = b64_char_to_byte(c);
     }
     if (d == 0xFF) {
-      if ((ignore != 0) && (strchr(ignore, c) != 0) ) {
+      if ((ignore != 0) && (strchr(ignore, c) != 0)) {
         b64_pos++;
         continue;
       }
@@ -313,10 +314,10 @@ int iwn_base64_decode(
     }
     b64_pos++;
   }
-  if ((acc_len > 4U) || ((acc & ((1U << acc_len) - 1U)) != 0U) ) {
+  if ((acc_len > 4U) || ((acc & ((1U << acc_len) - 1U)) != 0U)) {
     ret = -1;
   } else if (  (ret == 0)
-            && ((((unsigned int) variant) & VARIANT_NO_PADDING_MASK) == 0U) ) {
+            && ((((unsigned int) variant) & VARIANT_NO_PADDING_MASK) == 0U)) {
     ret = _base642bin_skip_padding(b64, b64_len, &b64_pos, ignore,
                                    acc_len / 2);
   }
@@ -339,7 +340,7 @@ int iwn_base64_decode(
   return ret;
 }
 
-char *iwn_base64_encode_url(const void *buf, size_t buf_len, size_t *out_len) {
+char* iwn_base64_encode_url(const void *buf, size_t buf_len, size_t *out_len) {
   size_t encoded_len = base64_ENCODED_LEN(buf_len, base64_VARIANT_URLSAFE_NO_PADDING);
   char *encoded = calloc(1, encoded_len);
   if (!encoded) {

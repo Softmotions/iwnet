@@ -18,14 +18,14 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <fcntl.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/epoll.h>
-#include <netdb.h>
 #include <arpa/inet.h>
-#include <netinet/tcp.h>
 #include <assert.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/tcp.h>
+#include <netinet/in.h>
 
 #define _STATE_HANDSHAKE_SEND 0x01U
 #define _STATE_HANDSHAKE_RECV 0x02U

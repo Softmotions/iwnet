@@ -6,7 +6,6 @@
 #include <iowow/iwp.h>
 #include <iowow/iwtp.h>
 
-
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -15,16 +14,15 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#include <sys/socket.h>
 
-#ifdef IWN_KQUEUE
+#if defined(IWN_KQUEUE)
 #include <sys/event.h>
-#else
+#elif defined(IWN_EPOLL)
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <sys/eventfd.h>
 #endif
-
-#include <sys/socket.h>
 
 KHASH_MAP_INIT_INT(SLOTS, struct poller_slot*)
 
@@ -42,6 +40,11 @@ struct iwn_poller {
   int event_fd;               ///< fd to signal internal changes on poller.
   int timer_fd;               ///< fd to set up timeouts
 #endif
+
+#ifdef IWN_KQUEUE
+  int identity_seq;
+#endif
+
   int fds_count;              ///< Numbver of active file descriptors
   int max_poll_events;        ///< Max wait epoll_wait fd events at once
 
@@ -62,8 +65,8 @@ struct poller_slot {
   void     (*on_dispose)(const struct iwn_poller_task*);         ///< On destroy handler
   uint32_t events;                                               ///< Default epoll monitoring events
   uint32_t events_mod;
-  long     timeout_sec;                                      ///< Optional slot timeout
-  struct iwn_poller *poller;                                 ///< Poller
+  long     timeout;                                      ///< Optional slot timeout
+  struct iwn_poller *poller;                             ///< Poller
 
   int      refs;
   uint32_t events_processing;
@@ -126,7 +129,7 @@ IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
 IW_INLINE void _service_fds_unsubcribe(struct iwn_poller *p) {
   if (p->fd > -1) {
     struct kevent ev = {
-      p->fd, EVFILT_TIMER, EV_DELETE
+      (unsigned) -p->fd, EVFILT_TIMER, EV_DELETE
     };
     kevent(p->fd, &ev, 1, 0, 0, 0);
   }
@@ -254,7 +257,9 @@ void iwn_poller_remove(struct iwn_poller *p, int fd) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
   if (!s) {
     pthread_mutex_unlock(&p->mtx);
-    close(fd);
+    if (fd > -1) {
+      close(fd);
+    }
     return;
   }
   if (s->flags & SLOT_REMOVE_PENDING) {
@@ -353,9 +358,9 @@ static void _timer_ready_impl(struct iwn_poller *p) {
 #elif defined(IWN_KQUEUE)
   {
     struct kevent ev = {
-      .ident  = p->fd,
+      .ident  = (unsigned) -p->fd,
       .filter = EVFILT_TIMER,
-      .flags  = EV_ADD | EV_ONESHOT,
+      .flags  = EV_ADD | EV_CLEAR | EV_ONESHOT,
       .fflags = NOTE_SECONDS,
       .data   = timeout_next - ctime,
     };
@@ -440,88 +445,151 @@ iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
 
 #endif
 
+#if defined(IWN_KQUEUE)
+
+static int _next_kevent_identity(struct poller_slot *s) {
+  int ret;
+  pthread_mutex_lock(&s->poller->mtx);
+  do {
+    if (s->poller->identity_seq == INT_MIN || s->poller->identity_seq > 0) {
+      s->poller->identity_seq = 0;
+    }
+  } while (--s->poller->identity_seq == -s->poller->fd);
+  ret = s->poller->identity_seq;
+  pthread_mutex_unlock(&s->poller->mtx);
+  return ret;
+}
+
+#endif
+
+static iwrc _poller_timeout_add(struct poller_slot *s) {
+  if (s->timeout < 1) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  s->timeout_limit = INT_MAX;
+
+#if defined(IWN_KQUEUE)
+  {
+    s->fd = _next_kevent_identity(s);
+    struct kevent ev = { (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_CLEAR | EV_ONESHOT, NOTE_MSECONDS, s->timeout };
+    if (kevent(s->poller->fd, &ev, 1, 0, 0, 0) == -1) {
+      return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+    }
+  }
+
+#elif defined(IWN_EPOLL)
+  {
+    s->fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    if (s->fd < 0) {
+      return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+    }
+
+    struct epoll_event ev = { 0 };
+    ev.events = EPOLLIN;
+    ev.data.fd = s->fd;
+
+    if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
+      return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+    }
+    if (timerfd_settime(fd, 0, &(struct itimerspec) {
+      .it_value = {
+        .tv_sec  = spec->timeout / 1000,
+        .tv_nsec = (int64_t) (spec->timeout % 1000) * 1000000
+      }
+    }, 0) < 0) {
+      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+    }
+  }
+
+#endif
+  return 0;
+}
+
 iwrc iwn_poller_add(const struct iwn_poller_task *task) {
   if (!task || task->fd < 0 || !task->poller) {
     return IW_ERROR_INVALID_ARGS;
   }
-  iwrc rc = 0;
+
+  iwrc rc;
   struct iwn_poller *p = task->poller;
-  assert(p);
   struct poller_slot *s = calloc(1, sizeof(*s));
   if (!s) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   memcpy(s, task, sizeof(*task));
 
-  if (s->refs != 0) {
-    rc = IW_ERROR_INVALID_STATE;
-    goto finish;
+  rc = _slot_ref(s);
+  if (rc) {
+    free(s);
+    return rc;
   }
-  RCC(rc, finish, _slot_ref(s));
 
+  if (IW_UNLIKELY(task->events & IWN_POLLTIMEOUT)) {
+    rc = _poller_timeout_add(s);
+  } else {
 #if defined(IWN_KQUEUE)
-  {
-    int i = 0;
-    struct kevent ev[2];
-    uint32_t events = s->events | s->events_mod;
-    unsigned short ka = _events_to_kflags(events);
+    {
+      int i = 0;
+      struct kevent ev[2];
+      uint32_t events = s->events | s->events_mod;
+      unsigned short ka = _events_to_kflags(events);
 
-    if (events & IWN_POLLIN) {
-      ev[i++] = (struct kevent) {
-        s->fd, EVFILT_READ, EV_ADD | ka
-      };
+      if (events & IWN_POLLIN) {
+        ev[i++] = (struct kevent) {
+          s->fd, EVFILT_READ, EV_ADD | ka
+        };
+      }
+      if (events & IWN_POLLOUT) {
+        ev[i++] = (struct kevent) {
+          s->fd, EVFILT_WRITE, EV_ADD | ka
+        };
+      }
+      if (kevent(p->fd, ev, i, 0, 0, 0) == -1) {
+        rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+        goto finish;
+      }
     }
-    if (events & IWN_POLLOUT) {
-      ev[i++] = (struct kevent) {
-        s->fd, EVFILT_WRITE, EV_ADD | ka
-      };
-    }
-    if (kevent(p->fd, ev, i, 0, 0, 0) == -1) {
-      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-      iwn_poller_remove(p, s->fd);
-      goto finish;
-    }
-  }
+
 #elif defined(IWN_EPOLL)
-  {
-    struct epoll_event ev = { 0 };
-    ev.events = s->events | s->events_mod;
-    ev.data.fd = s->fd;
+    {
+      struct epoll_event ev = { 0 };
+      ev.events = s->events | s->events_mod;
+      ev.data.fd = s->fd;
 
-    if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
-      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-      iwn_poller_remove(p, s->fd);
-      goto finish;
+      if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
+        rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+        goto finish;
+      }
     }
-  }
 #endif
 
-  if (s->timeout_sec > 0) {
-    s->timeout_limit = _time_sec() + s->timeout_sec;
-    _timer_check((void*) s, s->timeout_limit);
-  } else {
-    s->timeout_limit = INT_MAX;
+    if (s->timeout > 0) {
+      s->timeout_limit = _time_sec() + s->timeout;
+      _timer_check((void*) s, s->timeout_limit);
+    } else {
+      s->timeout_limit = INT_MAX;
+    }
   }
 
 finish:
   if (rc) {
     s->on_dispose = 0;
-    _slot_destroy(s);
+    iwn_poller_remove(p, s->fd);
   }
   return rc;
 }
 
 void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
-  if (!s || s->timeout_sec == timeout_sec) {
+  if (!s || s->timeout == timeout_sec || (s->events & IWN_POLLTIMEOUT)) {
     pthread_mutex_unlock(&p->mtx);
     return;
   }
   if (timeout_sec > 0) {
-    s->timeout_sec = timeout_sec;
-    s->timeout_limit = _time_sec() + s->timeout_sec;
+    s->timeout = timeout_sec;
+    s->timeout_limit = _time_sec() + s->timeout;
   } else {
-    s->timeout_sec = 0;
+    s->timeout = 0;
     s->timeout_limit = INT_MAX;
   }
   pthread_mutex_unlock(&p->mtx);
@@ -535,8 +603,8 @@ void iwn_poller_shutdown_request(struct iwn_poller *p) {
 #if defined(IWN_KQUEUE)
     {
       struct kevent ev[] = {
-        { p->fd, EVFILT_USER, EV_ADD | EV_CLEAR | EV_ONESHOT },
-        { p->fd, EVFILT_USER, 0, NOTE_TRIGGER                }
+        { (unsigned) -p->fd, EVFILT_USER, EV_ADD | EV_CLEAR | EV_ONESHOT },
+        { (unsigned) -p->fd, EVFILT_USER, 0, NOTE_TRIGGER                }
       };
       if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
         iwrc rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
@@ -663,6 +731,9 @@ start:
   } else {
     n = 0;
   }
+  if (s->events & IWN_POLLTIMEOUT) {
+    n = -1;
+  }
   if (n < 0) {
     rci = -1;
     destroy = _slot_unref(s, REF_DESTROY_DEFER);
@@ -714,8 +785,8 @@ finish:
   } else {
     if (rci < 0) {
       iwn_poller_remove(p, fd);
-    } else if (s->timeout_sec > 0) {
-      s->timeout_limit = _time_sec() + s->timeout_sec;
+    } else if (s->timeout > 0) {
+      s->timeout_limit = _time_sec() + s->timeout;
       _timer_check((void*) s, s->timeout_limit);
     }
   }
@@ -728,6 +799,8 @@ bool iwn_poller_alive(struct iwn_poller *p) {
 iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
   return iwtp_schedule(p->tp, task, arg);
 }
+
+//void iwn_poller_schedule()
 
 void iwn_poller_poll(struct iwn_poller *p) {
   int max_events = p->max_poll_events;
@@ -753,16 +826,27 @@ void iwn_poller_poll(struct iwn_poller *p) {
       }
     }
     for (int i = 0; i < nfds; ++i) {
+      int fd;
       uint32_t events = 0;
 
 #if defined(IWN_KQUEUE)
-      int fd = event[i].ident;
+      fd = (int) event[i].ident;
+      if (fd == -p->fd) { // Own, not fd related event
+        if (event[i].filter == EVFILT_TIMER) {
+          if (__sync_bool_compare_and_swap(&p->housekeeping, false, true)) {
+            _timer_ready_impl(p);
+            __sync_bool_compare_and_swap(&p->housekeeping, true, false);
+          }
+        }
+        continue;
+      }
       if (event[i].flags & (EV_EOF | EV_ERROR)) {
         iwn_poller_remove(p, fd);
         continue;
       }
       switch (event[i].filter) {
         case EVFILT_READ:
+        case EVFILT_TIMER:  
           events |= IWN_POLLIN;
         case EVFILT_WRITE:
           events |= IWN_POLLOUT;
@@ -770,7 +854,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
       }
 
 #elif defined(IWN_EPOLL)
-      int fd = event[i].data.fd;
+      fd = event[i].data.fd;
       events = event[i].events;
       if (events & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)) {
         iwn_poller_remove(p, fd);

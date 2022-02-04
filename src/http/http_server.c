@@ -22,7 +22,6 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <time.h>
@@ -1778,7 +1777,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   RCA(server = iwpool_calloc(sizeof(*server), pool), finish);
-  memcpy(&server->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(server->mtx));
+  pthread_mutex_init(&server->mtx, 0);
+
   server->pool = pool;
   server->refs = 1;
   spec = &server->spec;

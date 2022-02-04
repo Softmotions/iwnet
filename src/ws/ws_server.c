@@ -287,7 +287,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
   ctx->hreq = hreq;
   ctx->sess.req = req;
   ctx->spec = ctx->sess.spec = spec;
-  memcpy(&ctx->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(ctx->mtx));
+  pthread_mutex_init(&ctx->mtx, 0);
 
   iwn_http_request_ws_set(hreq, ctx);
   hreq->on_request_dispose = _on_request_dispose;

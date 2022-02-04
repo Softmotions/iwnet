@@ -146,7 +146,7 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   }
 
   RCA(route = iwpool_calloc(sizeof(*route), pool), finish);
-  memcpy(&route->mtx, &(pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER, sizeof(route->mtx));
+  pthread_mutex_init(&route->mtx, 0);
   memcpy(&route->base, spec, sizeof(route->base));
   base = &route->base;
   base->ctx = &ctx->base;
@@ -594,7 +594,7 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
         if (mret >= 0 && ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == mret)) {
           mlen = mret == 0 ? -1 : mret;
           for (int n = 0; n < r->pattern_re->nmatches; n += 2) {   // Record regexp submatches
-            struct route_re_submatch *sm = iwpool_alloc(sizeof(sm), req->pool);
+            struct route_re_submatch *sm = iwpool_alloc(sizeof(*sm), req->pool);
             if (sm) {
               sm->route = &r->base;
               sm->input = path_unmatched;

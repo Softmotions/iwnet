@@ -7,7 +7,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <signal.h>
-#include <wait.h>
+#include <sys/wait.h>
 
 static struct iwn_poller *poller;
 static struct iwn_ws_client *ws;
