@@ -407,7 +407,7 @@ iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
       }
       if (events & IWN_POLLOUT) {
         ev[rci++] = (struct kevent) {
-          fd, EVFILT_WRITE, EV_ADD | ka | EV_ONESHOT
+          fd, EVFILT_WRITE, EV_ADD | ka | EV_DISPATCH
         };
       }
       if (rci > 0) {
@@ -482,7 +482,7 @@ static iwrc _poller_timeout_create_fd(struct poller_slot *s) {
 
 static iwrc _poller_timeout_add(struct poller_slot *s) {
 #if defined(IWN_KQUEUE)
-  struct kevent ev = { (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_CLEAR | EV_ONESHOT, NOTE_MSECONDS, s->timeout };
+  struct kevent ev = { (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_ONESHOT, NOTE_MSECONDS, s->timeout };
   if (kevent(s->poller->fd, &ev, 1, 0, 0, 0) == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
@@ -553,7 +553,7 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
     }
     if (events & IWN_POLLOUT) {
       ev[i++] = (struct kevent) {
-        s->fd, EVFILT_WRITE, EV_ADD | ka | EV_ONESHOT
+        s->fd, EVFILT_WRITE, EV_ADD | ka | EV_DISPATCH
       };
     }
     if (i > 0 && kevent(p->fd, ev, i, 0, 0, 0) == -1) {
@@ -614,7 +614,7 @@ void iwn_poller_shutdown_request(struct iwn_poller *p) {
 #if defined(IWN_KQUEUE)
     {
       struct kevent ev[] = {
-        { (unsigned) -p->fd, EVFILT_USER, EV_ADD | EV_CLEAR | EV_ONESHOT },
+        { (unsigned) -p->fd, EVFILT_USER, EV_ADD | EV_ONESHOT },
         { (unsigned) -p->fd, EVFILT_USER, 0, NOTE_TRIGGER                }
       };
       if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
@@ -775,7 +775,7 @@ start:
     }
     if (events & IWN_POLLOUT) {
       ev[rci++] = (struct kevent) {
-        fd, EVFILT_WRITE, EV_ADD | ka | EV_ONESHOT
+        fd, EVFILT_WRITE, EV_ADD | ka | EV_DISPATCH
       };
     }
     if (rci > 0) {
