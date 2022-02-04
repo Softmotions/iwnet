@@ -809,8 +809,6 @@ iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
   return iwtp_schedule(p->tp, task, arg);
 }
 
-//void iwn_poller_schedule()
-
 void iwn_poller_poll(struct iwn_poller *p) {
   int max_events = p->max_poll_events;
 
@@ -855,8 +853,8 @@ void iwn_poller_poll(struct iwn_poller *p) {
       }
       switch (event[i].filter) {
         case EVFILT_READ:
-        case EVFILT_TIMER:
           events |= IWN_POLLIN;
+          break;
         case EVFILT_WRITE:
           events |= IWN_POLLOUT;
           break;
