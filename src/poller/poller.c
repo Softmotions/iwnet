@@ -129,7 +129,7 @@ IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
 IW_INLINE void _service_fds_unsubcribe(struct iwn_poller *p) {
   if (p->fd > -1) {
     struct kevent ev = {
-      (unsigned) -p->fd, EVFILT_TIMER, EV_DELETE
+      p->fd, EVFILT_TIMER, EV_DELETE
     };
     kevent(p->fd, &ev, 1, 0, 0, 0);
   }
@@ -358,7 +358,7 @@ static void _timer_ready_impl(struct iwn_poller *p) {
 #elif defined(IWN_KQUEUE)
   {
     struct kevent ev = {
-      .ident  = (unsigned) -p->fd,
+      .ident  = p->fd,
       .filter = EVFILT_TIMER,
       .flags  = EV_ADD | EV_ENABLE | EV_CLEAR | EV_ONESHOT,
       .fflags = NOTE_SECONDS,
@@ -452,12 +452,10 @@ iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
 static int _next_kevent_identity(struct poller_slot *s) {
   int ret;
   pthread_mutex_lock(&s->poller->mtx);
-  do {
-    if (s->poller->identity_seq == INT_MIN || s->poller->identity_seq >= 0) {
-      s->poller->identity_seq = -1;
-    }
-  } while (--s->poller->identity_seq == -s->poller->fd);
-  ret = s->poller->identity_seq;
+  if (s->poller->identity_seq == INT_MIN || s->poller->identity_seq >= 0) {
+    s->poller->identity_seq = -1;
+  }
+  ret = --s->poller->identity_seq;
   pthread_mutex_unlock(&s->poller->mtx);
   return ret;
 }
@@ -614,8 +612,8 @@ void iwn_poller_shutdown_request(struct iwn_poller *p) {
 #if defined(IWN_KQUEUE)
     {
       struct kevent ev[] = {
-        { (unsigned) -p->fd, EVFILT_USER, EV_ADD | EV_ONESHOT },
-        { (unsigned) -p->fd, EVFILT_USER, 0, NOTE_TRIGGER                }
+        { p->fd, EVFILT_USER, EV_ADD | EV_ONESHOT },
+        { p->fd, EVFILT_USER, 0, NOTE_TRIGGER     }
       };
       if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
         iwrc rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
@@ -842,7 +840,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
 
 #if defined(IWN_KQUEUE)
       fd = (int) event[i].ident;
-      if (fd == -p->fd) { // Own, not fd related event
+      if (fd == p->fd) { // Own, not fd related event
         if (event[i].filter == EVFILT_TIMER) {
           if (__sync_bool_compare_and_swap(&p->housekeeping, false, true)) {
             _timer_ready_impl(p);
