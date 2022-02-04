@@ -1872,6 +1872,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
       continue;
     }
     if (setsockopt(task.fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &optval, sizeof(optval)) < 0) {
+      // TODO: Error on freebsd
       iwlog_error("Error setsockopt: %s", strerror(errno));
     }
     if (bind(task.fd, rp->ai_addr, rp->ai_addrlen) == 0) {

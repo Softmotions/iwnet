@@ -45,30 +45,30 @@ run() {
   BASE="${PROTO}://localhost:${PORT}"
   FILTER='sed -r /(date|user-agent|trying|tcp)|^\*/Id'
 
-  echo "\n\nSmall response body:"
+  printf "\n\nSmall response body:\n"
   curl -isk ${BASE}/ | ${FILTER}
 
-  echo "\n\nEmpty response:"
+  printf "\n\nEmpty response:\n"
   curl -isk ${BASE}/empty | ${FILTER}
 
-  echo "\n\nEcho body:"
+  printf "\n\nEcho body:\n"
   curl -isk -XPOST ${BASE}/echo -d'b548f7fa-a786-4858-82cb-c3f42759c7a9' | ${FILTER}
 
-  echo "\n\nGet header:"
+  printf "\n\nGet header:\n"
   curl -isk -H'X-Foo:Bar' ${BASE}/header | ${FILTER}
 
-  echo "\n\nRequest large body:"
+  printf "\n\nRequest large body:\n"
   dd if=/dev/urandom of=test.dat bs=25165824 count=1 2> /dev/null
   curl -sk -H'Expect:' --data-binary @test.dat -o r1.dat ${BASE}/large 2>&1 | ${FILTER}
   diff r1.dat test.dat
 
-  echo "\n\nChunked response:"
+  printf "\n\nChunked response:\n"
   curl -isk ${BASE}/chunked  2>&1 | ${FILTER}
 
-  echo "\n\nChunked response close:"
+  printf "\n\nChunked response close:\n"
   curl -isk -H'Connection: close' ${BASE}/chunked ${BASE}/chunked 2>&1 | ${FILTER}
 
-  echo "\n\nChunked request:"
+  printf "\n\nChunked request:\n"
   dd if=/dev/urandom of=test.dat bs=262144 count=1 2> /dev/null
   curl -sk -H'Expect:' -H'Transfer-Encoding: chunked' -XPOST --data-binary @test.dat \
     -o r1.dat ${BASE}/large \
@@ -101,7 +101,7 @@ if [ -n "${VALGRIND}" ]; then
   diff valgrind-results.log valgrind-success.log
 fi  
 
-echo "\nDone!"
+printf "\nDone!\n"
 
 
 

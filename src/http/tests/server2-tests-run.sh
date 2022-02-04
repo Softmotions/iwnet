@@ -47,27 +47,27 @@ run() {
   BASE="${PROTO}://localhost:${PORT}"
   FILTER='sed -r /(date|user-agent|trying|tcp|sessionid|etag|boundary|--)|^\*/Id'
 
-  echo "\n\nGet empty:"
+  printf "\n\nGet empty:\n"
   curl -isk ${BASE}/get/empty | ${FILTER}
 
-  echo "\n\nGet not-found:"
+  printf "\n\nGet not-found:\n"
   curl -isk ${BASE}/get/not_found | ${FILTER}
 
-  echo "\n\nGet query:"
+  printf "\n\nGet query:\n"
   curl -isk "${BASE}/get/query?foo=bar&baz=a%40z" | ${FILTER}
   
-  echo "\n\nGet fail:"
+  printf "\n\nGet fail:\n"
   curl -vsk "${BASE}/fail" 2>&1 | grep -i empty
 
-  echo "\n\nPost urlencoded:"
+  printf "\n\nPost urlencoded:\n"
   curl -isk -d'foo=bar&baz=a%40z' ${BASE}/post/urlencoded | ${FILTER}
 
-  echo "\n\nPut data:"
+  printf "\n\nPut data:\n"
   curl -isk -XPUT -H'Content-Type:text/plain' -d'ff5fd857-c90b-4066-910f-a9a5d1fa1b47' ${BASE}/post/putdata | ${FILTER}
 
   base64 /dev/urandom | head -c 25165824 > ./test.dat
 
-  echo "\n\nPost chunked:"
+  printf "\n\nPost chunked:\n"
   curl -sk -XPOST -H'Expect:' -H'Transfer-Encoding: chunked' --data-urlencode bigparam@test.dat -o r1.dat \
     ${BASE}/post/bigparam 
 
@@ -75,17 +75,17 @@ run() {
     echo "./test.dat and ./r1.dat differs"
   fi
   
-  echo "\n\nPost multipart:"
+  printf "\n\nPost multipart:\n"
   curl -sk -XPOST -H'Expect:' -F 'foo=bar' -F 'baz=a%40z' -F 'bigparam=@test.dat;type=text/plain' \
     ${BASE}/post/multipart | ${FILTER}
 
-  echo "\n\nSession put:"
+  printf "\n\nSession put:\n"
   curl -isk -c ./cookie.jar ${BASE}/session/put | ${FILTER}
 
-  echo "\n\nSession get:"
+  printf "\n\nSession get:\n"
   curl -isk -b ./cookie.jar ${BASE}/session/get | ${FILTER}
 
-  echo "\n\nFile get:"
+  printf "\n\nFile get:\n"
   curl -sk ${BASE}/file/test.dat -o r1.dat | ${FILTER}
   
   if ! cmp -s ./test.dat ./r1.dat; then
@@ -94,25 +94,25 @@ run() {
 
   echo -n "ae0150d3-c811-4313-b5d5-89fcfc29f8c6" > chunks.txt
 
-  echo "\n\nRange1:"
+  printf "\n\nRange1:\n"
   curl -isk -H'Range: bytes=0-7' ${BASE}/file/chunks.txt | ${FILTER}
 
-  echo "\n\nRange2:"
+  printf "\n\nRange2:\n"
   curl -isk -H'Range: bytes=0-0' ${BASE}/file/chunks.txt | ${FILTER}
 
-  echo "\n\nRange3:"
+  printf "\n\nRange3:\n"
   curl -isk -H'Range: bytes=-1' ${BASE}/file/chunks.txt | ${FILTER}
 
-  echo "\n\nRange4:"
+  printf "\n\nRange4:\n"
   curl -isk -H'Range: bytes=-1111' ${BASE}/file/chunks.txt | ${FILTER}
 
-  echo "\n\nRange5:"
+  printf "\n\nRange5:\n"
   curl -isk -H'Range: bytes=' ${BASE}/file/chunks.txt | ${FILTER}
 
-  echo "\n\nRange6:"
+  printf "\n\nRange6:\n"
   curl -isk -H'Range: bytes=1' ${BASE}/file/chunks.txt | ${FILTER}
 
-  echo "\n\nRange7:"
+  printf "\n\nRange7:\n"
   curl -isk -H'Range: bytes=0-7,-1' ${BASE}/file/chunks.txt | ${FILTER}
 
 }
@@ -139,7 +139,7 @@ if [ -n "${VALGRIND}" ]; then
   diff valgrind2-results.log valgrind2-success.log
 fi  
 
-echo "\nDone!"
+printf "\nDone!\n"
 
 
 

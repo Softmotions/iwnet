@@ -407,10 +407,12 @@ iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
       }
       if (events & IWN_POLLOUT) {
         ev[rci++] = (struct kevent) {
-          fd, EVFILT_WRITE, EV_ADD | ka
+          fd, EVFILT_WRITE, EV_ADD | ka | EV_ONESHOT
         };
       }
-      rci = kevent(p->fd, ev, rci, 0, 0, 0);
+      if (rci > 0) {
+        rci = kevent(p->fd, ev, rci, 0, 0, 0);
+      }
     }
   }
   pthread_mutex_unlock(&p->mtx);
@@ -551,10 +553,10 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
     }
     if (events & IWN_POLLOUT) {
       ev[i++] = (struct kevent) {
-        s->fd, EVFILT_WRITE, EV_ADD | ka
+        s->fd, EVFILT_WRITE, EV_ADD | ka | EV_ONESHOT
       };
     }
-    if (kevent(p->fd, ev, i, 0, 0, 0) == -1) {
+    if (i > 0 && kevent(p->fd, ev, i, 0, 0, 0) == -1) {
       rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
       goto finish;
     }
@@ -773,10 +775,12 @@ start:
     }
     if (events & IWN_POLLOUT) {
       ev[rci++] = (struct kevent) {
-        fd, EVFILT_WRITE, EV_ADD | ka
+        fd, EVFILT_WRITE, EV_ADD | ka | EV_ONESHOT
       };
     }
-    rci = kevent(p->fd, ev, rci, 0, 0, 0);
+    if (rci > 0) {
+      rci = kevent(p->fd, ev, rci, 0, 0, 0);
+    }
   }
 #elif defined(IWN_EPOLL)
   struct epoll_event ev = { 0 };
