@@ -108,7 +108,7 @@ static void _slot_destroy(struct poller_slot *s) {
 #ifdef IWN_KQUEUE
 
 IW_INLINE unsigned short _events_to_kflags(uint32_t events) {
-  unsigned short action = 0;
+  unsigned short action = EV_ENABLE;
   if (events & IWN_POLLET) {
     action |= EV_CLEAR;
   }
@@ -360,7 +360,7 @@ static void _timer_ready_impl(struct iwn_poller *p) {
     struct kevent ev = {
       .ident  = (unsigned) -p->fd,
       .filter = EVFILT_TIMER,
-      .flags  = EV_ADD | EV_CLEAR | EV_ONESHOT,
+      .flags  = EV_ADD | EV_ENABLE | EV_CLEAR | EV_ONESHOT,
       .fflags = NOTE_SECONDS,
       .data   = timeout_next - ctime,
     };
