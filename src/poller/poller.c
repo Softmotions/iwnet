@@ -451,8 +451,8 @@ static int _next_kevent_identity(struct poller_slot *s) {
   int ret;
   pthread_mutex_lock(&s->poller->mtx);
   do {
-    if (s->poller->identity_seq == INT_MIN || s->poller->identity_seq > 0) {
-      s->poller->identity_seq = 0;
+    if (s->poller->identity_seq == INT_MIN || s->poller->identity_seq >= 0) {
+      s->poller->identity_seq = -1;
     }
   } while (--s->poller->identity_seq == -s->poller->fd);
   ret = s->poller->identity_seq;
@@ -462,54 +462,52 @@ static int _next_kevent_identity(struct poller_slot *s) {
 
 #endif
 
-static iwrc _poller_timeout_add(struct poller_slot *s) {
+static iwrc _poller_timeout_create_fd(struct poller_slot *s) {
+  s->timeout_limit = INT_MAX;
   if (s->timeout < 1) {
     return IW_ERROR_INVALID_ARGS;
   }
-  s->timeout_limit = INT_MAX;
+  #if defined(IWN_KQUEUE)
+  s->fd = _next_kevent_identity(s);
+  #elif defined(IWN_EPOLL)
+  s->fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+  if (s->fd < 0) {
+    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+  }
+  #endif
+  return 0;
+}
 
+static iwrc _poller_timeout_add(struct poller_slot *s) {
 #if defined(IWN_KQUEUE)
-  {
-    s->fd = _next_kevent_identity(s);
-    struct kevent ev = { (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_CLEAR | EV_ONESHOT, NOTE_MSECONDS, s->timeout };
-    if (kevent(s->poller->fd, &ev, 1, 0, 0, 0) == -1) {
-      return iwrc_set_errno(IW_ERROR_ERRNO, errno);
-    }
+  struct kevent ev = { (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_CLEAR | EV_ONESHOT, NOTE_MSECONDS, s->timeout };
+  if (kevent(s->poller->fd, &ev, 1, 0, 0, 0) == -1) {
+    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
-
 #elif defined(IWN_EPOLL)
-  {
-    s->fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
-    if (s->fd < 0) {
-      return iwrc_set_errno(IW_ERROR_ERRNO, errno);
-    }
+  struct epoll_event ev = { 0 };
+  ev.events = EPOLLIN;
+  ev.data.fd = s->fd;
 
-    struct epoll_event ev = { 0 };
-    ev.events = EPOLLIN;
-    ev.data.fd = s->fd;
-
-    if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
-      return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-    }
-    if (timerfd_settime(fd, 0, &(struct itimerspec) {
-      .it_value = {
-        .tv_sec  = spec->timeout / 1000,
-        .tv_nsec = (int64_t) (spec->timeout % 1000) * 1000000
-      }
-    }, 0) < 0) {
-      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
-    }
+  if (epoll_ctl(s->poller->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
+    return iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
   }
-
+  if (timerfd_settime(s->fd, 0, &(struct itimerspec) {
+    .it_value = {
+      .tv_sec  = s->timeout / 1000,
+      .tv_nsec = (int64_t) (s->timeout % 1000) * 1000000
+    }
+  }, 0) < 0) {
+    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+  }
 #endif
   return 0;
 }
 
 iwrc iwn_poller_add(const struct iwn_poller_task *task) {
-  if (!task || task->fd < 0 || !task->poller) {
+  if (!task || !task->poller || (!(task->events & IWN_POLLTIMEOUT) && task->fd < 0)) {
     return IW_ERROR_INVALID_ARGS;
   }
-
   iwrc rc;
   struct iwn_poller *p = task->poller;
   struct poller_slot *s = calloc(1, sizeof(*s));
@@ -518,8 +516,20 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
   }
   memcpy(s, task, sizeof(*task));
 
+  if (task->events & IWN_POLLTIMEOUT) {
+    s->fd = -1;
+    rc = _poller_timeout_create_fd(s);
+    if (rc) {
+      free(s);
+      return rc;
+    }
+  }
+
   rc = _slot_ref(s);
   if (rc) {
+    if (s->fd > -1 && s->fd != task->fd) {
+      close(s->fd);
+    }
     free(s);
     return rc;
   }
@@ -528,39 +538,38 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
     rc = _poller_timeout_add(s);
   } else {
 #if defined(IWN_KQUEUE)
-    {
-      int i = 0;
-      struct kevent ev[2];
-      uint32_t events = s->events | s->events_mod;
-      unsigned short ka = _events_to_kflags(events);
 
-      if (events & IWN_POLLIN) {
-        ev[i++] = (struct kevent) {
-          s->fd, EVFILT_READ, EV_ADD | ka
-        };
-      }
-      if (events & IWN_POLLOUT) {
-        ev[i++] = (struct kevent) {
-          s->fd, EVFILT_WRITE, EV_ADD | ka
-        };
-      }
-      if (kevent(p->fd, ev, i, 0, 0, 0) == -1) {
-        rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-        goto finish;
-      }
+    int i = 0;
+    struct kevent ev[2];
+    uint32_t events = s->events | s->events_mod;
+    unsigned short ka = _events_to_kflags(events);
+
+    if (events & IWN_POLLIN) {
+      ev[i++] = (struct kevent) {
+        s->fd, EVFILT_READ, EV_ADD | ka
+      };
+    }
+    if (events & IWN_POLLOUT) {
+      ev[i++] = (struct kevent) {
+        s->fd, EVFILT_WRITE, EV_ADD | ka
+      };
+    }
+    if (kevent(p->fd, ev, i, 0, 0, 0) == -1) {
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      goto finish;
     }
 
 #elif defined(IWN_EPOLL)
-    {
-      struct epoll_event ev = { 0 };
-      ev.events = s->events | s->events_mod;
-      ev.data.fd = s->fd;
 
-      if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
-        rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-        goto finish;
-      }
+    struct epoll_event ev = { 0 };
+    ev.events = s->events | s->events_mod;
+    ev.data.fd = s->fd;
+
+    if (epoll_ctl(p->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      goto finish;
     }
+
 #endif
 
     if (s->timeout > 0) {
@@ -846,7 +855,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
       }
       switch (event[i].filter) {
         case EVFILT_READ:
-        case EVFILT_TIMER:  
+        case EVFILT_TIMER:
           events |= IWN_POLLIN;
         case EVFILT_WRITE:
           events |= IWN_POLLOUT;

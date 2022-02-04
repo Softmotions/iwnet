@@ -1,5 +1,5 @@
-cd ./build/src/http/tests
-file ./server2
+cd ./build/src/poller/tests
+file ./poller_proc_test1
 #set args --ssl
 
 set confirm off
