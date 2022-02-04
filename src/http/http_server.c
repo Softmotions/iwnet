@@ -1891,14 +1891,18 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   }
   RCN(finish, optval = fcntl(task.fd, F_GETFL, 0));
   RCN(finish, fcntl(task.fd, F_SETFL, optval | O_NONBLOCK));
-  RCN(finish, listen(task.fd, spec->socket_queue_size));
 
   server->server.listen = spec->listen;
   server->server.fd = task.fd;
   server->server.port = spec->port;
   server->server.user_data = spec->user_data;
 
-  rc = iwn_poller_add(&task);
+  RCC(rc, finish, iwn_poller_add(&task));
+  if (listen(task.fd, spec->socket_queue_size) == -1) {
+    rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+    iwn_poller_remove(task.poller, task.fd);
+    return rc;
+  }
 
 finish:
   if (rc) {
