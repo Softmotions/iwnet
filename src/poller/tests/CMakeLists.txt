@@ -1,7 +1,7 @@
 link_libraries(iwnet_s)
 
 set(TEST_DATA_DIR ${CMAKE_CURRENT_BINARY_DIR})
-set(TESTS poller_proc_test1 poller_scheduler_test1)
+set(TESTS poller_pipe_test1 poller_proc_test1 poller_scheduler_test1)
 
 add_executable(echo echo.c)
 
