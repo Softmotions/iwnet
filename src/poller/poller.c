@@ -156,7 +156,12 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
     if (k != kh_end(p->slots)) {
       s = kh_value(p->slots, k);
       kh_del(SLOTS, p->slots, k);
-      if (--p->fds_count == 0) {       
+      --p->fds_count;
+#if defined(IWN_EPOLL)
+      if (p->fds_count < 3) {
+#elif defined(IWN_KQUEUE)
+      if (p->fds_count < 1) {
+#endif
         iwn_poller_shutdown_request(p);
       }
     }
@@ -819,7 +824,12 @@ iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
 }
 
 void iwn_poller_poll(struct iwn_poller *p) {
+#if defined(IWN_KQUEUE)  
   p->stop = p->fds_count < 1;
+#elif (defined IWN_EPOLL) 
+  p->stop = p->fds_count < 3;
+#endif  
+
   int max_events = p->max_poll_events;
 
 #if defined(IWN_KQUEUE)
@@ -860,7 +870,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
         }
         continue;
       }
-      for (int j = i; j < nfds; ++j) { // Coalesce events
+      for (int j = i; j < nfds; ++j) { // Coalesce events into single mask
         if (fd == event[j].ident) {
           event[j].ident = -1;
           switch (event[j].filter) {

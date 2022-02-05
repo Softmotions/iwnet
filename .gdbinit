@@ -1,5 +1,5 @@
 cd ./build/src/poller/tests
-file ./poller_pipe_test1
+file ./poller_proc_test1
 #set args --ssl
 
 set confirm off
