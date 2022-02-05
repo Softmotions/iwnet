@@ -58,7 +58,7 @@ static iwrc test_echo1(void) {
     .poller = poller,
     .path = "./echo",
     .on_stdout = _on_echo_stdout,
-    //.on_stderr = _on_echo_stderr,
+    .on_stderr = _on_echo_stderr,
     .on_exit = _on_echo1_exit,
     .write_stdin = true,
   }, &pid));

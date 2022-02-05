@@ -367,7 +367,7 @@ iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close) {
   if (close) {
     iwxstr_user_data_set(proc->buf_stdin, (void*) (intptr_t) 1, 0);
   }
-  rc = iwn_poller_arm_events(proc->spec.poller, proc->fds[2], IWN_POLLOUT);
+  rc = iwn_poller_arm_events(proc->spec.poller, proc->fds[FDS_STDIN], IWN_POLLOUT);
 
 finish:
   pthread_mutex_unlock(&proc->mtx);
