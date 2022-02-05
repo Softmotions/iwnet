@@ -651,6 +651,56 @@ void iwn_poller_destroy(struct iwn_poller **pp) {
   }
 }
 
+#if defined(IWN_EPOLL)
+
+static void _on_eventfd_dispose(const struct iwn_poller_task *t) {
+  t->poller->event_fd = -1;
+}
+
+static iwrc _eventfd_ensure(struct iwn_poller *p) {
+  iwrc rc = 0;
+  if (p->event_fd > -1) {
+    return 0;
+  }
+  RCN(finish, p->event_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
+   #if EFD_CLOEXEC == 0
+#endif
+  RCN(finish, fcntl(p->event_fd, F_SETFD, FD_CLOEXEC));
+  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
+    .poller = p,
+    .fd = p->event_fd,
+    .on_dispose = _on_eventfd_dispose,
+    .events = IWN_POLLIN
+  }));
+
+finish:
+  return rc;
+}
+
+static void _on_timerfd_dispose(const struct iwn_poller_task *t) {
+  t->poller->timer_fd = -1;
+}
+
+static iwrc _timerfd_ensure(struct iwn_poller *p) {
+  iwrc rc = 0;
+  if (p->timer_fd > -1) {
+    return 0;
+  }
+  RCN(finish, p->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
+  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
+    .poller = p,
+    .fd = p->timer_fd,
+    .on_ready = _timer_ready,
+    .on_dispose = _on_timerfd_dispose,
+    .events = IWN_POLLIN
+  }));
+
+finish:
+  return rc;
+}
+
+#endif
+
 static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **out_poller) {
   iwrc rc = 0;
   struct iwn_poller *p = calloc(1, sizeof(*p));
@@ -669,18 +719,11 @@ static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **ou
   RCC(rc, finish, iwtp_start("poller-tp-", num_threads, 0, &p->tp));
 
 #if defined(IWN_KQUEUE)
-
   RCN(finish, p->fd = kqueue());
-
 #elif defined(IWN_EPOLL)
-  {
-    RCN(finish, p->fd = epoll_create1(EPOLL_CLOEXEC));
-    RCN(finish, p->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
-    RCN(finish, p->event_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
-  #if EFD_CLOEXEC == 0
-    RCN(finish, fcntl(p->event_fd, F_SETFD, FD_CLOEXEC));
-  #endif
-  }
+  RCN(finish, p->fd = epoll_create1(EPOLL_CLOEXEC));
+  RCC(rc, finish, _eventfd_ensure(p));
+  RCC(rc, finish, _timerfd_ensure(p));
 #endif
 
 finish:
@@ -697,8 +740,6 @@ iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller *
     return IW_ERROR_INVALID_ARGS;
   }
   *out_poller = 0;
-  struct iwn_poller *p;
-
   if (num_threads < 1) {
     num_threads = iwp_num_cpu_cores();
   }
@@ -709,31 +750,7 @@ iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller *
     max_poll_events = 1;
   }
 
-  iwrc rc = RCR(_create(num_threads, max_poll_events, &p));
-
-#ifdef IWN_EPOLL
-  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
-    .poller = p,
-    .fd = p->event_fd,
-    .events = IWN_POLLIN
-  }));
-
-  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
-    .poller = p,
-    .fd = p->timer_fd,
-    .on_ready = _timer_ready,
-    .events = IWN_POLLIN
-  }));
-
-finish:
-#endif
-
-  if (rc) {
-    _destroy(p);
-  } else {
-    *out_poller = p;
-  }
-  return rc;
+  return _create(num_threads, max_poll_events, out_poller);
 }
 
 static void _worker_fn(void *arg) {
@@ -824,17 +841,15 @@ iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
 }
 
 void iwn_poller_poll(struct iwn_poller *p) {
-#if defined(IWN_KQUEUE)
-  p->stop = p->fds_count < 1;
-#elif (defined IWN_EPOLL)
-  p->stop = p->fds_count < 3;
-#endif
-
   int max_events = p->max_poll_events;
 
 #if defined(IWN_KQUEUE)
+  p->stop = p->fds_count < 1;
   struct kevent event[max_events];
 #elif defined(IWN_EPOLL)
+  _eventfd_ensure(p);
+  _timerfd_ensure(p);
+  p->stop = p->fds_count < 3;
   struct epoll_event event[max_events];
 #endif
 
