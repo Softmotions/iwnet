@@ -65,7 +65,7 @@ run() {
   printf "\n\nPut data:\n"
   curl -isk -XPUT -H'Content-Type:text/plain' -d'ff5fd857-c90b-4066-910f-a9a5d1fa1b47' ${BASE}/post/putdata | ${FILTER}
 
-  base64 /dev/urandom | head -c 25165824 > ./test.dat
+  base64 /dev/urandom | head -c 15165824 > ./test.dat
 
   printf "\n\nPost chunked:\n"
   curl -sk -XPOST -H'Expect:' -H'Transfer-Encoding: chunked' --data-urlencode bigparam@test.dat -o r1.dat \

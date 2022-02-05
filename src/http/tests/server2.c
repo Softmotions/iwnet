@@ -105,7 +105,7 @@ static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
   p = iwn_pair_find(&req->form_params, "bigparam", -1);
   IWN_ASSERT(p);
   if (p) {
-    IWN_ASSERT(p->val_len == 25165824);
+    IWN_ASSERT(p->val_len == 15165824 );
   }
   if (af == iwn_assertions_failed) {
     return 200;
