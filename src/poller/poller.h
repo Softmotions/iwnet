@@ -13,6 +13,7 @@ IW_EXTERN_C_START;
 /// Poller will do oneshot execution of `on_ready()` handler
 /// after the period of time in milliseconds specified in `(struct iwn_poller_task).timeout` field.
 #define IWN_POLLTIMEOUT (1U << 21)
+#define IWN_POLLABORT   (1U << 22)
 
 #ifdef __linux__
 #define IWN_EPOLL
@@ -29,6 +30,7 @@ IW_EXTERN_C_START;
 #else
 #error "Unsupported operating system"
 #endif
+
 
 struct iwn_poller;
 
@@ -54,6 +56,8 @@ IW_EXPORT iwrc iwn_poller_arm_events(struct iwn_poller *poller, int fd, uint32_t
 IW_EXPORT void iwn_poller_set_timeout(struct iwn_poller *poller, int fd, long timeout_sec);
 
 IW_EXPORT void iwn_poller_remove(struct iwn_poller *poller, int fd);
+
+IW_EXPORT void iwn_poller_poke(struct iwn_poller *p);
 
 IW_EXPORT void iwn_poller_shutdown_request(struct iwn_poller *p);
 

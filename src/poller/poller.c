@@ -156,7 +156,9 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
     if (k != kh_end(p->slots)) {
       s = kh_value(p->slots, k);
       kh_del(SLOTS, p->slots, k);
-      --p->fds_count;
+      if (--p->fds_count == 0) {       
+        iwn_poller_shutdown_request(p);
+      }
     }
   }
   if (!(flags & (REF_SET_LOCKED | REF_LOCKED))) {
@@ -607,25 +609,29 @@ void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
   }
 }
 
+void iwn_poller_poke(struct iwn_poller *p) {
+#if defined(IWN_KQUEUE)
+  {
+    struct kevent ev[] = {
+      { p->fd, EVFILT_USER, EV_ADD | EV_ONESHOT },
+      { p->fd, EVFILT_USER, 0, NOTE_TRIGGER     }
+    };
+    if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
+      iwrc rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+      iwlog_ecode_error3(rc);
+    }
+  }
+#elif defined(IWN_EPOLL)
+  if (p->event_fd > 0) {
+    int64_t data = 1;
+    write(p->event_fd, &data, sizeof(data));
+  }
+#endif
+}
+
 void iwn_poller_shutdown_request(struct iwn_poller *p) {
   if (p && __sync_bool_compare_and_swap(&p->stop, false, true)) {
-#if defined(IWN_KQUEUE)
-    {
-      struct kevent ev[] = {
-        { p->fd, EVFILT_USER, EV_ADD | EV_ONESHOT },
-        { p->fd, EVFILT_USER, 0, NOTE_TRIGGER     }
-      };
-      if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
-        iwrc rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
-        iwlog_ecode_error3(rc);
-      }
-    }
-#elif defined(IWN_EPOLL)
-    if (p->event_fd > 0) {
-      int64_t data = 1;
-      write(p->event_fd, &data, sizeof(data));
-    }
-#endif
+    iwn_poller_poke(p);
   }
 }
 
@@ -735,12 +741,13 @@ static void _worker_fn(void *arg) {
   int fd = s->fd;
 
 start:
-  if (s->on_ready) {
+
+  if (s->on_ready && events != IWN_POLLABORT) {
     n = s->on_ready((void*) s, events);
   } else {
     n = 0;
   }
-  if (s->events & IWN_POLLTIMEOUT) {
+  if ((s->events & IWN_POLLTIMEOUT) || (events & IWN_POLLABORT)) {
     n = -1;
   }
   if (n < 0) {
@@ -804,7 +811,7 @@ finish:
 }
 
 bool iwn_poller_alive(struct iwn_poller *p) {
-  return p && !p->stop && p->fds_count > 0;
+  return p && !p->stop;
 }
 
 iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
@@ -812,6 +819,7 @@ iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
 }
 
 void iwn_poller_poll(struct iwn_poller *p) {
+  p->stop = p->fds_count < 1;
   int max_events = p->max_poll_events;
 
 #if defined(IWN_KQUEUE)
@@ -820,7 +828,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
   struct epoll_event event[max_events];
 #endif
 
-  for (bool active = !p->stop && p->fds_count > 0; active; active = !p->stop && p->fds_count > 0) {
+  while (!p->stop) {
 #if defined(IWN_KQUEUE)
     int nfds = kevent(p->fd, 0, 0, event, max_events, 0);
 #elif defined(IWN_EPOLL)
@@ -839,6 +847,9 @@ void iwn_poller_poll(struct iwn_poller *p) {
       uint32_t events = 0;
 
 #if defined(IWN_KQUEUE)
+      if (event[i].ident == (uintptr_t) -1) {
+        continue;
+      }
       fd = (int) event[i].ident;
       if (fd == p->fd) { // Own, not fd related event
         if (event[i].filter == EVFILT_TIMER) {
@@ -849,17 +860,21 @@ void iwn_poller_poll(struct iwn_poller *p) {
         }
         continue;
       }
-      if (event[i].flags & (EV_EOF | EV_ERROR)) {
-        iwn_poller_remove(p, fd);
-        continue;
-      }
-      switch (event[i].filter) {
-        case EVFILT_READ:
-          events |= IWN_POLLIN;
-          break;
-        case EVFILT_WRITE:
-          events |= IWN_POLLOUT;
-          break;
+      for (int j = i; j < nfds; ++j) { // Coalesce events
+        if (fd == event[j].ident) {
+          event[j].ident = -1;
+          switch (event[j].filter) {
+            case EVFILT_READ:
+              events |= IWN_POLLIN;
+              break;
+            case EVFILT_WRITE:
+              events |= IWN_POLLOUT;
+              break;
+          }
+          if (event[j].flags & (EV_EOF | EV_ERROR)) {
+            events |= IWN_POLLABORT;
+          }
+        }
       }
 
 #elif defined(IWN_EPOLL)
@@ -873,6 +888,9 @@ void iwn_poller_poll(struct iwn_poller *p) {
 
       struct poller_slot *s = _slot_ref_id(p, fd, REF_SET_LOCKED);
       if (!s) {
+        if ((events & IWN_POLLABORT) && fd > -1) {
+          close(fd);
+        }
         pthread_mutex_unlock(&p->mtx);
         continue;
       } else if (s->flags & SLOT_PROCESSING) {
