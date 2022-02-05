@@ -13,7 +13,7 @@ IW_EXTERN_C_START;
 /// Poller will do oneshot execution of `on_ready()` handler
 /// after the period of time in milliseconds specified in `(struct iwn_poller_task).timeout` field.
 #define IWN_POLLTIMEOUT (1U << 21)
-#define IWN_POLLABORT   (1U << 22)
+//#define IWN_POLLABORT   (1U << 22)
 
 #ifdef __linux__
 #define IWN_EPOLL

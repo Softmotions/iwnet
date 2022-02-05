@@ -1849,8 +1849,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
 
   struct addrinfo hints = {
     .ai_socktype = SOCK_STREAM,
-    .ai_family   = AF_UNSPEC,
-    .ai_flags    = AI_PASSIVE | AI_NUMERICSERV
+    .ai_family   = AF_INET,
+    .ai_flags    = AI_PASSIVE
   };
 
   struct addrinfo *result, *rp;
@@ -1871,14 +1871,9 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     if (task.fd < 0) {
       continue;
     }
-    if (setsockopt(task.fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &optval, sizeof(optval)) < 0) {
-      // TODO: Error on freebsd
-      iwlog_error("Error setsockopt: %s", strerror(errno));
-    }
+    setsockopt(task.fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
     if (bind(task.fd, rp->ai_addr, rp->ai_addrlen) == 0) {
       break;
-    } else {
-      iwlog_error("Error binding socket: %s", strerror(errno));
     }
     close(task.fd);
   }
