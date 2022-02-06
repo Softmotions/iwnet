@@ -67,7 +67,7 @@ static void _kv_free(void *key, void *val) {
   _proc_destroy(val);
 }
 
-static iwrc _init(void) {
+static iwrc _init_lk(void) {
   iwrc rc = 0;
   if (!cc.map) {
     RCB(finish, cc.map = iwhmap_create_i32(_kv_free));
@@ -83,7 +83,7 @@ finish:
 static iwrc _proc_add(struct proc *proc) {
   iwrc rc = 0;
   pthread_mutex_lock(&cc.mtx);
-  RCC(rc, finish, _init());
+  RCC(rc, finish, _init_lk());
   proc->refs = 1;
   rc = iwhmap_put(cc.map, (void*) (intptr_t) proc->pid, proc);
 
@@ -131,6 +131,7 @@ static void _proc_unref(pid_t pid, int wstatus) {
       proc->fds[i] = -1;
     }
   }
+
   if (proc->spec.on_exit) {
     proc->spec.on_exit((void*) proc);
   }
@@ -170,7 +171,9 @@ static struct proc* _proc_create(const struct iwn_proc_spec *spec) {
   proc->pid = -1;
   proc->wstatus = -1;
   memcpy(&proc->spec, spec, sizeof(*spec));
-  memset(proc->fds, -1, sizeof(proc->fds));
+  for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
+    proc->fds[i] = -1;
+  }
   return proc;
 }
 
@@ -293,6 +296,21 @@ finish:
   }
   _proc_unref(pid, -1);
   return rc ? -1 : ret;
+}
+
+static void _on_fd_dispose(const struct iwn_poller_task *t) {
+  pid_t pid = (pid_t) (intptr_t) t->user_data;
+  struct proc *proc = _proc_ref(pid);
+  if (proc) {
+    for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
+      if (proc->fds[i] == t->fd) {
+        proc->fds[i] = -1;
+        break;
+      }
+    }
+    _proc_unref(pid, -1);
+  }
+  _proc_unref(pid, -1);
 }
 
 static int64_t _on_stdout_ready(const struct iwn_poller_task *t, uint32_t flags) {
@@ -446,7 +464,6 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
   RCC(rc, finish, _proc_init(proc, fds));
 
   pid_t pid = fork();
-
   if (pid > 0) { // Parent
     *out_pid = pid;
     proc->pid = pid;
@@ -465,6 +482,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         .fd = fds[0],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stdout_ready,
+        .on_dispose = _on_fd_dispose,
         .events = IWN_POLLIN,
         .events_mod = IWN_POLLET,
         .poller = spec->poller
@@ -474,6 +492,8 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         proc->fds[FDS_STDOUT] = -1;
         iwlog_ecode_error3(rc);
         rc = 0;
+      } else {
+        _proc_ref(pid);
       }
     }
     if (fds[3] > -1) {
@@ -482,6 +502,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         .fd = fds[2],
         .user_data = (void*) (intptr_t) pid,
         .on_ready = _on_stderr_ready,
+        .on_dispose = _on_fd_dispose,
         .events = IWN_POLLIN,
         .events_mod = IWN_POLLET,
         .poller = spec->poller
@@ -491,6 +512,8 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         proc->fds[FDS_STDERR] = -1;
         iwlog_ecode_error3(rc);
         rc = 0;
+      } else {
+        _proc_ref(pid);
       }
     }
     if (fds[4] > -1) {

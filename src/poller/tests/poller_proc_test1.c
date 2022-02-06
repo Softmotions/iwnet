@@ -50,7 +50,7 @@ static iwrc test_echo1(void) {
 
   iwxstr_clear(xstdout);
   iwxstr_clear(xstderr);
-  RCC(rc, finish,  iwn_poller_create(1, 1, &poller));
+  RCC(rc, finish, iwn_poller_create(1, 1, &poller));
 
   code = -1;
 
@@ -86,7 +86,7 @@ static iwrc test_echo2(void) {
 
   iwxstr_clear(xstdout);
   iwxstr_clear(xstderr);
-  RCC(rc, finish,  iwn_poller_create(1, 1, &poller));
+  RCC(rc, finish, iwn_poller_create(1, 1, &poller));
 
   code = -1;
 

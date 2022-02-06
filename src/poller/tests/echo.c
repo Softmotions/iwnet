@@ -18,5 +18,6 @@ int main(int argc, char const *argv[]) {
     fputc(ch, out);
   }
   fflush(out);
+  //sleep(1);
   return 0;
 }
