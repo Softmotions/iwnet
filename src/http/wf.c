@@ -105,7 +105,6 @@ static void _route_attach(struct route *parent, struct route *route) {
 
 static iwrc _route_init(struct route *route) {
   iwrc rc = 0;
-  struct iwn_wf_route *base = &route->base;
   char *pattern = route->pattern;
   size_t len = pattern ? strlen(pattern) : 0;
   route->pattern_len = len;
@@ -581,7 +580,6 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
     return false;
   }
 
-  struct ctx *ctx = (void*) req->base.ctx;
   int mlen = 0;
   size_t unmatched_len = req->path_len - (path_unmatched - req->base.path);
 

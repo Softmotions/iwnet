@@ -1486,7 +1486,6 @@ iwrc iwn_http_response_stream_start(
   ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  struct response *response = &client->response;
   IWXSTR *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
@@ -1540,7 +1539,6 @@ iwrc iwn_http_response_chunk_write(
   ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  struct response *response = &client->response;
   if (body_len < 0) {
     body_len = strlen(body);
   }

@@ -10,7 +10,6 @@
 
 #define S_ROOT_DISPOSED 0x01U
 static int _handle_get_empty_cnt;
-static int _handle_get_cnt;
 static int _handle_root_cnt;
 
 static uint32_t state;

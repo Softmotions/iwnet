@@ -4,7 +4,6 @@
 #include <iowow/iwtp.h>
 #include <inttypes.h>
 
-static int cnt;
 static int64_t st, et;
 static struct iwn_poller *poller;
 
