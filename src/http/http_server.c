@@ -136,6 +136,7 @@ struct client {
 #define HTTP_CHUNKED_RESPONSE 0x10U
 #define HTTP_STREAM_RESPONSE  0x20U
 #define HTTP_UPGRADE          0x40U
+#define HTTP_HAS_CONTENT_LEN  0x80U
 
 // http version indicators
 #define HTTP_1_0 0
@@ -1383,7 +1384,7 @@ static iwrc _client_response_headers_write(struct client *client, IWXSTR *xstr) 
   for (struct header *h = client->response.headers; h; h = h->next) {
     RCC(rc, finish, iwxstr_printf(xstr, "%s: %s\r\n", h->name, h->value));
   }
-  if (!(client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE))) {
+  if (!(client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE | HTTP_HAS_CONTENT_LEN))) {
     RCC(rc, finish, iwxstr_printf(xstr, "content-length: %d\r\n", (int) client->response.body_len));
   }
   rc = iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1);
@@ -1394,6 +1395,10 @@ finish:
 
 static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *xstr) {
   iwrc rc = 0;
+  struct iwn_val val = iwn_http_response_header_get(&client->request, "content-length");
+  if (val.len) {
+    client->flags |= HTTP_HAS_CONTENT_LEN;
+  }
   if (client->flags & HTTP_AUTOMATIC) {
     _client_autodetect_keep_alive(client);
   }
