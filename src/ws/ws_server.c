@@ -244,7 +244,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
 
   struct iwn_val val = iwn_http_request_header_get(hreq, "upgrade", IW_LLEN("upgrade"));
   if (val.len != IW_LLEN("websocket") || strncasecmp(val.buf, "websocket", val.len) != 0) {
-    goto finish;
+    return 0; // Unhandled
   }
 
   val = iwn_http_request_header_get(hreq, "sec-websocket-version", IW_LLEN("sec-websocket-version"));
