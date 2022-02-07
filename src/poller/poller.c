@@ -343,6 +343,7 @@ static void _timer_ready_impl(struct iwn_poller *p) {
         ++s->refs;
         s->timeout_limit = INT_MAX;
         s->next = h;
+        h = s;
       } else if (s->timeout_limit < timeout_next) {
         timeout_next = s->timeout_limit;
       }
@@ -379,6 +380,7 @@ static void _timer_ready_impl(struct iwn_poller *p) {
 #endif
 }
 
+
 IW_INLINE int64_t _timer_ready(const struct iwn_poller_task *t, uint32_t events) {
   struct iwn_poller *p = t->poller;
   if (__sync_bool_compare_and_swap(&p->housekeeping, false, true)) {
@@ -386,6 +388,12 @@ IW_INLINE int64_t _timer_ready(const struct iwn_poller_task *t, uint32_t events)
     __sync_bool_compare_and_swap(&p->housekeeping, true, false);
   }
   return 0;
+}
+
+static int64_t _timer_ready_fd(const struct iwn_poller_task *t, uint32_t events) {
+  uint64_t buf;
+  while (read(t->fd, &buf, sizeof(buf)) != -1);
+  return _timer_ready(t, events);
 }
 
 IW_INLINE void _timer_check(const struct iwn_poller_task *t, time_t time_limit) {
@@ -493,7 +501,7 @@ static iwrc _poller_timeout_add(struct poller_slot *s) {
   }
 #elif defined(IWN_EPOLL)
   struct epoll_event ev = { 0 };
-  ev.events = EPOLLIN;
+  ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
   ev.data.fd = s->fd;
 
   if (epoll_ctl(s->poller->fd, EPOLL_CTL_ADD, s->fd, &ev) == -1) {
@@ -690,9 +698,10 @@ static iwrc _timerfd_ensure(struct iwn_poller *p) {
   RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = p,
     .fd = p->timer_fd,
-    .on_ready = _timer_ready,
+    .on_ready = _timer_ready_fd,
     .on_dispose = _on_timerfd_dispose,
-    .events = IWN_POLLIN
+    .events = IWN_POLLIN,
+    .events_mod = IWN_POLLET
   }));
 
 finish:
