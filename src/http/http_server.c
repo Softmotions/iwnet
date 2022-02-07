@@ -1352,6 +1352,7 @@ void iwn_http_response_body_set(
   void (              *body_free )(void*)
   ) {
   if (!body || body_len == 0) {
+    iwn_http_response_body_clear(request);
     return;
   }
   struct client *client = (void*) request;
