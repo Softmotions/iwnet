@@ -986,10 +986,14 @@ static bool _request_stream_chunk_process(struct request *req) {
     iwn_http_request_chunk_next(hreq, _request_stream_chunk_next);
   } else {
     if (req->streamed_bytes > 0) {
-      int fd;
+      int fd = 0;
+      if (fwrite(&fd, 1, 1, req->stream_file) != 1) { // Write trailing `\0`
+        rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+        goto finish;
+      }
       RCN(finish, fflush(req->stream_file));
       RCN(finish, fd = fileno(req->stream_file));
-      void *mm = mmap(0, IW_ROUNDUP(req->streamed_bytes, _aunit), PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
+      void *mm = mmap(0, IW_ROUNDUP(req->streamed_bytes + 1, _aunit), PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
       if (!mm) {
         rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
         goto finish;
