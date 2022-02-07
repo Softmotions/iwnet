@@ -1,7 +1,7 @@
 #pragma once
 
 #include "poller_adapter.h"
-#include "utils/pairs.h"
+#include "pairs.h"
 
 #include <iowow/iwxstr.h>
 
