@@ -1,7 +1,7 @@
 #include "ws.h"
 #include "wf.h"
 
-IW_EXTERN_C_START;
+IW_EXTERN_C_START
 
 struct iwn_ws_handler_spec;
 
@@ -25,4 +25,4 @@ IW_EXPORT struct iwn_wf_route* iwn_ws_server_route_attach(
   struct iwn_wf_route              *route,
   const struct iwn_ws_handler_spec *spec);
 
-IW_EXTERN_C_END;
+IW_EXTERN_C_END

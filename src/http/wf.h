@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 
-IW_EXTERN_C_START;
+IW_EXTERN_C_START
 
 typedef enum {
   _WF_ERROR_START = (IW_ERROR_START + 205000UL),
@@ -187,4 +187,4 @@ IW_EXPORT iwrc iwn_wf_cookie_add(
 
 IW_EXPORT void iwn_wf_destroy(struct iwn_wf_ctx *ctx);
 
-IW_EXTERN_C_END;
+IW_EXTERN_C_END

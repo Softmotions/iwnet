@@ -3,7 +3,7 @@
 #include "poller.h"
 #include <iowow/iwtp.h>
 
-IW_EXTERN_C_START;
+IW_EXTERN_C_START
 
 typedef void (*iwn_scheduler_task_f)(void *arg);
 
@@ -17,4 +17,4 @@ struct iwn_scheduler_spec {
 
 IW_EXPORT iwrc iwn_schedule(const struct iwn_scheduler_spec *spec);
 
-IW_EXTERN_C_END;
+IW_EXTERN_C_END

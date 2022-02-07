@@ -10,7 +10,7 @@
 #include <ctype.h>
 #include <errno.h>
 
-IW_EXTERN_C_START;
+IW_EXTERN_C_START
 
 // Curl return code check
 #define XCC(cc_, label_, op_)               \
@@ -313,4 +313,4 @@ static void xcurlreq_destroy_keep(struct xcurlreq *req) {
   req->headers = 0;
 }
 
-IW_EXTERN_C_END;
+IW_EXTERN_C_END
