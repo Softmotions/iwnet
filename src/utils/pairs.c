@@ -13,6 +13,16 @@ void iwn_val_buf_free(struct iwn_val *val) {
   }
 }
 
+void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v) {
+  v->next = 0;
+  if (vals->last) {
+    vals->last->next = v;
+    vals->last = v;
+  } else {
+    vals->first = vals->last = v;
+  }
+}
+
 void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p) {
   p->next = 0;
   if (pairs->last) {
