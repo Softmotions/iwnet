@@ -621,7 +621,7 @@ static bool _client_read_bytes(struct client *client) {
   if (!stream->buf) {
     stream->length = 0;
     stream->capacity = 0;
-    stream->buf = calloc(1, server->spec.request_buf_size);
+    stream->buf = malloc(server->spec.request_buf_size + 1 /* \0 */);
     if (!stream->buf) {
       return false;
     }
@@ -640,7 +640,7 @@ static bool _client_read_bytes(struct client *client) {
         if (ncap > server->spec.request_buf_max_size) {
           ncap = server->spec.request_buf_max_size;
         }
-        char *nbuf = realloc(stream->buf, ncap);
+        char *nbuf = realloc(stream->buf, ncap + 1 /* \0 */);
         if (!nbuf) {
           bytes = 0;
           break;
@@ -870,7 +870,7 @@ static void _client_read(struct client *client) {
   do {
     token = _token_parse(client);
     if (token.type != HS_TOK_NONE) {
-      if (client->tokens.size == client->tokens.capacity) {
+      if (IW_UNLIKELY(client->tokens.size == client->tokens.capacity)) {
         ssize_t ncap = client->tokens.capacity * 2;
         struct token *nbuf = realloc(client->tokens.buf, ncap * sizeof(client->tokens.buf[0]));
         if (!nbuf) {
@@ -887,11 +887,19 @@ static void _client_read(struct client *client) {
         _client_response_error(client, 400, "Bad request");
         break;
       case HS_TOK_BODY:
-      case HS_TOK_BODY_STREAM:
-        if (token.type == HS_TOK_BODY_STREAM) {
-          client->flags |= HTTP_STREAMED;
-        }
         client->state = HTTP_SESSION_NOP;
+        if (token.len > 0) {
+          // We have allocated one extra byte behind client->stream-capacity
+          client->stream.buf[token.index + token.len] = '\0';
+        }
+        if (!client->server->spec.request_handler(&client->request)) {
+          client->flags |= HTTP_END_SESSION;
+          return;
+        }
+        break;
+      case HS_TOK_BODY_STREAM:
+        client->state = HTTP_SESSION_NOP;
+        client->flags |= HTTP_STREAMED;
         if (!client->server->spec.request_handler(&client->request)) {
           client->flags |= HTTP_END_SESSION;
           return;
@@ -1801,8 +1809,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   if (spec->socket_queue_size < 1) {
     spec->socket_queue_size = 64;
   }
-  if (spec->request_buf_size < 1024) {
-    spec->request_buf_size = 1024;
+  if (spec->request_buf_size < 1023) {
+    spec->request_buf_size = 1023;
   }
   if (spec->request_timeout_sec == 0) {
     spec->request_timeout_sec = 20;
@@ -1810,8 +1818,8 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   if (spec->request_timeout_keepalive_sec == 0) {
     spec->request_timeout_keepalive_sec = 120;
   }
-  if (spec->request_token_max_len < 8192) {
-    spec->request_token_max_len = 8192;
+  if (spec->request_token_max_len < 8191) {
+    spec->request_token_max_len = 8191;
   }
   if (spec->request_max_headers_count < 1) {
     spec->request_max_headers_count = 127;

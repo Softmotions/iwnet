@@ -1,5 +1,5 @@
-cd ./build/src/poller/tests
-file ./poller_timeout_test1
+cd ./build/src/http/tests
+file ./server1
 #set args --ssl
 
 set confirm off

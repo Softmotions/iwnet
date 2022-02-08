@@ -237,7 +237,7 @@ static void _request_stream_destroy(struct request *req) {
   if (req->stream_file) {
     if (req->flags & REQUEST_STREAM_FILE_MMAPED) {
       req->flags &= ~REQUEST_STREAM_FILE_MMAPED;
-      munmap((void*) req->base.body, IW_ROUNDUP(req->base.body_len, _aunit));
+      munmap((void*) req->base.body, IW_ROUNDUP(req->base.body_len + 1, _aunit));
     }
     fclose(req->stream_file);
     unlink(req->stream_file_path);

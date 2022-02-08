@@ -46,10 +46,10 @@ struct iwn_http_server_spec {
   int  port;                          ///< Default: 8080 http, 8443 https
   int  socket_queue_size;             ///< Default: 64
   int  request_buf_max_size;          ///< Default: 8Mb
-  int  request_buf_size;              ///< Default: 1024
+  int  request_buf_size;              ///< Default: 1023, Min: 1023
   int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 Use default timeout: 120sec
   int  request_timeout_sec;           ///< -1 Disable timeout, 0 Use default timeout: 20sec
-  int  request_token_max_len;         ///< Default: 8192
+  int  request_token_max_len;         ///< Default: 8191, Min: 8191
   int  request_max_headers_count;     ///< Default:  127
   bool certs_in_buffer;               ///< true if `certs_data` specified as data buffer rather a file name.
   bool private_key_in_buffer;         ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
