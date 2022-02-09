@@ -241,7 +241,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
   struct ctx *ctx = 0;
   struct iwn_http_req *hreq = req->http;
   struct iwn_ws_handler_spec *spec = user_data;
-  
+
   if (spec->on_http_init) {
     int rv = spec->on_http_init(req, spec);
     if (rv != 0) {
@@ -331,7 +331,7 @@ struct iwn_wf_route* iwn_ws_server_route_attach(struct iwn_wf_route *route, cons
   return route;
 }
 
-bool iwn_ws_server_write_text(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len) {
+bool iwn_ws_server_write(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len) {
   struct ctx *ctx = (void*) sess;
   if (!ctx || !buf) {
     return false;
@@ -381,7 +381,7 @@ bool iwn_ws_server_printf_va(struct iwn_ws_sess *sess, const char *fmt, va_list 
     }
   }
 
-  ret = iwn_ws_server_write_text(sess, wp, size);
+  ret = iwn_ws_server_write(sess, wp, size);
 
 finish:
   va_end(cva);

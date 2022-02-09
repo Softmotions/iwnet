@@ -22,7 +22,7 @@ struct iwn_ws_handler_spec {
   void  (*on_session_dispose)(struct iwn_ws_sess*);
 };
 
-IW_EXPORT bool iwn_ws_server_write_text(struct iwn_ws_sess*, const char *buf, ssize_t buf_len);
+IW_EXPORT bool iwn_ws_server_write(struct iwn_ws_sess*, const char *buf, ssize_t buf_len);
 
 IW_EXPORT bool iwn_ws_server_printf(struct iwn_ws_sess*, const char *fmt, ...);
 

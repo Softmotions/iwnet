@@ -30,7 +30,7 @@ static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_le
   fprintf(stderr, "message: %s\n", msg);
   char buf[64 + msg_len];
   int len = snprintf(buf, sizeof(buf), "echo: %s", msg);
-  return iwn_ws_server_write_text(sess, buf, len);
+  return iwn_ws_server_write(sess, buf, len);
 }
 
 static bool _on_ws_session_init(struct iwn_ws_sess *sess) {
