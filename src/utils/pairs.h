@@ -36,6 +36,8 @@ IW_EXPORT void iwn_val_buf_free(struct iwn_val *val);
 
 IW_EXPORT void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v);
 
+IW_EXPORT iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len);
+
 IW_EXPORT void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p);
 
 IW_EXPORT struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len);

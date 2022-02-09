@@ -23,6 +23,17 @@ void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v) {
   }
 }
 
+ iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len) {
+   struct iwn_val *v = malloc(sizeof(*v));
+   if (!v) {
+     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+   }
+   v->buf = buf;
+   v->len = len;
+   iwn_val_add(vals, v);
+   return 0;
+ }
+
 void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p) {
   p->next = 0;
   if (pairs->last) {
