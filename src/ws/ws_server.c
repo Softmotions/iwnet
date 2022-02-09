@@ -241,6 +241,13 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
   struct ctx *ctx = 0;
   struct iwn_http_req *hreq = req->http;
   struct iwn_ws_handler_spec *spec = user_data;
+  
+  if (spec->on_http_init) {
+    int rv = spec->on_http_init(req, spec);
+    if (rv != 0) {
+      return rv;
+    }
+  }
 
   struct iwn_val val = iwn_http_request_header_get(hreq, "upgrade", IW_LLEN("upgrade"));
   if (val.len != IW_LLEN("websocket") || strncasecmp(val.buf, "websocket", val.len) != 0) {

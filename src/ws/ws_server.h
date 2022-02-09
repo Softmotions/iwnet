@@ -17,6 +17,7 @@ typedef bool (*iwn_ws_msg_handler)(struct iwn_ws_sess *sess, const char *msg, si
 struct iwn_ws_handler_spec {
   iwn_ws_msg_handler handler; ///< Websocket messages handler. Required.
   void *user_data;            ///< Message handler user data.
+  int   (*on_http_init)(struct iwn_wf_req*, struct iwn_ws_handler_spec *spec);
   bool  (*on_session_init)(struct iwn_ws_sess*);
   void  (*on_session_dispose)(struct iwn_ws_sess*);
 };
