@@ -654,8 +654,9 @@ void iwn_poller_shutdown_wait(struct iwn_poller *p) {
 
 void iwn_poller_destroy(struct iwn_poller **pp) {
   if (pp && *pp) {
-    _destroy(*pp);
+    struct iwn_poller *p = *pp;
     *pp = 0;
+    _destroy(p);
   }
 }
 
