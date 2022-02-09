@@ -406,7 +406,7 @@ IW_INLINE void _request_data_free(struct client *client) {
   }
   client->_wf_data = 0;
   client->_ws_data = 0;
-  client->request.request_user_data = 0;
+  client->request.user_data = 0;
 }
 
 static bool _stream_next(struct stream *stream, char *c) {

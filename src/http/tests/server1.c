@@ -30,7 +30,7 @@ static void _server_on_dispose(const struct iwn_http_server *srv) {
 }
 
 static bool _chunk_req_cb(struct iwn_http_req *req) {
-  IWXSTR *xstr = req->request_user_data;
+  IWXSTR *xstr = req->user_data;
   IWN_ASSERT_FATAL(xstr);
   struct iwn_val val = iwn_http_request_chunk_get(req);
   if (val.len > 0) {
@@ -48,9 +48,9 @@ static bool _chunk_req_cb(struct iwn_http_req *req) {
 }
 
 static bool _chunk_resp_cb(struct iwn_http_req *req) {
-  int chunk_count = (int) (intptr_t) req->request_user_data;
+  int chunk_count = (int) (intptr_t) req->user_data;
   ++chunk_count;
-  req->request_user_data = (void*) (intptr_t) chunk_count;
+  req->user_data = (void*) (intptr_t) chunk_count;
 
   char *cdata = 0;
   switch (chunk_count) {
@@ -72,7 +72,7 @@ static bool _chunk_resp_cb(struct iwn_http_req *req) {
 }
 
 static void _on_chunk_req_destroy(struct iwn_http_req *req) {
-  IWXSTR *xstr = req->request_user_data;
+  IWXSTR *xstr = req->user_data;
   if (xstr) {
     iwxstr_destroy(xstr);
   }
@@ -94,7 +94,7 @@ static bool _request_handler(struct iwn_http_req *req) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
     IWXSTR *xstr;
     RCA(xstr = iwxstr_new(), finish);
-    req->request_user_data = xstr;
+    req->user_data = xstr;
     req->on_request_dispose = _on_chunk_req_destroy;
     iwn_http_request_chunk_next(req, _chunk_req_cb);
     goto finish;

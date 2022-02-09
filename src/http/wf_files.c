@@ -35,7 +35,7 @@ struct ctx {
 
 static void _ctx_destroy(struct ctx *ctx) {
   if (ctx) {
-    ctx->req->http->request_user_data = 0;
+    ctx->req->http->user_data = 0;
     ctx->req->http->on_request_dispose = 0;
     if (ctx->file) {
       fclose(ctx->file);
@@ -50,7 +50,7 @@ static void _ctx_destroy(struct ctx *ctx) {
 }
 
 static void _on_request_dispose(struct iwn_http_req *req) {
-  struct ctx *ctx = req->request_user_data;
+  struct ctx *ctx = req->user_data;
   _ctx_destroy(ctx);
 }
 
@@ -173,7 +173,7 @@ IW_INLINE size_t _etag_fill(struct ctx *ctx, char fout[64]) {
 static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req);
 
 static bool _file_serve_ranges_multiple_part_body(struct iwn_http_req *req) {
-  struct ctx *ctx = req->request_user_data;
+  struct ctx *ctx = req->user_data;
   struct range *r = ctx->ranges;
 
   ctx->range_processed = r != 0;
@@ -230,7 +230,7 @@ finish:
 static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req) {
   iwrc rc = 0;
 
-  struct ctx *ctx = req->request_user_data;
+  struct ctx *ctx = req->user_data;
   struct range *r = ctx->ranges;
 
   char *buf = 0;
@@ -293,7 +293,7 @@ finish:
 }
 
 static bool _file_serve_range_single_cb(struct iwn_http_req *req) {
-  struct ctx *ctx = req->request_user_data;
+  struct ctx *ctx = req->user_data;
   struct range *r = ctx->ranges;
 
   size_t to_read = MIN(sizeof(ctx->buf), r->to_read);
@@ -331,7 +331,7 @@ finish:
 }
 
 static bool _file_serve_norange_cb(struct iwn_http_req *req) {
-  struct ctx *ctx = req->request_user_data;
+  struct ctx *ctx = req->user_data;
   size_t len = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->file);
   iwn_http_response_stream_write(req, ctx->buf, len, 0, len != sizeof(ctx->buf) ? 0 : _file_serve_norange_cb);
   return true;
@@ -349,7 +349,7 @@ finish:
 }
 
 static iwrc _file_serve(struct ctx *ctx) {
-  ctx->req->http->request_user_data = ctx;
+  ctx->req->http->user_data = ctx;
   ctx->req->http->on_request_dispose = _on_request_dispose;
   if (IW_UNLIKELY(ctx->ranges)) {
     if (IW_UNLIKELY(ctx->ranges->next)) {
