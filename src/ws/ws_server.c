@@ -324,10 +324,13 @@ struct iwn_wf_route* iwn_ws_server_route_attach(struct iwn_wf_route *route, cons
   return route;
 }
 
-bool iwn_ws_server_write_text(struct iwn_ws_sess *sess, const char *buf, size_t buf_len) {
+bool iwn_ws_server_write_text(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len) {
   struct ctx *ctx = (void*) sess;
   if (!ctx || !buf) {
     return false;
+  }
+  if (buf_len < 0) {
+    buf_len = strlen(buf);
   }
   if (buf_len == 0) {
     return true;
