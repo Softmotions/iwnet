@@ -1,6 +1,8 @@
 #include "ws.h"
 #include "wf.h"
 
+#include <stdarg.h>
+
 IW_EXTERN_C_START
 
 struct iwn_ws_handler_spec;
@@ -20,6 +22,10 @@ struct iwn_ws_handler_spec {
 };
 
 IW_EXPORT bool iwn_ws_server_write_text(struct iwn_ws_sess*, const char *buf, ssize_t buf_len);
+
+IW_EXPORT bool iwn_ws_server_printf(struct iwn_ws_sess*, const char *fmt, ...);
+
+IW_EXPORT bool iwn_ws_server_printf_va(struct iwn_ws_sess*, const char *fmt, va_list va);
 
 IW_EXPORT struct iwn_wf_route* iwn_ws_server_route_attach(
   struct iwn_wf_route              *route,

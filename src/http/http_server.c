@@ -1285,7 +1285,7 @@ iwrc iwn_http_response_header_i64_set(
 iwrc iwn_http_response_header_printf_va(
   struct iwn_http_req *req,
   const char          *header_name,
-  const char          *format,
+  const char          *fmt,
   va_list              va
   ) {
   iwrc rc = 0;
@@ -1295,14 +1295,14 @@ iwrc iwn_http_response_header_printf_va(
   va_list cva;
   va_copy(cva, va);
 
-  int size = vsnprintf(wp, sizeof(buf), format, va);
+  int size = vsnprintf(wp, sizeof(buf), fmt, va);
   if (size < 0) {
     rc = IW_ERROR_FAIL;
     goto finish;
   }
   if (size >= sizeof(buf)) {
     RCA(wp = malloc(size + 1), finish);
-    size = vsnprintf(wp, size + 1, format, cva);
+    size = vsnprintf(wp, size + 1, fmt, cva);
     if (size < 0) {
       rc = IW_ERROR_FAIL;
       goto finish;
@@ -1322,12 +1322,12 @@ finish:
 iwrc iwn_http_response_header_printf(
   struct iwn_http_req *req,
   const char          *header_name,
-  const char          *format,
+  const char          *fmt,
   ...
   ) {
   va_list va;
-  va_start(va, format);
-  iwrc rc = iwn_http_response_header_printf_va(req, header_name, format, va);
+  va_start(va, fmt);
+  iwrc rc = iwn_http_response_header_printf_va(req, header_name, fmt, va);
   va_end(va);
   return rc;
 }
@@ -1632,52 +1632,51 @@ bool iwn_http_response_by_code(struct iwn_http_req *request, int code) {
   return iwn_http_response_write(request, code, "text/plain", text, -1);
 }
 
-IW_INLINE int _printf_estimate_size(const char *format, va_list ap) {
-  char buf[1];
-  int ret = vsnprintf(buf, sizeof(buf), format, ap);
-  if (ret < 0) {
-    return ret;
-  } else {
-    return ret + 1;
-  }
-}
-
 bool iwn_http_response_printf_va(
   struct iwn_http_req *req,
   int status_code, const char *content_type,
-  const char *body_fmt, va_list va
+  const char *fmt, va_list va
   ) {
+  iwrc rc = 0;
+  bool ret = false;
+  char buf[1024];
+  char *wp = buf;
+
   va_list cva;
   va_copy(cva, va);
-  int size = _printf_estimate_size(body_fmt, va);
+
+  int size = vsnprintf(wp, sizeof(buf), fmt, va);
   if (size < 0) {
-    va_end(cva);
-    return false;
+    rc = IW_ERROR_FAIL;
+    goto finish;
   }
-  char *buf = malloc(size);
-  if (!buf) {
-    va_end(cva);
-    return false;
+  if (size >= sizeof(buf)) {
+    RCA(wp = malloc(size + 1), finish);
+    size = vsnprintf(wp, size + 1, fmt, cva);
+    if (size < 0) {
+      rc = IW_ERROR_FAIL;
+      goto finish;
+    }
   }
-  size = vsnprintf(buf, size, body_fmt, cva);
+
+  ret = iwn_http_response_write(req, status_code, content_type, wp, size);
+
+finish:
   va_end(cva);
-  if (size < 0) {
-    free(buf);
-    return false;
+  if (wp != buf) {
+    free(wp);
   }
-  bool ret = iwn_http_response_write(req, status_code, content_type, buf, size);
-  free(buf);
-  return ret;
+  return ret && rc == 0;
 }
 
 bool iwn_http_response_printf(
   struct iwn_http_req *req,
   int status_code, const char *content_type,
-  const char *body_fmt, ...
+  const char *fmt, ...
   ) {
   va_list va;
-  va_start(va, body_fmt);
-  bool res = iwn_http_response_printf_va(req, status_code, content_type, body_fmt, va);
+  va_start(va, fmt);
+  bool res = iwn_http_response_printf_va(req, status_code, content_type, fmt, va);
   va_end(va);
   return res;
 }

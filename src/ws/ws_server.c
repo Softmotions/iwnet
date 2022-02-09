@@ -350,3 +350,44 @@ bool iwn_ws_server_write_text(struct iwn_ws_sess *sess, const char *buf, ssize_t
                                     ctx->hreq->poller_adapter->fd,
                                     IWN_POLLOUT | IWN_POLLET);
 }
+
+bool iwn_ws_server_printf_va(struct iwn_ws_sess *sess, const char *fmt, va_list va) {
+  iwrc rc = 0;
+  char buf[1024];
+  char *wp = buf;
+  bool ret = false;
+
+  va_list cva;
+  va_copy(cva, va);
+
+  int size = vsnprintf(wp, sizeof(buf), fmt, va);
+  if (size < 0) {
+    rc = IW_ERROR_FAIL;
+    goto finish;
+  }
+  if (size >= sizeof(buf)) {
+    RCA(wp = malloc(size + 1), finish);
+    size = vsnprintf(wp, size + 1, fmt, cva);
+    if (size < 0) {
+      rc = IW_ERROR_FAIL;
+      goto finish;
+    }
+  }
+
+  ret = iwn_ws_server_write_text(sess, wp, size);
+
+finish:
+  va_end(cva);
+  if (wp != buf) {
+    free(wp);
+  }
+  return ret && rc == 0;
+}
+
+bool iwn_ws_server_printf(struct iwn_ws_sess *sess, const char *fmt, ...) {
+  va_list va;
+  va_start(va, fmt);
+  bool ret = iwn_ws_server_printf_va(sess, fmt, va);
+  va_end(va);
+  return ret;
+}
