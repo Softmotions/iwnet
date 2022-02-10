@@ -1610,7 +1610,7 @@ bool iwn_http_response_write(
   }
   if (*content_type != '\0') {
     // Content-type header disabled if empty
-    RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type, IW_LLEN("content-type")));
+    RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type, -1));
   }
   iwn_http_response_body_set(request, body, body_len, 0);
   rc = iwn_http_response_end(request);
