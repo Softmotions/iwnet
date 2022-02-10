@@ -573,16 +573,18 @@ static void _client_write(struct client *client) {
   }
   if (stream->bytes_total != stream->length) {
     client->state = HTTP_SESSION_WRITE;
-    RCC(rc, finish, iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT));
+    rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
   } else if (client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE)) {
     client->state = HTTP_SESSION_WRITE;
     _stream_free_buffer(client);
     if (client->server->spec.request_timeout_sec > 0) {
       iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
     }
-    if (!client->chunk_cb || !client->chunk_cb((void*) client)) {
+    int cc = client->chunk_cb ? client->chunk_cb((void*) client) : 0;
+    if (cc == 0) {
       client->flags |= HTTP_END_SESSION;
-      return;
+    } else if (cc == -1) {
+      rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
     }
   } else {
     bool (*on_response_completed)(struct iwn_http_req*) = client->request.on_response_completed;
@@ -590,7 +592,6 @@ static void _client_write(struct client *client) {
       client->request.on_response_completed = 0;
       if (!on_response_completed(&client->request)) {
         client->flags |= HTTP_END_SESSION;
-        return;
       }
     } else if (client->flags & HTTP_KEEP_ALIVE) {
       if (client->server->spec.request_timeout_keepalive_sec > 0) {
@@ -600,11 +601,9 @@ static void _client_write(struct client *client) {
       _client_reset(client);
     } else {
       client->flags |= HTTP_END_SESSION;
-      return;
     }
   }
 
-finish:
   if (rc) {
     iwlog_ecode_error3(rc);
     client->flags |= HTTP_END_SESSION;

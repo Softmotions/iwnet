@@ -953,7 +953,7 @@ static bool _request_process(struct request *req) {
   return _request_routes_process(req);
 }
 
-static bool _request_stream_chunk_next(struct iwn_http_req *hreq);
+static int _request_stream_chunk_next(struct iwn_http_req *hreq);
 
 static bool _request_stream_chunk_process(struct request *req) {
   iwrc rc = 0;
@@ -1013,9 +1013,9 @@ finish:
   return true;
 }
 
-static bool _request_stream_chunk_next(struct iwn_http_req *hreq) {
+static int _request_stream_chunk_next(struct iwn_http_req *hreq) {
   struct request *req = iwn_http_request_wf_data(hreq);
-  return _request_stream_chunk_process(req);
+  return _request_stream_chunk_process(req) == true;
 }
 
 static bool _request_handler(struct iwn_http_req *hreq) {
