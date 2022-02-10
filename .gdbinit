@@ -9,12 +9,12 @@ set print elements 4096
 
 define lb
     set breakpoint pending on
-    source ~/Projects/softmotions/iwnet/.breakpoints
+    source ~/.breakpoints
     set breakpoint pending auto
     echo breakpoints loaded\n
 end
 
 define sb
-    save breakpoints ~/Projects/softmotions/iwnet/.breakpoints
+    save breakpoints ~/.breakpoints
     echo breakpoints saved\n
 end
