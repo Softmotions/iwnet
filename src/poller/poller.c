@@ -70,7 +70,8 @@ struct poller_slot {
 
   int      refs;
   uint32_t events_processing;
-  uint32_t events_update;
+  uint32_t events_update;  
+  uint32_t events_armed;
   uint32_t flags;
   atomic_long timeout_limit;           ///< Limit in seconds for use with time function.
 
@@ -410,7 +411,7 @@ iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
   if (s) {
     if (s->flags & SLOT_PROCESSING) {
-      s->events_update |= events;
+      s->events_armed |= events;
     } else {
       events |= s->events_mod;
       unsigned short ka = _events_to_kflags(events);
@@ -447,7 +448,7 @@ iwrc iwn_poller_arm_events(struct iwn_poller *p, int fd, uint32_t events) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
   if (s) {
     if (s->flags & SLOT_PROCESSING) {
-      s->events_update |= ev.events;
+      s->events_armed |= ev.events;
     } else {
       ev.events |= s->events_mod;
       rci = epoll_ctl(p->fd, EPOLL_CTL_MOD, fd, &ev);
@@ -799,8 +800,9 @@ start:
     goto start;
   }
   s->flags &= ~SLOT_PROCESSING;
-  events |= s->events_mod;
-
+  events = events | s->events_mod | s->events_armed;
+  s->events_armed = 0;
+  
 #if defined(IWN_KQUEUE)
   {
     unsigned short ka = _events_to_kflags(events);
