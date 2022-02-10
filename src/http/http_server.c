@@ -572,8 +572,8 @@ static void _client_write(struct client *client) {
     return;
   }
   if (stream->bytes_total != stream->length) {
-    RCC(rc, finish, iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT));
     client->state = HTTP_SESSION_WRITE;
+    RCC(rc, finish, iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT));
   } else if (client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE)) {
     client->state = HTTP_SESSION_WRITE;
     _stream_free_buffer(client);
