@@ -29,7 +29,7 @@ static void _server_on_dispose(const struct iwn_http_server *srv) {
   state |= STATE_SERVER_DISPOSED;
 }
 
-static int _chunk_req_cb(struct iwn_http_req *req) {
+static bool _chunk_req_cb(struct iwn_http_req *req) {
   IWXSTR *xstr = req->user_data;
   IWN_ASSERT_FATAL(xstr);
   struct iwn_val val = iwn_http_request_chunk_get(req);
@@ -47,7 +47,7 @@ static int _chunk_req_cb(struct iwn_http_req *req) {
   return true;
 }
 
-static int _chunk_resp_cb(struct iwn_http_req *req) {
+static bool _chunk_resp_cb(struct iwn_http_req *req) {
   int chunk_count = (int) (intptr_t) req->user_data;
   ++chunk_count;
   req->user_data = (void*) (intptr_t) chunk_count;

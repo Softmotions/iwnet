@@ -580,11 +580,8 @@ static void _client_write(struct client *client) {
     if (client->server->spec.request_timeout_sec > 0) {
       iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
     }
-    int cc = client->chunk_cb ? client->chunk_cb((void*) client) : 0;
-    if (cc == 0) {
+    if (client->chunk_cb && !client->chunk_cb((void*) client)) {
       client->flags |= HTTP_END_SESSION;
-    } else if (cc == -1) {
-      rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
     }
   } else {
     bool (*on_response_completed)(struct iwn_http_req*) = client->request.on_response_completed;
