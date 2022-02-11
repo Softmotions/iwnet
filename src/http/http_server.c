@@ -1454,7 +1454,7 @@ iwrc iwn_http_response_headers_flush_into(struct iwn_http_req *request, IWXSTR *
   return _client_response_headers_write_http(client, xstr);
 }
 
-IW_INLINE void _client_response_write(struct client *client, IWXSTR *xstr) {
+IW_INLINE void _client_response_setbuf(struct client *client, IWXSTR *xstr) {
   _stream_free_buffer(client);
   struct stream *s = &client->stream;
   s->buf = iwxstr_ptr(xstr);
@@ -1463,10 +1463,9 @@ IW_INLINE void _client_response_write(struct client *client, IWXSTR *xstr) {
   client->state = HTTP_SESSION_WRITE;
   iwxstr_destroy_keep_ptr(xstr);
   _response_free(client);
-  _client_write(client);
 }
 
-IW_INLINE void _client_response_setbuf(struct client *client, char *buf, ssize_t buf_len, void (*buf_free)(void*)) {
+IW_INLINE void _client_response_setbuf2(struct client *client, char *buf, ssize_t buf_len, void (*buf_free)(void*)) {
   _stream_free_buffer(client);
   struct stream *s = &client->stream;
   s->buf = buf;
@@ -1490,7 +1489,8 @@ iwrc iwn_http_response_end(struct iwn_http_req *request) {
     RCC(rc, finish, iwxstr_cat(xstr, response->body, response->body_len));
   }
 
-  _client_response_write(client, xstr);
+  _client_response_setbuf(client, xstr);
+  _client_write(client);
 
 finish:
   if (rc) {
@@ -1515,7 +1515,8 @@ iwrc iwn_http_response_stream_start(
     RCC(rc, finish, _client_response_headers_write_http(client, xstr));
   }
 
-  _client_response_write(client, xstr);
+  _client_response_setbuf(client, xstr);
+  _client_write(client);
 
 finish:
   if (rc) {
@@ -1539,15 +1540,15 @@ void iwn_http_response_stream_write_again(
     buf_len = strlen(buf);
   }
   struct client *client = (void*) request;
+  client->chunk_cb = chunk_cb;
   if (chunk_cb) {
-    client->chunk_cb = chunk_cb;
     if (again) {
       *again = true;
     }
   } else {
     client->flags &= ~HTTP_STREAM_RESPONSE;
   }
-  _client_response_setbuf(client, buf, buf_len, buf_free);
+  _client_response_setbuf2(client, buf, buf_len, buf_free);
   if (!again || *again != true) {
     _client_write(client);
   }
@@ -1557,11 +1558,12 @@ void iwn_http_response_stream_end(struct iwn_http_req *request) {
   iwn_http_response_stream_write_again(request, 0, 0, 0, 0, 0);
 }
 
-iwrc iwn_http_response_chunk_write(
+iwrc iwn_http_response_chunk_write_again(
   struct iwn_http_req          *request,
   char                         *body,
   ssize_t                       body_len,
-  iwn_http_server_chunk_handler chunk_cb
+  iwn_http_server_chunk_handler chunk_cb,
+  bool                         *again
   ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
@@ -1573,6 +1575,10 @@ iwrc iwn_http_response_chunk_write(
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   client->chunk_cb = chunk_cb;
+  if (chunk_cb && again) {
+    *again = true;
+  }
+
   if (!(client->flags & HTTP_CHUNKED_RESPONSE)) {
     client->flags |= HTTP_CHUNKED_RESPONSE;
     iwn_http_response_header_set(request, "transfer-encoding", "chunked", IW_LLEN("chunked"));
@@ -1582,7 +1588,10 @@ iwrc iwn_http_response_chunk_write(
   RCC(rc, finish, iwxstr_cat(xstr, body, body_len));
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
 
-  _client_response_write(client, xstr);
+  _client_response_setbuf(client, xstr);
+  if (!again || *again != true) {
+    _client_write(client);
+  }
 
 finish:
   if (rc) {
@@ -1603,7 +1612,8 @@ iwrc iwn_http_response_chunk_end(struct iwn_http_req *request) {
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
   client->flags &= ~HTTP_CHUNKED_RESPONSE;
 
-  _client_response_write(client, xstr);
+  _client_response_setbuf(client, xstr);
+  _client_write(client);
 
 finish:
   if (rc) {
