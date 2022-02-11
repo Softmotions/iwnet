@@ -28,6 +28,8 @@
 #include <unistd.h>
 #include <inttypes.h>
 
+#define MAX_CHUNK_CB_CALL_DEPTH 16
+
 struct server {
   struct iwn_http_server      server;
   struct iwn_http_server_spec spec;
@@ -107,6 +109,7 @@ struct client {
   void  (*_wf_on_request_dispose)(struct iwn_http_req*);
   void  (*_wf_on_response_headers_write)(struct iwn_http_req*);
 
+  int     write_call_depth;
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
@@ -571,6 +574,10 @@ static void _client_write(struct client *client) {
     client->flags |= HTTP_END_SESSION;
     return;
   }
+  if (++client->write_call_depth >= MAX_CHUNK_CB_CALL_DEPTH) {
+    rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
+    goto finish;
+  }
   if (stream->bytes_total != stream->length) {
     client->state = HTTP_SESSION_WRITE;
     rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
@@ -601,6 +608,8 @@ static void _client_write(struct client *client) {
     }
   }
 
+finish:
+  --client->write_call_depth;
   if (rc) {
     iwlog_ecode_error3(rc);
     client->flags |= HTTP_END_SESSION;
