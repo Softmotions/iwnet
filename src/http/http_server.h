@@ -31,7 +31,7 @@ typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
 /// Request handler.
 /// Returns `false` if client connection shold be removed from poller (terminated).
 typedef bool (*iwn_http_server_request_handler)(struct iwn_http_req*);
-typedef bool (*iwn_http_server_chunk_handler)(struct iwn_http_req*);
+typedef bool (*iwn_http_server_chunk_handler)(struct iwn_http_req*, bool *again);
 
 struct iwn_http_server_spec {
   iwn_http_server_request_handler request_handler; ///< Required request handler.
@@ -173,12 +173,13 @@ IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
 
 IW_EXPORT iwrc iwn_http_response_stream_start(struct iwn_http_req*, iwn_http_server_chunk_handler chunk_cb);
 
-IW_EXPORT void iwn_http_response_stream_write(
+IW_EXPORT void iwn_http_response_stream_write_again(
   struct iwn_http_req*,
   char                         *buf,
   ssize_t                       buf_len,
   void (                       *buf_free )(void*),
-  iwn_http_server_chunk_handler chunk_cb);
+  iwn_http_server_chunk_handler chunk_cb,
+  bool                         *again);
 
 IW_EXPORT void iwn_http_response_stream_end(struct iwn_http_req*);
 

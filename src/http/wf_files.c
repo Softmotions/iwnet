@@ -170,9 +170,9 @@ IW_INLINE size_t _etag_fill(struct ctx *ctx, char fout[64]) {
                   (int32_t) ctx->fs.size, (int32_t) ctx->fs.mtime);
 }
 
-static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req);
+static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req, bool *again);
 
-static bool _file_serve_ranges_multiple_part_body(struct iwn_http_req *req) {
+static bool _file_serve_ranges_multiple_part_body(struct iwn_http_req *req, bool *again) {
   struct ctx *ctx = req->user_data;
   struct range *r = ctx->ranges;
 
@@ -190,9 +190,10 @@ static bool _file_serve_ranges_multiple_part_body(struct iwn_http_req *req) {
     free(r);
   }
 
-  iwn_http_response_stream_write(
+  iwn_http_response_stream_write_again(
     req, ctx->buf, len, 0,
-    stop ? _file_serve_ranges_multiple_part : _file_serve_ranges_multiple_part_body);
+    stop ? _file_serve_ranges_multiple_part : _file_serve_ranges_multiple_part_body,
+    again);
 
   return true;
 }
@@ -227,7 +228,7 @@ finish:
   return rc == 0;
 }
 
-static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req) {
+static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req, bool *again) {
   iwrc rc = 0;
 
   struct ctx *ctx = req->user_data;
@@ -268,7 +269,7 @@ static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req) {
   iwxstr_destroy_keep_ptr(xstr);
   xstr = 0;
 
-  iwn_http_response_stream_write(req, buf, buf_len, free, ch);
+  iwn_http_response_stream_write_again(req, buf, buf_len, free, ch, again);
 
 finish:
   if (rc) {
@@ -292,7 +293,7 @@ finish:
   return rc;
 }
 
-static bool _file_serve_range_single_cb(struct iwn_http_req *req) {
+static bool _file_serve_range_single_cb(struct iwn_http_req *req, bool *again) {
   struct ctx *ctx = req->user_data;
   struct range *r = ctx->ranges;
 
@@ -302,8 +303,7 @@ static bool _file_serve_range_single_cb(struct iwn_http_req *req) {
 
   r->to_read -= len;
 
-  iwn_http_response_stream_write(req, ctx->buf, len, 0, stop ? 0 : _file_serve_range_single_cb);
-
+  iwn_http_response_stream_write_again(req, ctx->buf, len, 0, stop ? 0 : _file_serve_range_single_cb, again);
   return true;
 }
 
@@ -330,10 +330,12 @@ finish:
   return rc;
 }
 
-static bool _file_serve_norange_cb(struct iwn_http_req *req) {
+static bool _file_serve_norange_cb(struct iwn_http_req *req, bool *again) {
   struct ctx *ctx = req->user_data;
   size_t len = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->file);
-  iwn_http_response_stream_write(req, ctx->buf, len, 0, len != sizeof(ctx->buf) ? 0 : _file_serve_norange_cb);
+  iwn_http_response_stream_write_again(req, ctx->buf, len, 0,
+                                       len != sizeof(ctx->buf) ? 0 : _file_serve_norange_cb,
+                                       again);
   return true;
 }
 
@@ -341,7 +343,6 @@ static iwrc _file_serve_norange(struct ctx *ctx) {
   iwrc rc = 0;
   RCC(rc, finish, iwn_http_response_header_set(ctx->req->http, "content-type", ctx->ctype, -1));
   RCC(rc, finish, iwn_http_response_header_i64_set(ctx->req->http, "content-length", ctx->fs.size));
-
   rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_norange_cb);
 
 finish:

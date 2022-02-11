@@ -28,8 +28,6 @@
 #include <unistd.h>
 #include <inttypes.h>
 
-#define MAX_CHUNK_CB_CALL_DEPTH 16
-
 struct server {
   struct iwn_http_server      server;
   struct iwn_http_server_spec spec;
@@ -109,7 +107,6 @@ struct client {
   void  (*_wf_on_request_dispose)(struct iwn_http_req*);
   void  (*_wf_on_response_headers_write)(struct iwn_http_req*);
 
-  int     write_call_depth;
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
@@ -570,13 +567,11 @@ static bool _client_write_bytes(struct client *client) {
 static void _client_write(struct client *client) {
   iwrc rc = 0;
   struct stream *stream = &client->stream;
+
+again:
   if (!_client_write_bytes(client)) {
     client->flags |= HTTP_END_SESSION;
     return;
-  }
-  if (++client->write_call_depth >= MAX_CHUNK_CB_CALL_DEPTH) {
-    rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
-    goto finish;
   }
   if (stream->bytes_total != stream->length) {
     client->state = HTTP_SESSION_WRITE;
@@ -587,8 +582,11 @@ static void _client_write(struct client *client) {
     if (client->server->spec.request_timeout_sec > 0) {
       iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
     }
-    if (!client->chunk_cb || !client->chunk_cb((void*) client)) {
+    bool again = false;
+    if (!client->chunk_cb || !client->chunk_cb((void*) client, &again)) {
       client->flags |= HTTP_END_SESSION;
+    } else if (again) {
+      goto again;
     }
   } else {
     bool (*on_response_completed)(struct iwn_http_req*) = client->request.on_response_completed;
@@ -608,8 +606,6 @@ static void _client_write(struct client *client) {
     }
   }
 
-finish:
-  --client->write_call_depth;
   if (rc) {
     iwlog_ecode_error3(rc);
     client->flags |= HTTP_END_SESSION;
@@ -864,6 +860,8 @@ static struct iwn_val _token_get_string(struct client *client, int token_type) {
 
 static void _client_read(struct client *client) {
   struct token token;
+
+again:
   client->state = HTTP_SESSION_READ;
   if (client->server->spec.request_timeout_sec > 0) {
     iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
@@ -912,9 +910,12 @@ static void _client_read(struct client *client) {
         break;
       case HS_TOK_CHUNK_BODY:
         client->state = HTTP_SESSION_NOP;
-        if (client->chunk_cb && !client->chunk_cb(&client->request)) {
+        bool again = false;
+        if (!client->chunk_cb || !client->chunk_cb(&client->request, &again)) {
           client->flags |= HTTP_END_SESSION;
           return;
+        } else if (again) {
+          goto again;
         }
         break;
     }
@@ -1465,7 +1466,7 @@ IW_INLINE void _client_response_write(struct client *client, IWXSTR *xstr) {
   _client_write(client);
 }
 
-IW_INLINE void _client_response_write2(struct client *client, char *buf, ssize_t buf_len, void (*buf_free)(void*)) {
+IW_INLINE void _client_response_setbuf(struct client *client, char *buf, ssize_t buf_len, void (*buf_free)(void*)) {
   _stream_free_buffer(client);
   struct stream *s = &client->stream;
   s->buf = buf;
@@ -1474,7 +1475,6 @@ IW_INLINE void _client_response_write2(struct client *client, char *buf, ssize_t
   s->capacity = s->length;
   client->state = HTTP_SESSION_WRITE;
   _response_free(client);
-  _client_write(client);
 }
 
 iwrc iwn_http_response_end(struct iwn_http_req *request) {
@@ -1524,12 +1524,13 @@ finish:
   return rc;
 }
 
-void iwn_http_response_stream_write(
+void iwn_http_response_stream_write_again(
   struct iwn_http_req          *request,
   char                         *buf,
   ssize_t                       buf_len,
   void (                       *buf_free )(void*),
-  iwn_http_server_chunk_handler chunk_cb
+  iwn_http_server_chunk_handler chunk_cb,
+  bool                         *again
   ) {
   if (!buf_free) {
     buf_free = _noop_free;
@@ -1540,14 +1541,20 @@ void iwn_http_response_stream_write(
   struct client *client = (void*) request;
   if (chunk_cb) {
     client->chunk_cb = chunk_cb;
+    if (again) {
+      *again = true;
+    }
   } else {
     client->flags &= ~HTTP_STREAM_RESPONSE;
   }
-  _client_response_write2(client, buf, buf_len, buf_free);
+  _client_response_setbuf(client, buf, buf_len, buf_free);
+  if (!again || *again != true) {
+    _client_write(client);
+  }
 }
 
 void iwn_http_response_stream_end(struct iwn_http_req *request) {
-  iwn_http_response_stream_write(request, 0, 0, 0, 0);
+  iwn_http_response_stream_write_again(request, 0, 0, 0, 0, 0);
 }
 
 iwrc iwn_http_response_chunk_write(

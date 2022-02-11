@@ -953,9 +953,7 @@ static bool _request_process(struct request *req) {
   return _request_routes_process(req);
 }
 
-static bool _request_stream_chunk_next(struct iwn_http_req *hreq);
-
-static bool _request_stream_chunk_process(struct request *req) {
+static bool _request_stream_chunk_process(struct request *req, bool *again) {
   iwrc rc = 0;
   struct iwn_http_req *hreq = req->base.http;
   struct ctx *ctx = (void*) req->base.ctx;
@@ -983,7 +981,8 @@ static bool _request_stream_chunk_process(struct request *req) {
       goto finish;
     }
     req->streamed_bytes += val.len;
-    iwn_http_request_chunk_next(hreq, _request_stream_chunk_next);
+    *again = true;
+    return true;
   } else {
     if (req->streamed_bytes > 0) {
       int fd = 0;
@@ -1013,9 +1012,9 @@ finish:
   return true;
 }
 
-static bool _request_stream_chunk_next(struct iwn_http_req *hreq) {
+static bool _request_stream_chunk_next(struct iwn_http_req *hreq, bool *again) {
   struct request *req = iwn_http_request_wf_data(hreq);
-  return _request_stream_chunk_process(req) == true;
+  return _request_stream_chunk_process(req, again) == true;
 }
 
 static bool _request_handler(struct iwn_http_req *hreq) {
