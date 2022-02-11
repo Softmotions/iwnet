@@ -1142,6 +1142,7 @@ iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx
   struct ctx *ctx = 0;
   RCA(ctx = iwpool_calloc(sizeof(*ctx), pool), finish);
   ctx->pool = pool;
+  ctx->server_fd = -1;
   RCC(rc, finish, _route_import(root_route_spec, ctx, &ctx->root));
   ctx->base.root = &ctx->root->base;
 
