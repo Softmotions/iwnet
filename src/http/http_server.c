@@ -1773,7 +1773,7 @@ void* iwn_http_request_ws_data(struct iwn_http_req *request) {
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_fd) {
   iwrc rc = 0;
   if (out_fd) {
-    *out_fd = 0;
+    *out_fd = -1;
   }
   int optval;
   struct server *server;
