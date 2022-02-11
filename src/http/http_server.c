@@ -1525,7 +1525,7 @@ finish:
   return rc;
 }
 
-void iwn_http_response_stream_write_again(
+void iwn_http_response_stream_write(
   struct iwn_http_req          *request,
   char                         *buf,
   ssize_t                       buf_len,
@@ -1555,10 +1555,10 @@ void iwn_http_response_stream_write_again(
 }
 
 void iwn_http_response_stream_end(struct iwn_http_req *request) {
-  iwn_http_response_stream_write_again(request, 0, 0, 0, 0, 0);
+  iwn_http_response_stream_write(request, 0, 0, 0, 0, 0);
 }
 
-iwrc iwn_http_response_chunk_write_again(
+iwrc iwn_http_response_chunk_write(
   struct iwn_http_req          *request,
   char                         *body,
   ssize_t                       body_len,

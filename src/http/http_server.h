@@ -163,7 +163,7 @@ IW_EXPORT bool iwn_http_response_printf_va(
   int status_code, const char *content_type,
   const char *body_fmt, va_list va);
 
-IW_EXPORT iwrc iwn_http_response_chunk_write_again(
+IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_req*,
   char                         *body,
   ssize_t                       body_len,
@@ -174,7 +174,7 @@ IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
 
 IW_EXPORT iwrc iwn_http_response_stream_start(struct iwn_http_req*, iwn_http_server_chunk_handler chunk_cb);
 
-IW_EXPORT void iwn_http_response_stream_write_again(
+IW_EXPORT void iwn_http_response_stream_write(
   struct iwn_http_req*,
   char                         *buf,
   ssize_t                       buf_len,
