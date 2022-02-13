@@ -70,7 +70,7 @@ struct poller_slot {
 
   int      refs;
   uint32_t events_processing;
-  uint32_t events_update;  
+  uint32_t events_update;
   uint32_t events_armed;
   uint32_t flags;
   atomic_long timeout_limit;           ///< Limit in seconds for use with time function.
@@ -381,7 +381,6 @@ static void _timer_ready_impl(struct iwn_poller *p) {
 #endif
 }
 
-
 IW_INLINE int64_t _timer_ready(const struct iwn_poller_task *t, uint32_t events) {
   struct iwn_poller *p = t->poller;
   if (__sync_bool_compare_and_swap(&p->housekeeping, false, true)) {
@@ -631,14 +630,15 @@ void iwn_poller_poke(struct iwn_poller *p) {
       { p->fd, EVFILT_USER, 0, NOTE_TRIGGER     }
     };
     if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
-      iwrc rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
-      iwlog_ecode_error3(rc);
+      iwlog_ecode_error3(iwrc_set_errno(IW_ERROR_ERRNO, errno));
     }
   }
 #elif defined(IWN_EPOLL)
   if (p->event_fd > 0) {
     int64_t data = 1;
-    write(p->event_fd, &data, sizeof(data));
+    if (write(p->event_fd, &data, sizeof(data)) == -1) {
+      iwlog_ecode_error3(iwrc_set_errno(IW_ERROR_IO_ERRNO, errno));
+    }
   }
 #endif
 }
@@ -802,7 +802,7 @@ start:
   s->flags &= ~SLOT_PROCESSING;
   events = events | s->events_mod | s->events_armed;
   s->events_armed = 0;
-  
+
 #if defined(IWN_KQUEUE)
   {
     unsigned short ka = _events_to_kflags(events);

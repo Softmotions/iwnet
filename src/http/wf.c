@@ -395,7 +395,7 @@ static const char* _header_parse_next_parameter2(
   ) {
   bool in_quote = false, in_key = true, expect_eq = false, val_escaped = false;
   const char *ks = rp, *ke = ks;
-  const char *vs, *ve = 0;
+  const char *vs = 0, *ve = 0;
 
   while (rp < ep) {
     if (in_key) {
