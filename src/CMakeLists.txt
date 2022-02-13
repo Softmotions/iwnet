@@ -11,10 +11,24 @@ find_package(Wslay REQUIRED)
 find_package(Bearssl REQUIRED)
 find_package(Iowow REQUIRED)
 
+if(OWNER_PROJECT_NAME)
+  set(IW_PUBLIC_HEADER_DESTINATION
+      ${CMAKE_INSTALL_INCLUDEDIR}/${OWNER_PROJECT_NAME}/${PROJECT_NAME})
+else()
+  set(IW_PUBLIC_HEADER_DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+endif()
+
 set(MODULES utils poller ssl ws http)
 
-list(APPEND PROJECT_LIBRARIES ${WSLAY_LIBRARIES}
-  ${BEARSSL_LIBRARIES} ${IOWOW_LIBRARIES} CURL::libcurl Threads::Threads dl)
+list(
+  APPEND
+  PROJECT_LIBRARIES
+  ${WSLAY_LIBRARIES}
+  ${BEARSSL_LIBRARIES}
+  ${IOWOW_LIBRARIES}
+  CURL::libcurl
+  Threads::Threads
+  dl)
 
 set(PROJECT_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 list(
@@ -32,6 +46,9 @@ if(CMAKE_SIZEOF_VOID_P MATCHES 8)
 else()
   add_definitions(-DIW_32)
 endif()
+if((CMAKE_BUILD_TYPE EQUAL Release) OR (CMAKE_BUILD_TYPE EQUAL RelWithDebInfo))
+  add_definition(-DIW_RELEASE)
+endif()
 add_definitions(-D_GNU_SOURCE)
 add_definitions(-D_LARGEFILE_SOURCE)
 add_definitions(-D_FILE_OFFSET_BITS=64)
@@ -48,12 +65,32 @@ foreach(MODULE IN LISTS MODULES)
          ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.hpp)
     list(APPEND ALL_SRC ${MODULE_SRC})
     list(APPEND ALL_HDRS ${MODULE_HDRS})
-    list(APPEND PUB_HDRS ${MODULE_HDRS})
     list(APPEND PROJECT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE})
   endif()
 endforeach(MODULE)
 
-list(APPEND PUB_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/iwnet.h)
+list(
+  APPEND
+  PUB_HDRS
+  ${CMAKE_CURRENT_SOURCE_DIR}/iwnet.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/base64.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/codec.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/pairs.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/utils.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/xcurl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ssl/brssl_poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/proc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/scheduler.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/direct_poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/http_server.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_files.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_sst_inmem.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_client.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_server.h)
 
 set(CMAKE_C_FLAGS
     "${CMAKE_C_FLAGS} \
@@ -71,6 +108,20 @@ set(CMAKE_C_FLAGS
                   -fPIC \
                   -fsigned-char \
                   -std=gnu11")
+
+if(APPLE)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-shorten-64-to-32")
+endif()
+
+if(NOT WIN32) # todo review
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+else()
+  add_definitions(-D__USE_MINGW_ANSI_STDIO)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-pedantic-ms-format")
+  set(CMAKE_EXE_LINKER_FLAGS
+      "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+endif()
+
 if(ASAN)
   set(CMAKE_C_ASAN "-fsanitize=address -fno-omit-frame-pointer")
 endif()
@@ -113,44 +164,91 @@ foreach(MODULE IN LISTS MODULES)
   endif()
 endforeach(MODULE)
 
-add_library(iwnet_s STATIC ${ALL_SRC})
-add_dependencies(iwnet_s generated)
-target_link_libraries(iwnet_s PUBLIC ${PROJECT_LIBRARIES})
-set_target_properties(
-  iwnet_s
-  PROPERTIES VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
-             COMPILE_FLAGS "-DIW_STATIC"
-             PUBLIC_HEADER "${PUB_HDRS}"
-             OUTPUT_NAME iwnet-${PROJECT_VERSION_MAJOR})
+if(NOT BUILD_SHARED_LIBS)
+  add_definitions(-DIW_NODLL)
+  add_library(iwnet STATIC ${ALL_SRC})
+  add_library(iwnet_s ALIAS iwnet)
+else()
+  add_library(iwnet SHARED ${ALL_SRC})
+  add_library(iwnet_s STATIC ${ALL_SRC})
+endif()
 
-set(${PROJECT_NAME}_PUB_HDRS
-    ${PUB_HDRS}
-    CACHE INTERNAL "${PROJECT_NAME}: Public headers" FORCE)
+add_dependencies(iwnet generated)
+target_link_libraries(iwnet PUBLIC ${PROJECT_LIBRARIES})
 
-set(${PROJECT_NAME}_INCLUDE_DIRS
-    ${PROJECT_INCLUDE_DIRS}
-    CACHE INTERNAL "${PROJECT_NAME}: Include Directories" FORCE)
+if(BUILD_SHARED_LIBS)
+  add_dependencies(iwnet_s generated)
+  target_link_libraries(iwnet_s PUBLIC ${PROJECT_LIBRARIES})
 
-install(
-  TARGETS iwnet_s
-  EXPORT iwnet-exports
-  FRAMEWORK DESTINATION ${FRAMEWORK_INSTALL_DIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+  set_target_properties(
+    iwnet
+    PROPERTIES VERSION ${PROJECT_VERSION} SOVERSION ${PROJECT_VERSION_MAJOR}
+               PUBLIC_HEADER "${PUB_HDRS}" DEFINE_SYMBOL IW_API_EXPORTS)
 
-install(EXPORT iwnet-exports
-        DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME})
+  if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(
+      TARGET iwnet
+      POST_BUILD
+      COMMAND ${STRIP_CMD} $<TARGET_FILE:iwnet>)
+  endif()
 
-install(FILES ${CMAKE_SOURCE_DIR}/LICENSE ${CMAKE_SOURCE_DIR}/Changelog
-        DESTINATION ${CMAKE_INSTALL_DOCDIR})
-install(
-  FILES ${CMAKE_SOURCE_DIR}/README.md
-  RENAME README
-  DESTINATION ${CMAKE_INSTALL_DOCDIR})
+  set_target_properties(
+    iwnet_s
+    PROPERTIES VERSION ${PROJECT_VERSION}
+               COMPILE_FLAGS "-DIW_STATIC -DIW_NODLL"
+               OUTPUT_NAME iwnet-${PROJECT_VERSION_MAJOR})
 
-export(EXPORT iwnet-exports)
+else()
+
+  set_target_properties(
+    iwnet
+    PROPERTIES VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}"
+               COMPILE_FLAGS "-DIW_STATIC -DIW_NODLL"
+               PUBLIC_HEADER "${PUB_HDRS}"
+               LINK_FLAGS_RELEASE "${LINK_FLAGS_RELEASE} -s"
+               OUTPUT_NAME iwnet-${PROJECT_VERSION_MAJOR})
+endif()
+
+if(DO_INSTALL_CORE)
+  include(InstallRequiredSystemLibraries)
+  install(
+    TARGETS iwnet
+    EXPORT iwnet-exports
+    FRAMEWORK DESTINATION ${FRAMEWORK_INSTALL_DIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+  install(EXPORT iwnet-exports
+          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME})
+endif()
+
+if(BUILD_SHARED_LIBS AND DO_INSTALL_CORE)
+  install(
+    TARGETS iwnet_s
+    EXPORT iwnet-static-exports
+    FRAMEWORK DESTINATION ${FRAMEWORK_INSTALL_DIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+  install(EXPORT iwnet-static-exports
+          DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/${PROJECT_NAME})
+endif()
+
+if(DO_INSTALL_CORE)
+  install(FILES ${CMAKE_SOURCE_DIR}/LICENSE ${CMAKE_SOURCE_DIR}/Changelog
+          DESTINATION ${CMAKE_INSTALL_DOCDIR})
+  install(
+    FILES ${CMAKE_SOURCE_DIR}/README.md
+    RENAME README
+    DESTINATION ${CMAKE_INSTALL_DOCDIR})
+
+  export(EXPORT iwnet-exports)
+  if(BUILD_SHARED_LIBS)
+    export(EXPORT iwnet-static-exports)
+  endif(BUILD_SHARED_LIBS)
+endif()
 
 message("")
 message("CMAKE_GENERATOR: ${CMAKE_GENERATOR}")

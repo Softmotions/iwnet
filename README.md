@@ -1,6 +1,6 @@
 # IWNET
 
-Pure `C` asynchronous HTTP framework library with support of websockets, SSL, routing.
+Pure `C` asynchronous HTTP framework with support of websockets client/server, SSL and routing.
 
 * Fast asynchronous HTTP server (http_server.h)
 * Web framework based on HTTP server (wf.h)   
