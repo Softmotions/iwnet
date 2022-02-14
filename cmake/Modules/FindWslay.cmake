@@ -1,6 +1,6 @@
 mark_as_advanced(WSLAY_INCLUDE_DIRS WSLAY_STATIC_LIB)
 
-find_path(WSLAY_INCLUDE_DIRS NAMES wslay.h PATH_SUFFIXES wslay)
+find_path(WSLAY_INCLUDE_DIRS NAMES wslay/wslay.h)
 find_library(WSLAY_STATIC_LIB NAMES libwslay.a)
 
 if(WSLAY_INCLUDE_DIRS AND WSLAY_STATIC_LIB)
