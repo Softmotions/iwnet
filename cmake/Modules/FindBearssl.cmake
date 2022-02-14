@@ -1,6 +1,6 @@
 mark_as_advanced(BEARSSL_INCLUDE_DIRS BEARSSL_STATIC_LIB)
 
-find_path(BEARSSL_INCLUDE_DIRS NAMES bearssl.h)
+find_path(BEARSSL_INCLUDE_DIRS NAMES bearssl.h PATH_SUFFIXES bearssl ejdb2/bearssl)
 find_library(BEARSSL_STATIC_LIB NAMES libbearssl.a)
 
 if(BEARSSL_STATIC_LIB AND BEARSSL_INCLUDE_DIRS)
