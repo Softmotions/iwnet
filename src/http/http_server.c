@@ -1899,11 +1899,12 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
 
   optval = 1;
   for (rp = result; rp; rp = rp->ai_next) {
-    task.fd = socket(rp->ai_family, rp->ai_socktype | SOCK_CLOEXEC, rp->ai_protocol);
+    task.fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
     server->fd = task.fd;
     if (task.fd < 0) {
       continue;
     }
+    fcntl(task.fd, F_SETFD, FD_CLOEXEC);
     setsockopt(task.fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
     if (bind(task.fd, rp->ai_addr, rp->ai_addrlen) == 0) {
       break;

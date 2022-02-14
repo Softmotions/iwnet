@@ -2,6 +2,8 @@
 
 Pure `C` asynchronous HTTP framework with support of websockets client/server, SSL and routing.
 
+Works on Linux, macOS, FreeBSD
+
 * Fast asynchronous HTTP server (http_server.h)
 * Web framework based on HTTP server (wf.h)   
 * Websocket server (ws_server.h)
