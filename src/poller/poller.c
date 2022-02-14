@@ -121,8 +121,8 @@ IW_INLINE unsigned short _events_to_kflags(uint32_t events) {
 
 IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
   struct kevent ev[] = {
-    { fd, EVFILT_READ,  EV_DELETE },
-    { fd, EVFILT_WRITE, EV_DELETE },
+    { fd, EVFILT_READ,  EV_DELETE  },
+    { fd, EVFILT_WRITE, EV_DELETE  },
   };
   kevent(pfd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0);
 }
@@ -495,7 +495,9 @@ static iwrc _poller_timeout_create_fd(struct poller_slot *s) {
 
 static iwrc _poller_timeout_add(struct poller_slot *s) {
 #if defined(IWN_KQUEUE)
-  struct kevent ev = { (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_ONESHOT, NOTE_MSECONDS, s->timeout };
+  struct kevent ev = {
+    (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_ONESHOT, NOTE_USECONDS, ((int64_t) s->timeout) * 1000
+  };
   if (kevent(s->poller->fd, &ev, 1, 0, 0, 0) == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
