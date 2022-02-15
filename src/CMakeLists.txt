@@ -8,7 +8,7 @@ endif()
 find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
 find_package(CURL REQUIRED)
 find_package(Wslay REQUIRED)
-find_package(Bearssl REQUIRED)
+find_package(BearSSL REQUIRED)
 find_package(Iowow REQUIRED)
 
 if(OWNER_PROJECT_NAME)
