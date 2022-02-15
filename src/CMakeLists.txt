@@ -23,9 +23,9 @@ set(MODULES utils poller ssl ws http)
 list(
   APPEND
   PROJECT_LIBRARIES
-  ${WSLAY_STATIC_LIB}
-  ${BEARSSL_STATIC_LIB}
-  ${IOWOW_STATIC_LIB}
+  ${WSLAY_LIBRARIES}
+  ${BEARSSL_LIBRARIES}
+  ${IOWOW_LIBRARIES}
   CURL::libcurl
   Threads::Threads
   dl

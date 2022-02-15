@@ -6,3 +6,7 @@ find_library(WSLAY_STATIC_LIB NAMES libwslay.a)
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Wslay DEFAULT_MSG WSLAY_INCLUDE_DIRS
                                   WSLAY_STATIC_LIB)
+
+if(Wslay_FOUND)
+  set(WSLAY_LIBRARIES ${WSLAY_STATIC_LIB})
+endif()

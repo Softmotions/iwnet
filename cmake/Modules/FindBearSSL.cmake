@@ -10,3 +10,7 @@ find_library(BEARSSL_STATIC_LIB NAMES libbearssl.a)
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(BearSSL DEFAULT_MSG BEARSSL_INCLUDE_DIRS
                                   BEARSSL_STATIC_LIB)
+
+if(BearSSL_FOUND)
+  set(BEARSSL_LIBRARIES ${BEARSSL_STATIC_LIB})
+endif()

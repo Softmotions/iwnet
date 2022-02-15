@@ -10,3 +10,7 @@ find_library(IOWOW_STATIC_LIB NAMES libiowow-1.a libiowow.a)
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Iowow DEFAULT_MSG IOWOW_INCLUDE_DIRS
                                   IOWOW_STATIC_LIB)
+
+if(Iowow_FOUND)
+  set(IOWOW_LIBRARIES ${IOWOW_STATIC_LIB})
+endif()
