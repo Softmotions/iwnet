@@ -108,14 +108,14 @@ int main(int argc, char *argv[]) {
   };
 
   if (ssl) {
-    spec.private_key = "./key.pem";
-    spec.private_key_len = -1;
-    spec.certs = "./cert.pem";
-    spec.certs_len = -1;
+    spec.ssl.private_key = "./key.pem";
+    spec.ssl.private_key_len = -1;
+    spec.ssl.certs = "./cert.pem";
+    spec.ssl.certs_len = -1;
   }
 
   RCC(rc, finish, iwn_wf_server(&spec, ctx));
-  
+
   fprintf(stderr, "0542a108-ff0f-47ef-86e3-495fd898a8ee\n");
   iwn_poller_poll(poller);
 

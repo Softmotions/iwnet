@@ -121,8 +121,8 @@ IW_INLINE unsigned short _events_to_kflags(uint32_t events) {
 
 IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
   struct kevent ev[] = {
-    { fd, EVFILT_READ,  EV_DELETE  },
-    { fd, EVFILT_WRITE, EV_DELETE  },
+    { fd, EVFILT_READ,  EV_DELETE },
+    { fd, EVFILT_WRITE, EV_DELETE },
   };
   kevent(pfd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0);
 }
@@ -852,6 +852,17 @@ bool iwn_poller_alive(struct iwn_poller *p) {
 
 iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
   return iwtp_schedule(p->tp, task, arg);
+}
+
+bool iwn_poller_probe(struct iwn_poller *p, int fd, iwn_poller_probe_fn probe, void *fn_user_data) {
+  struct poller_slot *s = _slot_ref_id(p, fd, 0);
+  if (s) {
+    probe(p, s->user_data, fn_user_data);
+    _slot_unref(s, 0);
+    return true;
+  } else {
+    return false;
+  }
 }
 
 void iwn_poller_poll(struct iwn_poller *p) {

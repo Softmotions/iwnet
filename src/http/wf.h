@@ -113,24 +113,18 @@ struct iwn_wf_session_store {
 
 struct iwn_wf_server_spec {
   struct iwn_poller *poller;                       ///< Required poller reference.
-  struct iwn_wf_session_store session_store;
+  struct iwn_http_server_ssl_spec ssl;
+  struct iwn_wf_session_store     session_store;
   const char *listen;
-  const char *certs;
-  ssize_t     certs_len;
-  const char *private_key;
-  ssize_t     private_key_len;
   int port;                           ///< Default: 8080 http, 8443 https
   int socket_queue_size;              ///< Default: 64
   int request_buf_max_size;           ///< Default: 8Mb
   int request_buf_size;               ///< Default: 1024
   int request_file_max_size;          ///< -1: To disable chunked requests and files uploading. Default:  50Mb
-  // (52428800)
-  int  request_max_headers_count;     ///< Default:  127
-  int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 Use default timeout: 120sec
-  int  request_timeout_sec;           ///< -1 Disable timeout, 0 Use default timeout: 20sec
-  int  request_token_max_len;         ///< Default: 8192
-  bool certs_in_buffer;               ///< true if `certs_data` specified as data buffer rather a file name.
-  bool private_key_in_buffer;         ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
+  int request_max_headers_count;      ///< Default:  127
+  int request_timeout_keepalive_sec;  ///< -1 Disable timeout, 0 Use default timeout: 120sec
+  int request_timeout_sec;            ///< -1 Disable timeout, 0 Use default timeout: 20sec
+  int request_token_max_len;          ///< Default: 8192
 };
 
 struct iwn_wf_ctx {

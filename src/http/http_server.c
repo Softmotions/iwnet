@@ -37,7 +37,7 @@ struct server {
   pthread_mutex_t mtx;
   IWPOOL *pool;
   char    stime_text[32]; ///< Formatted as: `%a, %d %b %Y %T GMT`
-  bool    https;
+  volatile bool https;
 };
 
 struct token {
@@ -992,22 +992,24 @@ static iwrc _client_accept(struct server *server, int fd) {
   RCN(finish, fcntl(fd, F_SETFL, flags | O_NONBLOCK));
 
   if (server->https) {
+    pthread_mutex_lock(&server->mtx);
     RCC(rc, finish, iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
-      .certs = server->spec.certs,
-      .certs_in_buffer = server->spec.certs_in_buffer,
-      .certs_len = server->spec.certs_len,
+      .certs = server->spec.ssl.certs,
+      .certs_in_buffer = server->spec.ssl.certs_in_buffer,
+      .certs_len = server->spec.ssl.certs_len,
       .events = IWN_POLLIN,
       .events_mod = IWN_POLLET,
       .fd = fd,
       .on_dispose = _client_on_poller_adapter_dispose,
       .on_event = _client_on_poller_adapter_event,
       .poller = server->spec.poller,
-      .private_key = server->spec.private_key,
-      .private_key_in_buffer = server->spec.private_key_in_buffer,
-      .private_key_len = server->spec.private_key_len,
+      .private_key = server->spec.ssl.private_key,
+      .private_key_in_buffer = server->spec.ssl.private_key_in_buffer,
+      .private_key_len = server->spec.ssl.private_key_len,
       .timeout_sec = server->spec.request_timeout_sec,
       .user_data = client,
     }));
+    pthread_mutex_unlock(&server->mtx);
   } else {
     RCC(rc, finish,
         iwn_direct_poller_adapter(
@@ -1718,6 +1720,8 @@ static void _server_destroy(struct server *server) {
     close(server->fd);
   }
   pthread_mutex_destroy(&server->mtx);
+  free((void*) server->spec.ssl.certs);
+  free((void*) server->spec.ssl.private_key);
   iwpool_destroy(server->pool);
 }
 
@@ -1796,6 +1800,28 @@ void* iwn_http_request_ws_data(struct iwn_http_req *request) {
   return client->_ws_data;
 }
 
+static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data) {
+  struct server *server = slot_data;
+  const struct iwn_http_server_ssl_spec *ssl = fn_data;
+  pthread_mutex_lock(&server->mtx);
+  server->spec.ssl.certs = ssl->certs;
+  server->spec.ssl.certs_len = ssl->certs_len;
+  server->spec.ssl.certs_in_buffer = ssl->certs_in_buffer;
+  server->spec.ssl.private_key = ssl->private_key;
+  server->spec.ssl.private_key_len = ssl->private_key_len;
+  server->spec.ssl.private_key_in_buffer = ssl->private_key_in_buffer;
+  server->https = ssl->certs && ssl->certs_len && ssl->private_key && ssl->private_key_len;
+  pthread_mutex_unlock(&server->mtx);
+}
+
+bool iwn_http_server_ssl_set(
+  struct iwn_poller                     *poller,
+  int                                    server_fd,
+  const struct iwn_http_server_ssl_spec *ssl
+  ) {
+  return iwn_poller_probe(poller, server_fd, _probe_ssl_set, (void*) ssl);
+}
+
 iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_fd) {
   iwrc rc = 0;
   if (out_fd) {
@@ -1849,18 +1875,16 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     spec->request_buf_max_size = 8 * 1024 * 1024;
   }
 
-  server->https = spec->certs && spec->certs_len && spec->private_key && spec->private_key_len;
+  server->https = spec->ssl.certs && spec->ssl.certs_len && spec->ssl.private_key && spec->ssl.private_key_len;
   if (server->https) {
-    if (spec->certs_len < 0) {
-      spec->certs_len = strlen(spec->certs);
+    if (spec->ssl.certs_len < 0) {
+      spec->ssl.certs_len = strlen(spec->ssl.certs);
     }
-    if (spec->private_key_len < 0) {
-      spec->private_key_len = strlen(spec->private_key);
+    if (spec->ssl.private_key_len < 0) {
+      spec->ssl.private_key_len = strlen(spec->ssl.private_key);
     }
-    spec->certs = iwpool_strndup(pool, spec->certs, spec->certs_len, &rc);
-    RCGO(rc, finish);
-    spec->private_key = iwpool_strndup(pool, spec->private_key, spec->private_key_len, &rc);
-    RCGO(rc, finish);
+    RCA(spec->ssl.certs = strndup(spec->ssl.certs, spec->ssl.certs_len), finish);
+    RCA(spec->ssl.private_key = strndup(spec->ssl.private_key, spec->ssl.private_key_len), finish);
   }
 
   if (!spec->port) {

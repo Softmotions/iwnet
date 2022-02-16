@@ -33,31 +33,41 @@ typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
 typedef bool (*iwn_http_server_request_handler)(struct iwn_http_req*);
 typedef bool (*iwn_http_server_chunk_handler)(struct iwn_http_req*, bool *again);
 
+struct iwn_http_server_ssl_spec {
+  const char *certs;
+  const char *private_key;
+  ssize_t     certs_len;
+  ssize_t     private_key_len;
+  bool private_key_in_buffer; ///< true if `certs_data` specified as data buffer rather a file name.
+  bool certs_in_buffer;       ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
+};
+
 struct iwn_http_server_spec {
   iwn_http_server_request_handler request_handler; ///< Required request handler.
   struct iwn_poller *poller;                       ///< Required poller reference.
   const char *listen;
   void       *user_data;
-  iwn_http_server_on_dispose on_server_dispose;
-  const char *certs;
-  ssize_t     certs_len;
-  const char *private_key;
-  ssize_t     private_key_len;
-  int  port;                          ///< Default: 8080 http, 8443 https
-  int  socket_queue_size;             ///< Default: 64
-  int  request_buf_max_size;          ///< Default: 8Mb
-  int  request_buf_size;              ///< Default: 1023, Min: 1023
-  int  request_timeout_keepalive_sec; ///< -1 Disable timeout, 0 Use default timeout: 120sec
-  int  request_timeout_sec;           ///< -1 Disable timeout, 0 Use default timeout: 20sec
-  int  request_token_max_len;         ///< Default: 8191, Min: 8191
-  int  request_max_headers_count;     ///< Default:  127
-  bool certs_in_buffer;               ///< true if `certs_data` specified as data buffer rather a file name.
-  bool private_key_in_buffer;         ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
+  iwn_http_server_on_dispose      on_server_dispose;
+  struct iwn_http_server_ssl_spec ssl;
+  int port;                           ///< Default: 8080 http, 8443 https
+  int socket_queue_size;              ///< Default: 64
+  int request_buf_max_size;           ///< Default: 8Mb
+  int request_buf_size;               ///< Default: 1023, Min: 1023
+  int request_timeout_keepalive_sec;  ///< -1 Disable timeout, 0 Use default timeout: 120sec
+  int request_timeout_sec;            ///< -1 Disable timeout, 0 Use default timeout: 20sec
+  int request_token_max_len;          ///< Default: 8191, Min: 8191
+  int request_max_headers_count;      ///< Default:  127
 };
 
 IW_EXPORT WUR iwrc iwn_http_server_create(
   const struct iwn_http_server_spec*,
   int *out_fd);
+
+IW_EXPORT bool iwn_http_server_ssl_set(
+  struct iwn_poller                     *poller,
+  int                                    server_fd,
+  const struct iwn_http_server_ssl_spec *ssl);
+
 
 IW_EXPORT void iwn_http_request_chunk_next(struct iwn_http_req*, iwn_http_server_chunk_handler);
 

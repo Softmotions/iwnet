@@ -101,7 +101,7 @@ static bool _request_handler(struct iwn_http_req *req) {
   } else if (iwn_http_request_target_is(req, "/chunked", -1)) {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain", -1));
     RCC(rc, finish, iwn_http_response_chunk_write(req, "\n4cd009fb-dceb-4907-a6be-dd05c3f052b3",
-                                                        -1, _chunk_resp_cb, 0));
+                                                  -1, _chunk_resp_cb, 0));
     goto finish;
   } else {
     RCC(rc, finish, iwn_http_response_header_set(req, "content-type", "text/plain", -1));
@@ -164,10 +164,10 @@ int main(int argc, char *argv[]) {
   };
 
   if (ssl) {
-    spec.private_key = "./server-eckey.pem";
-    spec.private_key_len = -1;
-    spec.certs = "./server-ecdsacert.pem";
-    spec.certs_len = -1;
+    spec.ssl.private_key = "./server-eckey.pem";
+    spec.ssl.private_key_len = -1;
+    spec.ssl.certs = "./server-ecdsacert.pem";
+    spec.ssl.certs_len = -1;
   }
 
   RCC(rc, finish, iwn_http_server_create(&spec, 0));

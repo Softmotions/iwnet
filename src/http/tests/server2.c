@@ -104,7 +104,7 @@ static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
   p = iwn_pair_find(&req->form_params, "bigparam", -1);
   IWN_ASSERT(p);
   if (p) {
-    IWN_ASSERT(p->val_len == 15165824 );
+    IWN_ASSERT(p->val_len == 15165824);
   }
   if (af == iwn_assertions_failed) {
     return 200;
@@ -271,10 +271,10 @@ int main(int argc, char *argv[]) {
   };
 
   if (ssl) {
-    spec.private_key = "./server-eckey.pem";
-    spec.private_key_len = -1;
-    spec.certs = "./server-ecdsacert.pem";
-    spec.certs_len = -1;
+    spec.ssl.private_key = "./server-eckey.pem";
+    spec.ssl.private_key_len = -1;
+    spec.ssl.certs = "./server-ecdsacert.pem";
+    spec.ssl.certs_len = -1;
   }
 
   RCC(rc, finish, iwn_wf_server(&spec, ctx));
