@@ -139,6 +139,8 @@ IW_EXPORT WUR iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec, struct i
 
 IW_EXPORT struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx);
 
+IW_EXPORT int iwn_wf_server_fd_get(struct iwn_wf_ctx *ctx);
+
 IW_EXPORT const char* iwn_wf_header_val_part_next(
   const char      *header_val,
   const char      *ptr,

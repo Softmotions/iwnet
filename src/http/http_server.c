@@ -37,7 +37,7 @@ struct server {
   pthread_mutex_t mtx;
   IWPOOL *pool;
   char    stime_text[32]; ///< Formatted as: `%a, %d %b %Y %T GMT`
-  volatile bool https;
+  bool    https;
 };
 
 struct token {
@@ -1718,10 +1718,11 @@ static void _server_destroy(struct server *server) {
   }
   if (server->fd > -1) {
     close(server->fd);
+    server->fd = -1;
   }
-  pthread_mutex_destroy(&server->mtx);
   free((void*) server->spec.ssl.certs);
   free((void*) server->spec.ssl.private_key);
+  pthread_mutex_destroy(&server->mtx);
   iwpool_destroy(server->pool);
 }
 
@@ -1804,11 +1805,27 @@ static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data)
   struct server *server = slot_data;
   const struct iwn_http_server_ssl_spec *ssl = fn_data;
   pthread_mutex_lock(&server->mtx);
-  server->spec.ssl.certs = ssl->certs;
+  free((void*) server->spec.ssl.certs);
+  free((void*) server->spec.ssl.private_key);
   server->spec.ssl.certs_len = ssl->certs_len;
-  server->spec.ssl.certs_in_buffer = ssl->certs_in_buffer;
-  server->spec.ssl.private_key = ssl->private_key;
   server->spec.ssl.private_key_len = ssl->private_key_len;
+  if (ssl->certs) {
+    if (ssl->certs_len < 0) {
+      server->spec.ssl.certs_len = strlen(ssl->certs);
+    }
+    server->spec.ssl.certs = strndup(ssl->certs, server->spec.ssl.certs_len);
+  } else {
+    server->spec.ssl.certs = 0;
+  }
+  if (ssl->private_key) {
+    if (ssl->private_key_len < 0) {
+      server->spec.ssl.private_key_len = strlen(ssl->private_key);
+    }
+    server->spec.ssl.private_key = strndup(ssl->private_key, server->spec.ssl.private_key_len);
+  } else {
+    server->spec.ssl.private_key = 0;
+  }
+  server->spec.ssl.certs_in_buffer = ssl->certs_in_buffer;
   server->spec.ssl.private_key_in_buffer = ssl->private_key_in_buffer;
   server->https = ssl->certs && ssl->certs_len && ssl->private_key && ssl->private_key_len;
   pthread_mutex_unlock(&server->mtx);

@@ -1162,6 +1162,10 @@ struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx) {
   return ((struct ctx*) ctx)->poller;
 }
 
+int iwn_wf_server_fd_get(struct iwn_wf_ctx *ctx) {
+  return ((struct ctx*) ctx)->server_fd;
+}
+
 char* iwn_wf_session_get(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
@@ -1261,7 +1265,7 @@ iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ct
   http.poller = spec.poller;
   http.listen = spec.listen;
   http.port = spec.port;
-    
+
   memcpy(&http.ssl, &spec.ssl, sizeof(http.ssl));
 
   http.socket_queue_size = spec.socket_queue_size;
