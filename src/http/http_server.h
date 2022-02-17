@@ -130,7 +130,7 @@ IW_EXPORT iwrc iwn_http_response_header_printf(
   struct iwn_http_req *req,
   const char          *header_name,
   const char          *format,
-  ...);
+  ...) __attribute__((format(__printf__, 3, 4)));
 
 IW_EXPORT iwrc iwn_http_response_header_add(
   struct iwn_http_req*,
@@ -166,7 +166,8 @@ IW_EXPORT bool iwn_http_response_write(
 IW_EXPORT bool iwn_http_response_printf(
   struct iwn_http_req*,
   int status_code, const char *content_type,
-  const char *body_fmt, ...);
+  const char *body_fmt, ...)
+__attribute__((format(__printf__, 4, 5)));
 
 IW_EXPORT bool iwn_http_response_printf_va(
   struct iwn_http_req*,

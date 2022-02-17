@@ -24,7 +24,8 @@ struct iwn_ws_handler_spec {
 
 IW_EXPORT bool iwn_ws_server_write(struct iwn_ws_sess*, const char *buf, ssize_t buf_len);
 
-IW_EXPORT bool iwn_ws_server_printf(struct iwn_ws_sess*, const char *fmt, ...);
+IW_EXPORT bool iwn_ws_server_printf(struct iwn_ws_sess*, const char *fmt, ...)
+__attribute__((format(__printf__, 2, 3)));
 
 IW_EXPORT bool iwn_ws_server_printf_va(struct iwn_ws_sess*, const char *fmt, va_list va);
 

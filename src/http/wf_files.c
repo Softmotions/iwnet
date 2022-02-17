@@ -244,7 +244,7 @@ static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req, bool *aga
   }
 
   if (ctx->range_processed) {
-    RCC(rc, finish, iwxstr_printf(xstr, "\r\n", ctx->boundary));
+    RCC(rc, finish, iwxstr_printf(xstr, "\r\n"));
   }
 
   if (r) {

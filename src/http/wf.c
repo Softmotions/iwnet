@@ -608,7 +608,7 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
           }
         }
       } else {
-        iwlog_ecode_error(rc, "Route matching failed. Pattern: %s tag: %s", rc, r->pattern_re->expression,
+        iwlog_ecode_error(rc, "Route matching failed. Pattern: %s tag: %s", r->pattern_re->expression,
                           (r->base.tag ? r->base.tag : ""));
       }
       pthread_mutex_unlock(&r->mtx);

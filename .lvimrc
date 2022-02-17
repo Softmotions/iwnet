@@ -22,7 +22,7 @@ let g:termdebug_wide = 1
 nnoremap <leader>cc :call asyncrun#run('',
         \ {'mode':'bang','cwd':g:build_dir,'save':2},
         \ 'cmake .. -DCMAKE_BUILD_TYPE='.g:build_type
-        \.' -DCMAKE_FIND_ROOT_PATH=/home/adam/Projects/softmotions/smtrader3/build'
+        \.' -DCMAKE_FIND_ROOT_PATH=/home/adam/.local/install'
         \.' -DBUILD_TESTS='.g:build_tests
         \.' -DCMAKE_CXX_COMPILER='.g:cxx
         \.' -DCMAKE_C_COMPILER='.g:cc

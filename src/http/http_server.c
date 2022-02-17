@@ -1586,7 +1586,7 @@ iwrc iwn_http_response_chunk_write(
     iwn_http_response_header_set(request, "transfer-encoding", "chunked", IW_LLEN("chunked"));
     RCC(rc, finish, _client_response_headers_write_http(client, xstr));
   }
-  RCC(rc, finish, iwxstr_printf(xstr, "%X\r\n", body_len));
+  RCC(rc, finish, iwxstr_printf(xstr, "%X\r\n", (unsigned int) body_len));
   RCC(rc, finish, iwxstr_cat(xstr, body, body_len));
   RCC(rc, finish, iwxstr_cat(xstr, "\r\n", sizeof("\r\n") - 1));
 

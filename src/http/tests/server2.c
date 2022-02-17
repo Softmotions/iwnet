@@ -98,7 +98,7 @@ static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
   }
   p = iwn_pair_find(&req->form_params, "baz", -1);
   IWN_ASSERT(p);
-  if (p) {
+  if (p) {  
     IWN_ASSERT(strncmp(p->val, "a%40z", p->val_len) == 0);
   }
   p = iwn_pair_find(&req->form_params, "bigparam", -1);

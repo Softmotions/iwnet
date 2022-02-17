@@ -382,7 +382,7 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     a->server.certs = read_certificates(buf, &a->server.certs_num);
     free(buf);
     if (!a->server.certs) {
-      iwlog_error("Error reading server certs file: %.*s", certs_len, spec->certs);
+      iwlog_error("Error reading server certs file: %.*s", (int) certs_len, spec->certs);
       rc = BRS_ERROR_INVALID_CASCERT_DATA;
       goto finish;
     }
@@ -403,7 +403,7 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     a->server.pk = read_private_key(buf);
     free(buf);
     if (!a->server.pk) {
-      iwlog_error("Error reading server private key file: %.*s", private_key_len, spec->private_key);
+      iwlog_error("Error reading server private key file: %.*s", (int) private_key_len, spec->private_key);
       rc = BRS_ERROR_INVALID_PRIVKEY_DATA;
       goto finish;
     }
