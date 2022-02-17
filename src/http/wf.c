@@ -1108,8 +1108,8 @@ iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_rou
   }
   struct ctx *ctx = (void*) spec->ctx;
   if (spec->parent) {
-    spec->parent->flags |= IWN_WF_MATCH_PREFIX;
-    for (struct iwn_wf_route *p = spec->parent; !ctx && p; p = p->parent) {
+    ((struct iwn_wf_route*) spec->parent)->flags |= IWN_WF_MATCH_PREFIX;
+    for (const struct iwn_wf_route *p = spec->parent; !ctx && p; p = p->parent) {
       ctx = (void*) p->ctx;
     }
   }

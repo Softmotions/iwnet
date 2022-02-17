@@ -90,8 +90,8 @@ struct iwn_wf_req {
 
 /// Route specification.
 struct iwn_wf_route {
-  struct iwn_wf_ctx   *ctx;
-  struct iwn_wf_route *parent;
+  struct iwn_wf_ctx *ctx;
+  const struct iwn_wf_route *parent;
   const char    *pattern;
   uint32_t       flags;
   iwn_wf_handler handler;
