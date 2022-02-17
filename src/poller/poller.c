@@ -651,10 +651,6 @@ void iwn_poller_shutdown_request(struct iwn_poller *p) {
   }
 }
 
-void iwn_poller_shutdown_wait(struct iwn_poller *p) {
-  iwtp_shutdown(&p->tp, true);
-}
-
 void iwn_poller_destroy(struct iwn_poller **pp) {
   if (pp && *pp) {
     struct iwn_poller *p = *pp;

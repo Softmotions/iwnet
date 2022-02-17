@@ -62,8 +62,6 @@ IW_EXPORT void iwn_poller_poke(struct iwn_poller*);
 
 IW_EXPORT void iwn_poller_shutdown_request(struct iwn_poller*);
 
-IW_EXPORT void iwn_poller_shutdown_wait(struct iwn_poller*);
-
 IW_EXPORT void iwn_poller_destroy(struct iwn_poller **pp);
 
 IW_EXPORT iwrc iwn_poller_task(struct iwn_poller*, void (*task)(void*), void *arg);
