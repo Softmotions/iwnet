@@ -69,12 +69,13 @@ IW_EXPORT bool iwn_http_server_ssl_set(
   int                                    server_fd,
   const struct iwn_http_server_ssl_spec *ssl);
 
-
 IW_EXPORT void iwn_http_request_chunk_next(struct iwn_http_req*, iwn_http_server_chunk_handler);
 
 IW_EXPORT struct iwn_val iwn_http_request_chunk_get(struct iwn_http_req*);
 
 IW_EXPORT bool iwn_http_request_is_streamed(struct iwn_http_req*);
+
+IW_EXPORT bool iwn_http_request_is_secure(struct iwn_http_req*);
 
 IW_EXPORT void iwn_http_request_free(struct iwn_http_req*);
 

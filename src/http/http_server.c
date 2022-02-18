@@ -37,7 +37,7 @@ struct server {
   pthread_mutex_t mtx;
   IWPOOL *pool;
   char    stime_text[32]; ///< Formatted as: `%a, %d %b %Y %T GMT`
-  bool    https;
+  volatile bool https;
 };
 
 struct token {
@@ -1041,6 +1041,11 @@ finish:
 bool iwn_http_request_is_streamed(struct iwn_http_req *request) {
   struct client *client = (void*) request;
   return (client->flags & HTTP_STREAMED);
+}
+
+bool iwn_http_request_is_secure(struct iwn_http_req *request) {
+  struct client *client = (void*) request;
+  return client->server->https;
 }
 
 void iwn_http_request_free(struct iwn_http_req *request) {

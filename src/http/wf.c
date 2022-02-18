@@ -1098,7 +1098,7 @@ static void _response_headers_write(struct iwn_http_req *hreq) {
     return;
   }
   struct request *req = iwn_http_request_wf_data(hreq);
-  if (_request_sid_exists(req)) {
+  if (_request_sid_exists(req)) {  
     iwn_wf_cookie_add(&req->base, IWN_WF_SESSION_COOKIE_KEY, req->sid, (struct iwn_wf_cookie_opts) {
       .path = "/",
       .httponly = true,
@@ -1262,15 +1262,7 @@ iwrc iwn_wf_cookie_add(
   if (opts.validity_sec < 0) {
     RCC(rc, finish, iwxstr_cat2(xstr, "; expires=Thu, 01 Jan 1970 00:00:00 GMT"));
   } else if (opts.validity_sec > 0) {
-    char buf[32];
-    time_t time = opts.validity_sec;
-    struct tm *timeinfo = gmtime(&time);
-    if (!timeinfo) {
-      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
-      goto finish;
-    }
-    strftime(buf, sizeof(buf), "; expires=%a, %d %b %Y %T %Z", timeinfo);
-    RCC(rc, finish, iwxstr_cat2(xstr, buf));
+    RCC(rc, finish, iwxstr_printf(xstr, "; expires=%d", opts.validity_sec));
   }
   if (opts.path) {
     RCC(rc, finish, iwxstr_printf(xstr, "; path=\"%s\"", opts.path));
@@ -1281,7 +1273,7 @@ iwrc iwn_wf_cookie_add(
   if (opts.httponly) {
     RCC(rc, finish, iwxstr_cat(xstr, "; HttpOnly", IW_LLEN("; HttpOnly")));
   }
-  if (opts.secure) {
+  if (opts.secure || iwn_http_request_is_secure(req->http)) {
     RCC(rc, finish, iwxstr_cat(xstr, "; Secure", IW_LLEN("; Secure")));
   }
   if (opts.extra) {
