@@ -25,7 +25,7 @@ struct iwn_http_req {
   void (*on_response_headers_write)(struct iwn_http_req*);
   bool (*on_response_completed)(struct iwn_http_req*);
   struct iwn_poller_adapter *poller_adapter;
-  int sesssion_cookie_max_age_sec; ///< Max age of session cookies sec.
+  int session_cookie_max_age_sec; ///< Max age of session cookies sec.
 };
 
 typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);

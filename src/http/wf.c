@@ -1102,7 +1102,7 @@ static void _response_headers_write(struct iwn_http_req *hreq) {
     iwn_wf_cookie_add(&req->base, IWN_WF_SESSION_COOKIE_KEY, req->sid, (struct iwn_wf_cookie_opts) {
       .path = "/",
       .httponly = true,
-      .max_age_sec = hreq->sesssion_cookie_max_age_sec,
+      .max_age_sec = hreq->session_cookie_max_age_sec,
       .extra = hreq->session_cookie_params ? hreq->session_cookie_params : "; samesite=lax"
     });
   }
