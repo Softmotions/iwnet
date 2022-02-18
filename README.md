@@ -1,6 +1,6 @@
 # IWNET
 
-Pure `C` asynchronous HTTP framework with support of websockets client/server, SSL and routing.
+Pure `C` asynchronous HTTP framework with support of websockets client/server, TLS 1.2 (SSL), routing.
 
 Works on Linux, macOS, FreeBSD
 

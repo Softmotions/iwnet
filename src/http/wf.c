@@ -923,7 +923,12 @@ static bool _request_routes_process(struct request *req) {
         }
         break;
       } else if (rv < 0) {
-        return false;
+        if (rv == -2) {
+          rv = 0; // Stop further processing of routes
+          break;
+        } else {
+          return false;
+        }
       }
     }
   }
