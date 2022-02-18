@@ -1244,8 +1244,8 @@ void iwn_wf_session_clear(struct iwn_wf_req *req_) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {
-    req->sid[0] = 0;
     ctx->sst.clear(&ctx->sst, req->sid);
+    req->sid[0] = 0;
   }
 }
 
