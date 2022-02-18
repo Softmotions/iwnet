@@ -176,7 +176,7 @@ struct iwn_wf_cookie_opts {
   const char *path;
   const char *domain;
   const char *extra;
-  int  validity_sec;
+  int  max_age_sec;
   bool httponly;
   bool secure;
 };

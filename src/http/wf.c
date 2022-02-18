@@ -1098,10 +1098,11 @@ static void _response_headers_write(struct iwn_http_req *hreq) {
     return;
   }
   struct request *req = iwn_http_request_wf_data(hreq);
-  if (_request_sid_exists(req)) {  
+  if (_request_sid_exists(req)) {
     iwn_wf_cookie_add(&req->base, IWN_WF_SESSION_COOKIE_KEY, req->sid, (struct iwn_wf_cookie_opts) {
       .path = "/",
       .httponly = true,
+      .max_age_sec = hreq->sesssion_cookie_max_age_sec,
       .extra = hreq->session_cookie_params ? hreq->session_cookie_params : "; samesite=lax"
     });
   }
@@ -1259,10 +1260,10 @@ iwrc iwn_wf_cookie_add(
 
   RCA(xstr = iwxstr_new(), finish);
   RCC(rc, finish, iwxstr_printf(xstr, "%s=\"%s\"", name, value));
-  if (opts.validity_sec < 0) {
-    RCC(rc, finish, iwxstr_cat2(xstr, "; expires=Thu, 01 Jan 1970 00:00:00 GMT"));
-  } else if (opts.validity_sec > 0) {
-    RCC(rc, finish, iwxstr_printf(xstr, "; expires=%d", opts.validity_sec));
+  if (opts.max_age_sec < 0) {
+    RCC(rc, finish, iwxstr_cat(xstr, "; max-age=0", IW_LLEN("; max-age=0")));
+  } else if (opts.max_age_sec > 0) {
+    RCC(rc, finish, iwxstr_printf(xstr, "; max-age=%d", opts.max_age_sec));
   }
   if (opts.path) {
     RCC(rc, finish, iwxstr_printf(xstr, "; path=\"%s\"", opts.path));
@@ -1271,10 +1272,10 @@ iwrc iwn_wf_cookie_add(
     RCC(rc, finish, iwxstr_printf(xstr, "; domain=\"%s\"", opts.domain));
   }
   if (opts.httponly) {
-    RCC(rc, finish, iwxstr_cat(xstr, "; HttpOnly", IW_LLEN("; HttpOnly")));
+    RCC(rc, finish, iwxstr_cat(xstr, "; httponly", IW_LLEN("; httponly")));
   }
   if (opts.secure || iwn_http_request_is_secure(req->http)) {
-    RCC(rc, finish, iwxstr_cat(xstr, "; Secure", IW_LLEN("; Secure")));
+    RCC(rc, finish, iwxstr_cat(xstr, "; secure", IW_LLEN("; secure")));
   }
   if (opts.extra) {
     RCC(rc, finish, iwxstr_cat2(xstr, opts.extra));
