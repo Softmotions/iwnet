@@ -18,6 +18,7 @@ struct iwn_http_server {
 
 struct iwn_http_req {
   void       *user_data;                            ///< Request specific user data.
+  uint64_t    user_flags;
   void       *server_user_data;                     ///< User data specified in `iwn_http_server_spec`
   const char *session_cookie_params;                ///< Optional params used to store session cookie. Default: lax
   void (*on_request_dispose)(struct iwn_http_req*); ///< Request dispose handler.
