@@ -913,9 +913,17 @@ static bool _request_routes_process(struct request *req) {
   }
   int rv = 0;
   bool ok = true;
+  struct route *pr = 0;
 
   for (struct route *r = _route_iter_current(&req->it); r; r = _route_iter_next(&req->it)) {
     if (r->base.handler) {
+      if (IW_UNLIKELY(pr)) {
+        if (r->parent == pr) {
+          continue;
+        } else {
+          pr = 0;
+        }
+      }
       rv = r->base.handler(&req->base, r->base.user_data);
       if (rv > 0) {
         if (rv > 1) {
@@ -923,9 +931,9 @@ static bool _request_routes_process(struct request *req) {
         }
         break;
       } else if (rv < 0) {
-        if (rv == -2) {
-          rv = 0; // Stop further processing of routes
-          break;
+        if (rv == -2) { // Stop further processing of child routes
+          pr = r;
+          continue;
         } else {
           return false;
         }
