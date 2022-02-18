@@ -29,6 +29,7 @@ struct ctx {
   struct iwn_http_req *hreq;
   struct iwn_ws_handler_spec *spec;
   struct msg *msgs;
+  void (*on_request_dispose)(struct iwn_http_req*);
   wslay_event_context_ptr wc;
   pthread_mutex_t mtx;
 };
@@ -57,7 +58,11 @@ static void _route_handler_dispose(struct iwn_wf_ctx *ctx, void *user_data) {
 
 static void _on_request_dispose(struct iwn_http_req *hreq) {
   struct ctx *ctx = iwn_http_request_ws_data(hreq);
+  void (*on_request_dispose)(struct iwn_http_req*) = ctx->on_request_dispose;
   _ctx_destroy(ctx);
+  if (on_request_dispose) {
+    on_request_dispose(hreq);
+  }
 }
 
 static ssize_t _wslay_recv_callback(
@@ -297,6 +302,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
   pthread_mutex_init(&ctx->mtx, 0);
 
   iwn_http_request_ws_set(hreq, ctx);
+  ctx->on_request_dispose = hreq->on_request_dispose;
   hreq->on_request_dispose = _on_request_dispose;
   hreq->on_response_completed = _on_response_completed;
 
