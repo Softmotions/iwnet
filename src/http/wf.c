@@ -1068,6 +1068,15 @@ IW_INLINE bool _request_sid_exists(struct request *req) {
   return req->sid[0] != 0;
 }
 
+const char* iwn_wf_session_id(struct iwn_wf_req *req_) {
+  struct request *req = (void*) req_;
+  if (_request_sid_exists(req)) {
+    return req->sid;
+  } else {
+    return 0;
+  }
+}
+
 static iwrc _request_sid_ensure(struct request *req) {
   if (_request_sid_exists(req)) {
     return 0;
