@@ -1192,6 +1192,45 @@ iwrc iwn_wf_session_put(struct iwn_wf_req *req_, const char *key, const char *da
   return ctx->sst.put(&ctx->sst, req->sid, key, data);
 }
 
+iwrc iwn_wf_session_printf_va(struct iwn_wf_req *req, const char *key, const char *fmt, va_list va) {
+  iwrc rc = 0;
+  char buf[1024];
+  char *wp = buf;
+
+  va_list cva;
+  va_copy(cva, va);
+
+  int size = vsnprintf(wp, sizeof(buf), fmt, va);
+  if (size < 0) {
+    return IW_ERROR_FAIL;
+  }
+  if (size >= sizeof(buf)) {
+    RCA(wp = malloc(size + 1), finish);
+    size = vsnprintf(wp, size + 1, fmt, cva);
+    if (size < 0) {
+      rc = IW_ERROR_FAIL;
+      goto finish;
+    }
+  }
+
+  rc = iwn_wf_session_put(req, key, wp);
+
+finish:
+  va_end(cva);
+  if (wp != buf) {
+    free(wp);
+  }
+  return rc;
+}
+
+iwrc iwn_wf_session_printf(struct iwn_wf_req *req, const char *key, const char *fmt, ...) {
+  va_list va;
+  va_start(va, fmt);
+  iwrc rc = iwn_wf_session_printf_va(req, key, fmt, va);
+  va_end(va);
+  return rc;
+}
+
 void iwn_wf_session_del(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;

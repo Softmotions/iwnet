@@ -375,8 +375,7 @@ bool iwn_ws_server_printf_va(struct iwn_ws_sess *sess, const char *fmt, va_list 
 
   int size = vsnprintf(wp, sizeof(buf), fmt, va);
   if (size < 0) {
-    rc = IW_ERROR_FAIL;
-    goto finish;
+    return IW_ERROR_FAIL;
   }
   if (size >= sizeof(buf)) {
     RCA(wp = malloc(size + 1), finish);

@@ -163,6 +163,11 @@ IW_EXPORT IW_ALLOC char* iwn_wf_session_get(struct iwn_wf_req*, const char *key)
 
 IW_EXPORT iwrc iwn_wf_session_put(struct iwn_wf_req*, const char *key, const char *data);
 
+IW_EXPORT iwrc iwn_wf_session_printf(struct iwn_wf_req*, const char *key, const char *fmt, ...)
+__attribute__((format(__printf__, 3, 4)));
+
+IW_EXPORT iwrc iwn_wf_session_printf_va(struct iwn_wf_req*, const char *key, const char *fmt, va_list va);
+
 IW_EXPORT void iwn_wf_session_del(struct iwn_wf_req*, const char *key);
 
 IW_EXPORT void iwn_wf_session_clear(struct iwn_wf_req*);
