@@ -87,10 +87,12 @@ run() {
 
   printf "\n\nFile get:\n"
   curl -sk ${BASE}/file/test.dat -o r1.dat | ${FILTER}
-  
   if ! cmp -s ./test.dat ./r1.dat; then
     echo "./test.dat and ./r1.dat differs"
   fi
+
+  printf "\n\nFile get HEAD:\n"
+  curl -sk -I ${BASE}/file/test.dat | ${FILTER}
 
   echo -n "ae0150d3-c811-4313-b5d5-89fcfc29f8c6" > chunks.txt
 

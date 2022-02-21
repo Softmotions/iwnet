@@ -69,6 +69,15 @@ content-length: 36
 File get:
 
 
+File get HEAD:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 15165824
+content-type: application/octet-stream
+accept-ranges: bytes
+
+
+
 Range1:
 HTTP/1.1 206 Partial Content
 connection: keep-alive

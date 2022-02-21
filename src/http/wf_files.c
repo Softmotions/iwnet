@@ -287,7 +287,12 @@ static iwrc _file_serve_ranges_multiple(struct ctx *ctx) {
   iwn_http_connection_set_keep_alive(ctx->req->http, false);
   RCC(rc, finish, iwn_http_response_header_printf(
         ctx->req->http, "content-type", "multipart/byteranges; boundary=\"%s\"", ctx->boundary));
-  rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_ranges_multiple_part);
+
+  if (IW_UNLIKELY(ctx->req->flags & IWN_WF_HEAD)) {
+    iwn_http_response_write(ctx->req->http, 206, "", 0, 0);
+  } else {
+    rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_ranges_multiple_part);
+  }
 
 finish:
   return rc;
@@ -324,7 +329,11 @@ static iwrc _file_serve_range_single(struct ctx *ctx) {
         ctx->req->http, "content-range",
         "bytes %" PRId64 "-%" PRId64 "/%" PRIu64, start, end, ctx->fs.size));
 
-  rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_range_single_cb);
+  if (IW_UNLIKELY(ctx->req->flags & IWN_WF_HEAD)) {
+    iwn_http_response_write(ctx->req->http, 206, "", 0, 0);
+  } else {
+    rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_range_single_cb);
+  }
 
 finish:
   return rc;
@@ -334,8 +343,8 @@ static bool _file_serve_norange_cb(struct iwn_http_req *req, bool *again) {
   struct ctx *ctx = req->user_data;
   size_t len = fread(ctx->buf, 1, sizeof(ctx->buf), ctx->file);
   iwn_http_response_stream_write(req, ctx->buf, len, 0,
-                                       len != sizeof(ctx->buf) ? 0 : _file_serve_norange_cb,
-                                       again);
+                                 len != sizeof(ctx->buf) ? 0 : _file_serve_norange_cb,
+                                 again);
   return true;
 }
 
@@ -343,7 +352,12 @@ static iwrc _file_serve_norange(struct ctx *ctx) {
   iwrc rc = 0;
   RCC(rc, finish, iwn_http_response_header_set(ctx->req->http, "content-type", ctx->ctype, -1));
   RCC(rc, finish, iwn_http_response_header_i64_set(ctx->req->http, "content-length", ctx->fs.size));
-  rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_norange_cb);
+
+  if (IW_UNLIKELY(ctx->req->flags & IWN_WF_HEAD)) {
+    iwn_http_response_write(ctx->req->http, 200, "", 0, 0);
+  } else {
+    rc = iwn_http_response_stream_start(ctx->req->http, _file_serve_norange_cb);
+  }
 
 finish:
   return rc;

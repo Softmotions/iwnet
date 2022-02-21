@@ -256,7 +256,7 @@ int main(int argc, char *argv[]) {
     .ctx = ctx,
     .pattern = "/file",
     .handler = _handle_file_get,
-    .flags = IWN_WF_MATCH_PREFIX,
+    .flags = IWN_WF_MATCH_PREFIX | IWN_WF_GET | IWN_WF_HEAD,
   }, 0));
 
   // Start the server:
