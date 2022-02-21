@@ -573,6 +573,7 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
   struct request *req = it->req;
   struct iwn_wf_req *wreq = &req->base;
   const char *path_unmatched = wreq->path_unmatched - it->prev_sibling_mlen;
+  wreq->path_matched = path_unmatched;
 
   if (!r) {
     wreq->path_unmatched = path_unmatched;
@@ -637,6 +638,7 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
 static void _route_iter_init(struct request *req, struct route_iter *it) {
   it->req = req;
   req->base.path_unmatched = req->base.path;
+  req->base.path_matched = req->base.path;
   struct ctx *ctx = (void*) it->req->base.ctx;
   memset(it->stack, 0, sizeof(it->stack));
   memset(it->mlen, 0, sizeof(it->mlen));

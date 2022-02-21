@@ -79,6 +79,7 @@ struct iwn_wf_req {
   struct iwn_http_req *http;
   const char *path;           ///< Full request path except query string
   const char *path_unmatched; ///< Rest of path not consumed by previous router matcher.
+  const char *path_matched;   ///< Start position of last match section of the path
   const char *body;
   size_t      body_len;
   struct route_re_submatch *first;
