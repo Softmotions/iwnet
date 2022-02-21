@@ -2,16 +2,19 @@ cmake_minimum_required(VERSION 3.12)
 project(tools LANGUAGES C)
 
 set(_TARGETS)
-set(_TOOLS_LIST strliteral)
+set(_TOOLS_LIST strliteral mimegen)
 
 if(CMAKE_CROSSCOMPILING)
   file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools)
   file(TO_NATIVE_PATH ${CMAKE_COMMAND} native_cmake_command)
-  file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR} native_cmake_current_source_dir)
-  
+  file(TO_NATIVE_PATH ${CMAKE_CURRENT_SOURCE_DIR}
+       native_cmake_current_source_dir)
+
   execute_process(
     COMMAND_ECHO STDOUT
-    COMMAND sh -c "CC= ${native_cmake_command} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} ${native_cmake_current_source_dir}"
+    COMMAND
+      sh -c
+      "CC= ${native_cmake_command} -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} ${native_cmake_current_source_dir}"
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools)
 
   add_custom_target(
@@ -30,7 +33,7 @@ else(!CMAKE_CROSSCOMPILING)
 endif(CMAKE_CROSSCOMPILING)
 
 add_executable(strliteral strliteral.c)
-# add_executable(mimegen mimegen.c)
+add_executable(mimegen mimegen.c)
 
 if(NOT CMAKE_CROSSCOMPILING)
   foreach(tgt IN ITEMS ${_TOOLS_LIST})

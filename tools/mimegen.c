@@ -2,10 +2,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <ctype.h>
 
+struct node {
+  char *name;
+  struct node *ext;
+  struct node *next;
+} *nodes;
 
 static void on_line(const char *line) {
-
+  char *sp = line;
+  if (*sp == '#' || isspace(*sp)) {
+    return;
+  }
+  while (*sp && isspace(*sp)) ++sp;
 }
 
 static void code_write(FILE *f) {
