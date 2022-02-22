@@ -124,5 +124,5 @@ finish:
   IWN_ASSERT(state & S_SESSION_INIT);
   IWN_ASSERT(state & S_SESSION_DISPOSE);
   iwn_poller_destroy(&poller);
-  return iwn_assertions_failed > 0 ?: 0;
+  return iwn_assertions_failed > 0 ? EXIT_FAILURE: EXIT_SUCCESS;
 }

@@ -136,7 +136,7 @@ static size_t _bitstring_write(struct asn1_node *n, void *out_buf) {
   uint8_t *bsp = wp;
   wp++;
   while (bits_left) {
-    int i, bits = 8;
+    int bits = 8;
     *wp = 0;
     if (bits_left < 8) {
       bits = bits_left;
@@ -155,7 +155,6 @@ static size_t _bitstring_write(struct asn1_node *n, void *out_buf) {
 }
 
 static size_t _string_write(struct asn1_node *n, void *out_buf) {
-  uint8_t *sp = out_buf;
   if (!out_buf) {
     return _node_header_write(n, n->vlen, 0) + n->vlen;
   }
@@ -307,7 +306,7 @@ struct asn1_node *asn1_oid_add(struct asn1 *asn1, const char *oid, struct asn1_n
 }
 
 static size_t _container_write(struct asn1_node *n, void *out_buf) {
-  size_t sz = 0, sz2 = 0, ret;
+  size_t sz = 0, ret;
   uint8_t *wp = out_buf;
   for (struct asn1_node *nn = n->child; nn; nn = nn->next) {
     sz += ZRET(0, nn->write(nn, 0));
