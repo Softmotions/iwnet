@@ -34,7 +34,8 @@ set(CMAKE_C_FLAGS
                   -Wno-unknown-pragmas \
                   -Wno-unused-function \
                   -Wno-unused-parameter \
-                  -std=gnu11")
+                  -std=gnu11 \
+                  -fPIC")
 
 if(NOT WIN32) # todo review
   # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
