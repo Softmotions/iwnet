@@ -4,6 +4,13 @@ project(tools LANGUAGES C)
 set(_TARGETS)
 set(_TOOLS_LIST strliteral mimegen)
 
+file(
+  COPY .
+  DESTINATION ${CMAKE_CURRENT_BINARY_DIR}
+  FILES_MATCHING
+  PATTERN "*.types"
+  PATTERN "*.sh")
+
 if(CMAKE_CROSSCOMPILING)
   file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/host_tools)
   file(TO_NATIVE_PATH ${CMAKE_COMMAND} native_cmake_command)
@@ -46,6 +53,7 @@ if(NOT CMAKE_CROSSCOMPILING)
 endif()
 
 list(APPEND _TARGETS "${CMAKE_BINARY_DIR}/include/data_cacert.inc")
+list(APPEND _TARGETS "${CMAKE_BINARY_DIR}/include/generated_mimegen.h")
 
 add_custom_command(
   OUTPUT "${CMAKE_BINARY_DIR}/include/data_cacert.inc"
@@ -57,5 +65,15 @@ add_custom_command(
     $<TARGET_FILE:hoststrliteral> -i "data_cacert"
     ${CMAKE_SOURCE_DIR}/tools/cacert.pem >
     "${CMAKE_BINARY_DIR}/include/data_cacert.inc")
+
+ 
+add_custom_command(
+  OUTPUT "${CMAKE_BINARY_DIR}/include/generated_mimegen.h"
+  DEPENDS hostmimegen
+  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  USES_TERMINAL
+  COMMAND cmake -E make_directory ${CMAKE_BINARY_DIR}/include
+  COMMAND $<TARGET_FILE:hostmimegen> "./mime.types" > "${CMAKE_BINARY_DIR}/include/generated_mimegen.h"
+)
 
 add_custom_target(generated DEPENDS ${_TARGETS})

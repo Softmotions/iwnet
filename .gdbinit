@@ -1,6 +1,6 @@
-cd ./build/src/http/tests
-file ./server1
-#set args --ssl
+cd ./build/tools
+file ./mimegen
+set args ./test-mime.types
 
 set confirm off
 set follow-fork-mode parent

@@ -5,15 +5,16 @@
 #include <ctype.h>
 #include <stdint.h>
 
-#define NSIZE 255
+#define NSIZE 1024
+#define STR(x_) #x_
+#define Q(x_)   STR(x_)
 
 struct node {
   char *name;
   struct node *ctype;
   struct node *nnext;
   struct node *hnext;
-  int h;
-} *enodes[NSIZE], *nnode, *enode;
+} *enodes[NSIZE], *nnode;
 
 static inline uint32_t _h(const char *str) {
   unsigned char c;
@@ -39,9 +40,8 @@ static void _line(char *sp) {
 
   struct node *n = malloc(sizeof(*n));
   n->name = strndup(sp, p1 - sp);
-  n->h = 0;
-  n->ctype = 0;
   n->hnext = 0;
+  n->ctype = 0;
 
   p1 = p2;
 
@@ -50,44 +50,48 @@ static void _line(char *sp) {
     if (p2 > p1) {
       struct node *e = malloc(sizeof(*e));
       e->name = strndup(p1, p2 - p1);
+      uint32_t b = _h(e->name) % NSIZE;
       e->ctype = n;
-      e->h = _h(e->name);
-      e->hnext = enodes[e->h % NSIZE];
-      enodes[e->h % NSIZE] = n;
-      if (enode) {
-        e->nnext = enode;
+
+      if (!enodes[b]) {
+        enodes[b] = e;
       } else {
-        enode = e;
-        e->nnext = 0;
+        for (struct node *ee = enodes[b]; ee; ee = ee->hnext) {
+          if (strcmp(ee->name, e->name) == 0) {
+            break;
+          }
+          if (ee->hnext == 0) {
+            ee->hnext = e;
+            break;
+          }
+        }
       }
+    } else {
+      break;
     }
+    while (*p2 == ' ' || *p2 == '\t' || *p2 == '\n' || *p2 == '\r') ++p2;
     p1 = p2;
   }
 
-  if (nnode) {
-    n->nnext = nnode;
-  } else {
-    nnode = n;
-    n->nnext = 0;
-  }
-}
-
-const char* _mime(const char *m) {
-  int h = _h(m);
-  switch (h) {
-    case 112:
-    case 223:
-      return "zzz";
-    case 222:
-      return "aaa";
-  }
-  return 0;
+  n->nnext = nnode;
+  nnode = n;
 }
 
 static void _code(FILE *f) {
-  const char *inc = "#include <stdint.h>\n\n";
-  const char *hf
-    = "static inline uint32_t _h(const char *str) {\n"
+  char fbuf[1024];
+
+  #define WF(f_, ...) \
+  do { \
+    int n = snprintf(fbuf, sizeof(fbuf), f_, __VA_ARGS__); \
+    fwrite(fbuf, n, 1, f); \
+  } while (0)
+
+  #define WW(f_) fwrite(f_, sizeof(f_) - 1, 1, f)
+
+  WW("#include <string.h>\n");
+  WW("#include <stdint.h>\n\n");
+  const char hf[]
+    = "static inline uint32_t _hash(const char *str) {\n"
       "  unsigned char c;\n"
       "  uint32_t hash = 5381;\n"
       "  while ((c = *str++)) {\n"
@@ -95,16 +99,43 @@ static void _code(FILE *f) {
       "  }\n"
       "  return hash;\n"
       "}\n";
-  fwrite(inc, sizeof(inc) - 1, 1, f);
-  fwrite(hf, sizeof(hf) - 1, 1, f);
+  WW(hf);
+  WW("static const char* _mimetype_find(const char *ext) {\n");
+  WW("  uint32_t b = _hash(ext) % " Q(NSIZE) ";\n");
+  WW("  switch(b) {\n");
+
+  for (int i = 0; i < NSIZE; ++i) {
+    if (!enodes[i]) {
+      continue;
+    }
+    {
+      WF("    case %d:\n", i);
+    }
+    struct node *e = enodes[i];
+    while (e) {
+      WF("      if (strcmp(ext, \"%s\") == 0) return \"%s\";\n", e->name, e->ctype->name);
+      e = e->hnext;
+    }
+    {
+      WW("      break;\n");
+    }
+  }
+
+  WW("  }\n");
+  WW("  return 0;\n");
+  WW("}\n\n");
+
+  #undef W
+  #undef WF
 }
 
 int main(int argc, char *argv[]) {
-  const char *path = argc ? argv[0] : "/etc/mime.types";
+  const char *path = argc > 1 ? argv[1] : "/etc/mime.types";
   char buf[4096];
   FILE *f = fopen(path, "r");
   if (!f) {
     fprintf(stderr, "Error reading file %s\n", path);
+    return EXIT_FAILURE;
   }
   char *l;
   while ((l = fgets(buf, sizeof(buf), f))) {
