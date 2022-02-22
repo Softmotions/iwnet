@@ -16,13 +16,10 @@ check_include_file("netinet/in.h" HAVE_NETINET_IN_H)
 check_include_file("winsock2.h" HAVE_WINSOCK2_H)
 test_big_endian(WORDS_BIGENDIAN)
 
-add_definitions(-D_GNU_SOURCE)
-add_definitions(-D_LARGEFILE_SOURCE)
-add_definitions(-D_FILE_OFFSET_BITS=64)
+add_definitions(-D_GNU_SOURCE) 
 add_definitions(-DHAVE_CONFIG_H)
 
 find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
-find_package(CURL REQUIRED)
 find_package(Iowow REQUIRED)
 
 set(CMAKE_C_FLAGS
@@ -33,21 +30,14 @@ set(CMAKE_C_FLAGS
                   -Wno-implicit-fallthrough \
                   -Wno-missing-braces \
                   -Wno-missing-field-initializers \
-                  -Wno-shorten-64-to-32 \
                   -Wno-sign-compare \
                   -Wno-unknown-pragmas \
                   -Wno-unused-function \
                   -Wno-unused-parameter \
-                  -fPIC \
-                  -fsigned-char \
                   -std=gnu11")
 
-if(APPLE)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-shorten-64-to-32")
-endif()
-
 if(NOT WIN32) # todo review
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+  # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 else()
   add_definitions(-D__USE_MINGW_ANSI_STDIO)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-pedantic-ms-format")
@@ -76,16 +66,16 @@ set(PROJECT_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
                ${PROJECT_GENERATED_DIR}/config.h @ONLY)
 
-set(MODULES bearssl wslay utils poller ssl ws http)
+set(MODULES
+    bearssl
+    wslay
+    utils
+    poller
+    ssl
+    ws
+    http)
 
-list(
-  APPEND
-  PROJECT_LIBRARIES
-  ${IOWOW_LIBRARIES}
-  CURL::libcurl
-  Threads::Threads
-  dl
-  m)
+list(APPEND PROJECT_LIBRARIES ${IOWOW_LIBRARIES} Threads::Threads dl m)
 
 list(
   APPEND
@@ -120,6 +110,7 @@ list(
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/codec.h
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/pairs.h
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/utils.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/url.h
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/xcurl.h
   ${CMAKE_CURRENT_SOURCE_DIR}/ssl/brssl_poller_adapter.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller.h
@@ -261,7 +252,7 @@ message("CMAKE_GENERATOR: ${CMAKE_GENERATOR}")
 message("${PROJECT_NAME} LINK LIBS: ${PROJECT_LIBRARIES}")
 message("${PROJECT_NAME} ASAN: ${ASAN}")
 message("\n${PROJECT_NAME} INCLUDE DIRS: ${PROJECT_INCLUDE_DIRS}")
-#message("\n${PROJECT_NAME} SOURCES: ${ALL_SRC}")
+# message("\n${PROJECT_NAME} SOURCES: ${ALL_SRC}")
 message("\n${PROJECT_NAME} PUB_HDRS: ${PUB_HDRS}")
 message("\n${PROJECT_NAME} CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 message("${PROJECT_NAME} BUILD_TESTS: ${BUILD_TESTS}")

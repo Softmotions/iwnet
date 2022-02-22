@@ -5,6 +5,7 @@
 #include "bearssl/bearssl_hash.h"
 #include "ssl/brssl_poller_adapter.h"
 #include "utils/base64.h"
+#include "utils/url.h"
 #include "wslay/wslay.h"
 
 #include <iowow/iwlog.h>
@@ -12,7 +13,6 @@
 #include <iowow/iwutils.h>
 
 #include <pthread.h>
-#include <curl/urlapi.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
@@ -34,15 +34,15 @@ struct iwn_ws_client {
   struct iwn_ws_client_ctx   ctx;
   struct iwn_ws_client_spec  spec;
   struct iwn_poller_adapter *pa;
-  CURLU *url;
-  char  *host;
-  char  *port;
-  char  *path;
-  char  *query;
+  char *host;
+  char *path;
+  char *query;
+  char *urlbuf;
   wslay_event_context_ptr wc;
   IWXSTR *output;
   IWXSTR *input;
   pthread_mutex_t mtx;
+  int     port;
   int     fd;
   uint8_t state;
   bool    secure;
@@ -76,11 +76,8 @@ static void _destroy(struct iwn_ws_client *ws) {
   if (ws->fd > -1) {
     close(ws->fd);
   }
-  curl_free(ws->host);
-  curl_free(ws->port);
-  curl_free(ws->path);
-  curl_free(ws->query);
-  curl_url_cleanup(ws->url);
+  free(ws->path);
+  free(ws->urlbuf);
   wslay_event_context_free(ws->wc);
   iwxstr_destroy(ws->output);
   iwxstr_destroy(ws->input);
@@ -88,9 +85,15 @@ static void _destroy(struct iwn_ws_client *ws) {
   free(ws);
 }
 
-static iwrc _connect(const char *host, const char *port, int *out_fd) {
-  assert(host && port && out_fd);
+static iwrc _connect(const char *host, int port_, int *out_fd) {
+  assert(host && out_fd);
+
   *out_fd = 0;
+
+  char nbuf[64];
+  snprintf(nbuf, sizeof(nbuf), "%d", port_);
+  char *port = nbuf;
+
   iwrc rc = 0;
   int fd = -1, rci;
   struct addrinfo *si, *p, hints = {
@@ -206,7 +209,7 @@ static iwrc _handshake_output_fill(struct iwn_ws_client *ws) {
   RCR(iwxstr_printf(
         ws->output,
         "GET %s%s%s HTTP/1.1\r\n"
-        "Host: %s:%s\r\n"
+        "Host: %s:%d\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
         "Sec-Websocket-Key: %s\r\n"
@@ -495,35 +498,35 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
 
   RCB(finish, ws->output = iwxstr_new());
   RCB(finish, ws->input = iwxstr_new());
+  RCB(finish, ws->urlbuf = strdup(spec->url));
 
-  // Parse connection url
-  RCB(finish, ws->url = curl_url());
-  if (curl_url_set(ws->url, CURLUPART_URL, spec->url, CURLU_NON_SUPPORT_SCHEME)) {
-    rc = WS_ERROR_INVALID_URL;
-    goto finish;
-  }
-  if (curl_url_get(ws->url, CURLUPART_HOST, &ws->host, 0)) {
+  struct iwn_url u;
+  if (iwn_url_parse(&u, ws->urlbuf) == -1) {
+    iwlog_error("Failed to parse url: %s", ws->urlbuf);
     rc = IW_ERROR_FAIL;
     goto finish;
   }
-  curl_url_get(ws->url, CURLUPART_PATH, &ws->path, 0);
+  ws->host = u.host;
+  ws->path = u.path;
+  ws->port = u.port;
+  ws->query = u.query;
+  
   if (!ws->path) {
     RCB(finish, ws->path = strdup("/"));
+  } else {
+    RCB(finish, ws->path = malloc(strlen(u.path) + 2));
+    ws->path[0] = '/';
+    memcpy(ws->path + 1, u.path, strlen(u.path) + 1);
   }
-  curl_url_get(ws->url, CURLUPART_QUERY, &ws->query, 0);
 
-  ptr = 0;
-  curl_url_get(ws->url, CURLUPART_SCHEME, &ptr, 0);
+  ptr = u.scheme;
   if (ptr) {
     if (strcmp("wss", ptr) == 0) {
       ws->secure = true;
     }
-    curl_free(ptr);
   }
-
-  curl_url_get(ws->url, CURLUPART_PORT, &ws->port, 0);
-  if (!ws->port) {
-    RCB(finish, ws->port = strdup(ws->secure ? "443" : "80"));
+  if (ws->port < 1) {
+    ws->port = ws->secure ? 443 : 80;
   }
 
   // Now do the initial handshake

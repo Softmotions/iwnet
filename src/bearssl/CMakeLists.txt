@@ -1,3 +1,6 @@
+
+add_definitions(-U_GNU_SOURCE)
+
 file(GLOB BRSSL_SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.c)
 file(GLOB BRSSL_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/br*.h
      ${CMAKE_CURRENT_SOURCE_DIR}/bear*.h)
@@ -124,7 +127,6 @@ list(
   ${CMAKE_CURRENT_SOURCE_DIR}/codec/pemenc.c
   ${CMAKE_CURRENT_SOURCE_DIR}/kdf/hkdf.c
   ${CMAKE_CURRENT_SOURCE_DIR}/kdf/shake.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/inner.h
   ${CMAKE_CURRENT_SOURCE_DIR}/rand/hmac_drbg.c
   ${CMAKE_CURRENT_SOURCE_DIR}/rand/sysrng.c
   ${CMAKE_CURRENT_SOURCE_DIR}/rand/aesctr_drbg.c
@@ -312,7 +314,21 @@ list(
   ${CMAKE_CURRENT_SOURCE_DIR}/bre/bre_asn1.c
   ${CMAKE_CURRENT_SOURCE_DIR}/bre/bre_pool.c
   ${CMAKE_CURRENT_SOURCE_DIR}/bre/bre_utils.c
-  ${CMAKE_CURRENT_SOURCE_DIR}/bre/bre_base64.c)
+  ${CMAKE_CURRENT_SOURCE_DIR}/bre/bre_base64.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/certs.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/chain.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/errors.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/files.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/impl.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/keys.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/names.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/skey.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/sslio.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/ta.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/twrch.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/vector.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify.c
+  ${CMAKE_CURRENT_SOURCE_DIR}/tools/xmem.c)
 
 set(ALL_SRC
     ${ALL_SRC} ${BRSSL_SRC}

@@ -1,6 +1,6 @@
-cd ./build/tools
-file ./mimegen
-set args ./test-mime.types
+cd ./build/src/ws/tests
+file ./ws_client_test1
+#set args ./test-mime.types
 
 set confirm off
 set follow-fork-mode parent
