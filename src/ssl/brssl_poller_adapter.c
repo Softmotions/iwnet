@@ -1,9 +1,9 @@
 #include "iwnet.h"
 #include "brssl_poller_adapter.h"
 
+#include "bearssl/brssl.h"
 #include <iowow/iwlog.h>
 
-#include <brssl.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>

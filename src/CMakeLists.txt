@@ -5,93 +5,25 @@ if(NOT CMAKE_BUILD_TYPE)
   )
 endif()
 
-find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
-find_package(CURL REQUIRED)
-find_package(Wslay REQUIRED)
-find_package(BearSSL REQUIRED)
-find_package(Iowow REQUIRED)
-
-if(OWNER_PROJECT_NAME)
-  set(IW_PUBLIC_HEADER_DESTINATION
-      ${CMAKE_INSTALL_INCLUDEDIR}/${OWNER_PROJECT_NAME}/${PROJECT_NAME})
-else()
-  set(IW_PUBLIC_HEADER_DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
-endif()
-
-set(MODULES utils poller ssl ws http)
-
-list(
-  APPEND
-  PROJECT_LIBRARIES
-  ${WSLAY_LIBRARIES}
-  ${BEARSSL_LIBRARIES}
-  ${IOWOW_LIBRARIES}
-  CURL::libcurl
-  Threads::Threads
-  dl
-  m)
-
-set(PROJECT_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
-list(
-  APPEND
-  PROJECT_INCLUDE_DIRS
-  ${PROJECT_GENERATED_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_BINARY_DIR}/include
-  ${WSLAY_INCLUDE_DIRS}
-  ${BEARSSL_INCLUDE_DIRS}
-  ${IOWOW_INCLUDE_DIRS})
-
-if(CMAKE_SIZEOF_VOID_P MATCHES 8)
-  add_definitions(-DIW_64)
-else()
-  add_definitions(-DIW_32)
-endif()
 if((CMAKE_BUILD_TYPE EQUAL Release) OR (CMAKE_BUILD_TYPE EQUAL RelWithDebInfo))
   add_definition(-DIW_RELEASE)
 endif()
+
+include(CheckIncludeFile)
+include(TestBigEndian)
+check_include_file("arpa/inet.h" HAVE_ARPA_INET_H)
+check_include_file("netinet/in.h" HAVE_NETINET_IN_H)
+check_include_file("winsock2.h" HAVE_WINSOCK2_H)
+test_big_endian(WORDS_BIGENDIAN)
+
 add_definitions(-D_GNU_SOURCE)
 add_definitions(-D_LARGEFILE_SOURCE)
 add_definitions(-D_FILE_OFFSET_BITS=64)
-add_definitions(-DIW_PTHREADS)
+add_definitions(-DHAVE_CONFIG_H)
 
-file(GLOB ROOT_SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.c)
-list(APPEND ALL_SRC ${ROOT_SRC})
-
-foreach(MODULE IN LISTS MODULES)
-  if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/CMakeLists.txt)
-    file(GLOB MODULE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.c
-         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.cpp)
-    file(GLOB MODULE_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.h
-         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.hpp)
-    list(APPEND ALL_SRC ${MODULE_SRC})
-    list(APPEND ALL_HDRS ${MODULE_HDRS})
-    list(APPEND PROJECT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE})
-  endif()
-endforeach(MODULE)
-
-list(
-  APPEND
-  PUB_HDRS
-  ${CMAKE_CURRENT_SOURCE_DIR}/iwnet.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/base64.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/codec.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/pairs.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/utils.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/xcurl.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ssl/brssl_poller_adapter.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/proc.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/scheduler.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller_adapter.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/direct_poller_adapter.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/http_server.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_files.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_sst_inmem.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_client.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_server.h)
+find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
+find_package(CURL REQUIRED)
+find_package(Iowow REQUIRED)
 
 set(CMAKE_C_FLAGS
     "${CMAKE_C_FLAGS} \
@@ -138,6 +70,70 @@ set(CMAKE_C_FLAGS_RELEASEWITHDEBINFO ${CMAKE_C_FLAGS_RELWITHDEBINFO})
 if(CMAKE_COMPILER_IS_GNUCC)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
 endif()
+
+set(PROJECT_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
+               ${PROJECT_GENERATED_DIR}/config.h @ONLY)
+
+set(MODULES bearssl wslay utils poller ssl ws http)
+
+list(
+  APPEND
+  PROJECT_LIBRARIES
+  ${IOWOW_LIBRARIES}
+  CURL::libcurl
+  Threads::Threads
+  dl
+  m)
+
+list(
+  APPEND
+  PROJECT_INCLUDE_DIRS
+  ${PROJECT_GENERATED_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/bearssl
+  ${CMAKE_BINARY_DIR}/include
+  ${IOWOW_INCLUDE_DIRS})
+
+file(GLOB ROOT_SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.c)
+list(APPEND ALL_SRC ${ROOT_SRC})
+
+foreach(MODULE IN LISTS MODULES)
+  if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/CMakeLists.txt)
+    file(GLOB MODULE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.c
+         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.cpp)
+    file(GLOB MODULE_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.h
+         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.hpp)
+    list(APPEND ALL_SRC ${MODULE_SRC})
+    list(APPEND ALL_HDRS ${MODULE_HDRS})
+    list(APPEND PROJECT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE})
+  endif()
+endforeach(MODULE)
+
+list(
+  APPEND
+  PUB_HDRS
+  ${CMAKE_CURRENT_SOURCE_DIR}/iwnet.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/mimetypes.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/base64.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/codec.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/pairs.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/utils.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/xcurl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ssl/brssl_poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/proc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/scheduler.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/direct_poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/http_server.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_files.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_sst_inmem.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_client.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_server.h)
 
 list(REMOVE_DUPLICATES PROJECT_LIBRARIES)
 list(REMOVE_DUPLICATES PROJECT_INCLUDE_DIRS)
@@ -212,6 +208,13 @@ else()
                OUTPUT_NAME iwnet-${PROJECT_VERSION_MAJOR})
 endif()
 
+if(OWNER_PROJECT_NAME)
+  set(IW_PUBLIC_HEADER_DESTINATION
+      ${CMAKE_INSTALL_INCLUDEDIR}/${OWNER_PROJECT_NAME}/${PROJECT_NAME})
+else()
+  set(IW_PUBLIC_HEADER_DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
+endif()
+
 if(DO_INSTALL_CORE)
   include(InstallRequiredSystemLibraries)
   install(
@@ -258,7 +261,7 @@ message("CMAKE_GENERATOR: ${CMAKE_GENERATOR}")
 message("${PROJECT_NAME} LINK LIBS: ${PROJECT_LIBRARIES}")
 message("${PROJECT_NAME} ASAN: ${ASAN}")
 message("\n${PROJECT_NAME} INCLUDE DIRS: ${PROJECT_INCLUDE_DIRS}")
-message("\n${PROJECT_NAME} SOURCES: ${ALL_SRC}")
+#message("\n${PROJECT_NAME} SOURCES: ${ALL_SRC}")
 message("\n${PROJECT_NAME} PUB_HDRS: ${PUB_HDRS}")
 message("\n${PROJECT_NAME} CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
 message("${PROJECT_NAME} BUILD_TESTS: ${BUILD_TESTS}")

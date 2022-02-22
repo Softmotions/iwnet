@@ -2,14 +2,14 @@
 
 #include "poller.h"
 #include "poller/direct_poller_adapter.h"
+#include "bearssl/bearssl_hash.h"
 #include "ssl/brssl_poller_adapter.h"
 #include "utils/base64.h"
+#include "wslay/wslay.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwxstr.h>
 #include <iowow/iwutils.h>
-#include <wslay/wslay.h>
-#include <bearssl_hash.h>
 
 #include <pthread.h>
 #include <curl/urlapi.h>
