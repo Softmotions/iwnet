@@ -38,6 +38,11 @@ add_test(
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./server2-tests-run.sh)
 
+add_test(
+  NAME "server2-tests-run.sh_ssl"
+  WORKING_DIRECTORY ${TEST_DATA_DIR}
+  COMMAND sh ./server2-tests-run.sh -- --ssl)
+
 set(TESTS wf_test1)
 
 foreach(TN IN ITEMS ${TESTS})

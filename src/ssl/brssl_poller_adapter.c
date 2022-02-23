@@ -90,6 +90,7 @@ static ssize_t _write(struct iwn_poller_adapter *pa, const uint8_t *data, size_t
   struct pa *a = (void*) pa;
   br_ssl_engine_context *cc = a->eng;
   size_t tow = len;
+
   while (tow > 0 && (br_ssl_engine_current_state(cc) & BR_SSL_SENDAPP)) {
     size_t blen;
     unsigned char *buf = br_ssl_engine_sendapp_buf(cc, &blen);
@@ -119,6 +120,7 @@ IW_INLINE void _destroy(struct pa *a) {
       free_certificates(a->server.certs, a->server.certs_num);
     }
   }
+  pthread_mutex_destroy(&a->mtx);
   free(a);
 }
 
@@ -152,26 +154,41 @@ static int _read_fd(struct pa *a, unsigned char *buf, size_t len) {
 
 static inline int64_t _next_poll(br_ssl_engine_context *cc) {
   int64_t ret = 0;
-  uint32_t st = br_ssl_engine_current_state(cc);
-  if (st & BR_SSL_CLOSED) {
+  unsigned cs = br_ssl_engine_current_state(cc);
+  if (cs & BR_SSL_CLOSED) {
     return -1;
   }
-  if (st & BR_SSL_RECVREC) {
+  if (cs & BR_SSL_RECVREC) {
     ret |= IWN_POLLIN;
   }
-  if (st & BR_SSL_SENDREC) {
+  if (cs & BR_SSL_SENDREC) {
     ret |= IWN_POLLOUT;
   }
   if (ret == 0) {
     ret |= IWN_POLLIN;
   }
-  return ret | IWN_POLLET;
+  return ret;
 }
+
+static void _has_pending_write_bytes_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
+  struct pa *a = slot_user_data;
+  bool *ret = fn_user_data;
+  br_ssl_engine_context *cc = a->eng;
+  pthread_mutex_lock(&a->mtx);
+  *ret = (br_ssl_engine_current_state(cc) & BR_SSL_SENDREC) != 0;
+  pthread_mutex_unlock(&a->mtx);
+};
+
+static bool _has_pending_write_bytes(struct iwn_poller_adapter *a) {
+  bool ret;
+  iwn_poller_probe(a->poller, a->fd, _has_pending_write_bytes_probe, &ret);
+  return ret;
+};
 
 static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
   struct pa *a = t->user_data;
   br_ssl_engine_context *cc = a->eng;
-  bool done = !(flags & IWN_POLLIN);
+  bool write_done, read_done;
   bool locked = false;
   int64_t nflags;
 
@@ -183,6 +200,7 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
       goto finish;
     }
 
+    write_done = !(br_ssl_engine_current_state(cc) & BR_SSL_SENDREC);
     while (br_ssl_engine_current_state(cc) & BR_SSL_SENDREC) {
       size_t len;
       unsigned char *buf = br_ssl_engine_sendrec_buf(cc, &len);
@@ -191,7 +209,7 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
         goto finish;
       } else if (wlen < 0) {
         if (errno == EWOULDBLOCK || errno == EAGAIN) {
-          done = true;
+          write_done = true;
           break;
         } else {
           goto finish;
@@ -200,6 +218,7 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
       br_ssl_engine_sendrec_ack(cc, wlen);
     }
 
+    read_done = !(br_ssl_engine_current_state(cc) & BR_SSL_RECVREC);
     while (br_ssl_engine_current_state(cc) & BR_SSL_RECVREC) {
       size_t len;
       unsigned char *buf = br_ssl_engine_recvrec_buf(cc, &len);
@@ -208,7 +227,7 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
         goto finish;
       } else if (rlen < 0) {
         if (errno == EWOULDBLOCK || errno == EAGAIN) {
-          done = true;
+          read_done = true;
           break;
         } else {
           goto finish;
@@ -237,7 +256,7 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
 
     nflags = _next_poll(cc);
     pthread_mutex_unlock(&a->mtx), locked = false;
-  } while (!done);
+  } while (!read_done || !write_done);
 
 finish:
   if (locked) {
@@ -363,9 +382,16 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   a->b.poller = p;
   a->b.read = _read;
   a->b.write = _write;
+  a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = spec->on_event;
   a->on_dispose = spec->on_dispose;
   a->user_data = spec->user_data;
+
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&a->mtx, &attr);
+  pthread_mutexattr_destroy(&attr);
 
   if (spec->certs_in_buffer) {
     a->server.certs = read_certificates_data(spec->certs, certs_len, &a->server.certs_num);
@@ -472,9 +498,16 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
   a->b.poller = p;
   a->b.read = _read;
   a->b.write = _write;
+  a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = spec->on_event;
   a->on_dispose = spec->on_dispose;
   a->user_data = spec->user_data;
+
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&a->mtx, &attr);
+  pthread_mutexattr_destroy(&attr);
 
   const char *cacerts_data = spec->cacerts_data;
   size_t cacerts_data_len = spec->cacerts_data_len;

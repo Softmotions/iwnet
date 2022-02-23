@@ -14,6 +14,7 @@ struct iwn_poller_adapter {
   struct iwn_poller *poller;
   ssize_t (*read)(struct iwn_poller_adapter *a, uint8_t *buf, size_t len);
   ssize_t (*write)(struct iwn_poller_adapter *a, const uint8_t *buf, size_t len);
+  bool    (*has_pending_write_bytes)(struct iwn_poller_adapter *a);
   int     fd;
 };
 

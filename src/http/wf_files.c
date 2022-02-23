@@ -277,7 +277,7 @@ finish:
     iwxstr_destroy(xstr);
     return false;
   }
-  return r != 0;
+  return true;
 }
 
 static iwrc _file_serve_ranges_multiple(struct ctx *ctx) {

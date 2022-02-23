@@ -1,6 +1,6 @@
-cd ./build/src/ws/tests
-file ./ws_client_test1
-#set args ./test-mime.types
+cd ./build/src/http/tests
+file ./server2
+set args --ssl
 
 set confirm off
 set follow-fork-mode parent

@@ -553,28 +553,33 @@ finish:
   return rc;
 }
 
-static bool _client_write_bytes(struct client *client) {
+IW_INLINE bool _client_write_bytes(struct client *client) {
   struct iwn_poller_adapter *pa = client->request.poller_adapter;
   struct stream *stream = &client->stream;
-  ssize_t bytes = pa->write(pa,
-                            (uint8_t*) stream->buf + stream->bytes_total,
-                            stream->length - stream->bytes_total);
-  if (bytes > 0) {
-    stream->bytes_total += bytes;
+  if (stream->length > stream->bytes_total) {
+    ssize_t bytes = pa->write(pa,
+                              (uint8_t*) stream->buf + stream->bytes_total,
+                              stream->length - stream->bytes_total);
+    if (bytes > 0) {
+      stream->bytes_total += bytes;
+    }
+    return errno != EPIPE;
+  } else {
+    return true;
   }
-  return errno != EPIPE;
 }
 
 static void _client_write(struct client *client) {
   iwrc rc = 0;
   struct stream *stream = &client->stream;
+  struct iwn_poller_adapter *pa = client->request.poller_adapter;
 
 again:
   if (!_client_write_bytes(client)) {
     client->flags |= HTTP_END_SESSION;
     return;
   }
-  if (stream->bytes_total != stream->length) {
+  if (stream->bytes_total != stream->length || (pa->has_pending_write_bytes && pa->has_pending_write_bytes(pa))) {
     client->state = HTTP_SESSION_WRITE;
     rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
   } else if (client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE)) {
