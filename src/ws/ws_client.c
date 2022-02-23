@@ -6,6 +6,7 @@
 #include "ssl/brssl_poller_adapter.h"
 #include "utils/base64.h"
 #include "utils/url.h"
+#include "utils/utils.h"
 #include "wslay/wslay.h"
 
 #include <iowow/iwlog.h>
@@ -294,7 +295,7 @@ static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_dat
         }
         if (strstr(iwxstr_ptr(ws->input), "\r\n\r\n")) {
           ws->state |= _STATE_HANDSHAKE_RECV;
-          char *p = strcasestr(iwxstr_ptr(ws->input), "sec-websocket-accept:");
+          char *p = iwn_strcasestr(iwxstr_ptr(ws->input), "sec-websocket-accept:");
           if (!p) {
             rc = WS_ERROR_HANDSHAKE_CLIENT_KEY;
             goto finish;

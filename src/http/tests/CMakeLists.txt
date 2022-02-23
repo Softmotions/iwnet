@@ -14,27 +14,27 @@ add_executable(server2 server2.c)
 set_target_properties(server1 server2 PROPERTIES COMPILE_FLAGS
                                                  "-DIW_STATIC -DIW_TESTS")
 add_test(
-  NAME "http_server1_test"
+  NAME "server1-tests-run.sh"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./server1-tests-run.sh)
 
 add_test(
-  NAME "http_server1_valgrind_test"
+  NAME "server1-tests-run.sh_valgrind"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./server1-tests-run.sh --valgrind)
 
 add_test(
-  NAME "https_server1_test"
+  NAME "server1-tests-run.sh_ssl"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./server1-tests-run.sh -- --ssl)
 
 add_test(
-  NAME "https_server1_valgrind_test"
+  NAME "server1-tests-run.sh_valgrind_ssl"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./server1-tests-run.sh --valgrind -- --ssl)
 
 add_test(
-  NAME "https_server2_test"
+  NAME "server2-tests-run.sh"
   WORKING_DIRECTORY ${TEST_DATA_DIR}
   COMMAND sh ./server2-tests-run.sh)
 

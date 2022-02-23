@@ -16,7 +16,6 @@ check_include_file("netinet/in.h" HAVE_NETINET_IN_H)
 check_include_file("winsock2.h" HAVE_WINSOCK2_H)
 test_big_endian(WORDS_BIGENDIAN)
 
-add_definitions(-D_GNU_SOURCE) 
 add_definitions(-DHAVE_CONFIG_H)
 
 find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
