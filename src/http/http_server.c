@@ -579,11 +579,11 @@ again:
     client->flags |= HTTP_END_SESSION;
     return;
   }
-  if (stream->bytes_total != stream->length || (pa->has_pending_write_bytes && pa->has_pending_write_bytes(pa))) {
+  if (stream->bytes_total != stream->length) {
     client->state = HTTP_SESSION_WRITE;
-    if (stream->bytes_total != stream->length) {
-      rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
-    }
+    rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
+  } else if (pa->has_pending_write_bytes && pa->has_pending_write_bytes(pa)) {
+    client->state = HTTP_SESSION_WRITE;
   } else if (client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE)) {
     client->state = HTTP_SESSION_WRITE;
     _stream_free_buffer(client);
