@@ -579,10 +579,8 @@ again:
     client->flags |= HTTP_END_SESSION;
     return;
   }
-  if (stream->bytes_total != stream->length) {
-    rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
-  } else if (pa->has_pending_write_bytes && pa->has_pending_write_bytes(pa)) {
-    ; // NOOP
+  if (stream->bytes_total != stream->length || pa->has_pending_write_bytes(pa)) {
+    rc = pa->arm(pa, IWN_POLLOUT);
   } else if (client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE)) {
     _stream_free_buffer(client);
     if (client->server->spec.request_timeout_sec > 0) {

@@ -23,6 +23,7 @@ struct pa {
   void *user_data;
   br_ssl_engine_context *eng;
   pthread_mutex_t mtx;
+  pthread_key_t   ready_fd_tl;
 
   union {
     struct  {
@@ -120,6 +121,7 @@ IW_INLINE void _destroy(struct pa *a) {
       free_certificates(a->server.certs, a->server.certs_num);
     }
   }
+  pthread_key_delete(a->ready_fd_tl);
   pthread_mutex_destroy(&a->mtx);
   free(a);
 }
@@ -185,12 +187,33 @@ static bool _has_pending_write_bytes(struct iwn_poller_adapter *a) {
   return ret;
 };
 
+static void _arm_needed_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
+  struct pa *a = slot_user_data;
+  bool *ret = fn_user_data;
+  *ret = pthread_getspecific(a->ready_fd_tl) != (void*) 1;
+};
+
+static bool _arm_needed(struct iwn_poller_adapter *a) {
+  bool ret;
+  iwn_poller_probe(a->poller, a->fd, _arm_needed_probe, &ret);
+  return ret;
+};
+
+iwrc _arm(struct iwn_poller_adapter *a, uint32_t events) {
+  if (_arm_needed(a)) {
+    return iwn_poller_arm_events(a->poller, a->fd, events);
+  }
+  return 0;
+}
+
 static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
   struct pa *a = t->user_data;
   br_ssl_engine_context *cc = a->eng;
   bool write_done, read_done;
   bool locked = false;
   int64_t nflags;
+
+  pthread_setspecific(a->ready_fd_tl, (void*) 1);
 
   do {
     nflags = -1;
@@ -268,6 +291,8 @@ finish:
       iwlog_warn("brssl | error code: %d", err);
     }
   }
+
+  pthread_setspecific(a->ready_fd_tl, 0);
   return nflags;
 }
 
@@ -382,6 +407,7 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   a->b.poller = p;
   a->b.read = _read;
   a->b.write = _write;
+  a->b.arm = _arm;
   a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = spec->on_event;
   a->on_dispose = spec->on_dispose;
@@ -392,6 +418,8 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
   pthread_mutex_init(&a->mtx, &attr);
   pthread_mutexattr_destroy(&attr);
+
+  pthread_key_create(&a->ready_fd_tl, 0);
 
   if (spec->certs_in_buffer) {
     a->server.certs = read_certificates_data(spec->certs, certs_len, &a->server.certs_num);
@@ -498,6 +526,7 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
   a->b.poller = p;
   a->b.read = _read;
   a->b.write = _write;
+  a->b.arm = _arm;
   a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = spec->on_event;
   a->on_dispose = spec->on_dispose;
@@ -508,6 +537,8 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
   pthread_mutex_init(&a->mtx, &attr);
   pthread_mutexattr_destroy(&attr);
+
+  pthread_key_create(&a->ready_fd_tl, 0);
 
   const char *cacerts_data = spec->cacerts_data;
   size_t cacerts_data_len = spec->cacerts_data_len;

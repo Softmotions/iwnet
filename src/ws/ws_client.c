@@ -464,7 +464,7 @@ bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t 
     return false;
   }
   pthread_mutex_unlock(&ws->mtx);
-  return 0 == iwn_poller_arm_events(ws->pa->poller, ws->fd, IWN_POLLOUT | IWN_POLLET);
+  return 0 == ws->pa->arm(ws->pa, IWN_POLLOUT);
 }
 
 iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_client **out_ws) {
@@ -511,7 +511,7 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   ws->path = u.path;
   ws->port = u.port;
   ws->query = u.query;
-  
+
   if (!ws->path) {
     RCB(finish, ws->path = strdup("/"));
   } else {

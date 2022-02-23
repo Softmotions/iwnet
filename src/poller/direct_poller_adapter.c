@@ -13,6 +13,14 @@ struct pa {
   void *user_data;
 };
 
+static bool _has_pending_write_bytes(struct iwn_poller_adapter *a) {
+  return false;
+}
+
+static iwrc _arm(struct iwn_poller_adapter *a, uint32_t events) {
+  return iwn_poller_arm_events(a->poller, a->fd, events);
+}
+
 static ssize_t _read(struct iwn_poller_adapter *a, uint8_t *buf, size_t len) {
   return read(a->fd, buf, len);
 }
@@ -55,6 +63,8 @@ iwrc iwn_direct_poller_adapter(
   a->b.poller = p;
   a->b.read = _read;
   a->b.write = _write;
+  a->b.arm = _arm;
+  a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = on_event;
   a->on_dispose = on_dispose;
   a->user_data = user_data;

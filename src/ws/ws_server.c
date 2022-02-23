@@ -359,9 +359,7 @@ bool iwn_ws_server_write(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_
   }
   pthread_mutex_unlock(&ctx->mtx);
 
-  return 0 == iwn_poller_arm_events(ctx->hreq->poller_adapter->poller,
-                                    ctx->hreq->poller_adapter->fd,
-                                    IWN_POLLOUT | IWN_POLLET);
+  return 0 == ctx->hreq->poller_adapter->arm(ctx->hreq->poller_adapter, IWN_POLLOUT);
 }
 
 bool iwn_ws_server_printf_va(struct iwn_ws_sess *sess, const char *fmt, va_list va) {
