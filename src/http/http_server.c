@@ -580,12 +580,10 @@ again:
     return;
   }
   if (stream->bytes_total != stream->length) {
-    client->state = HTTP_SESSION_WRITE;
     rc = iwn_poller_arm_events(client->server->spec.poller, client->fd, IWN_POLLOUT);
   } else if (pa->has_pending_write_bytes && pa->has_pending_write_bytes(pa)) {
-    client->state = HTTP_SESSION_WRITE;
+    ; // NOOP
   } else if (client->flags & (HTTP_CHUNKED_RESPONSE | HTTP_STREAM_RESPONSE)) {
-    client->state = HTTP_SESSION_WRITE;
     _stream_free_buffer(client);
     if (client->server->spec.request_timeout_sec > 0) {
       iwn_poller_set_timeout(client->server->spec.poller, client->fd, client->server->spec.request_timeout_sec);
