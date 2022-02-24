@@ -1,6 +1,6 @@
 #pragma once
 
-#include "http_server.h"
+#include "iwn_http_server.h"
 
 void iwn_http_request_wf_set(
   struct iwn_http_req*, void *user_data,

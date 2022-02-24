@@ -18,8 +18,8 @@ test_big_endian(WORDS_BIGENDIAN)
 
 add_definitions(-DHAVE_CONFIG_H)
 
+include(AddIowow)
 find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
-find_package(Iowow REQUIRED)
 
 set(CMAKE_C_FLAGS
     "${CMAKE_C_FLAGS} \
@@ -105,26 +105,26 @@ list(
   APPEND
   PUB_HDRS
   ${CMAKE_CURRENT_SOURCE_DIR}/iwnet.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/mimetypes.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/base64.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/codec.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/pairs.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/utils.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/url.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/utils/xcurl.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ssl/brssl_poller_adapter.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/proc.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/scheduler.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/poller_adapter.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/poller/direct_poller_adapter.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/http_server.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_files.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/http/wf_sst_inmem.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_client.h
-  ${CMAKE_CURRENT_SOURCE_DIR}/ws/ws_server.h)
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_mimetypes.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_base64.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_codec.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_pairs.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_utils.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_url.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_curl.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ssl/iwn_brssl_poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_poller.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_proc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_scheduler.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_direct_poller_adapter.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/iwn_http_server.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/iwn_wf.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/iwn_wf_files.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/http/iwn_wf_sst_inmem.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/iwn_ws.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/iwn_ws_client.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/ws/iwn_ws_server.h)
 
 list(REMOVE_DUPLICATES PROJECT_LIBRARIES)
 list(REMOVE_DUPLICATES PROJECT_INCLUDE_DIRS)

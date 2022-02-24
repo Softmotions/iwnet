@@ -1,4 +1,4 @@
-#include "wf_files.h"
+#include "iwn_wf_files.h"
 
 #include <iowow/iwp.h>
 #include <iowow/iwlog.h>

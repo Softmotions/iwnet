@@ -1,5 +1,5 @@
-#include "utils/tests.h"
-#include "poller.h"
+#include "iwn_tests.h"
+#include "iwn_poller.h"
 
 #include <unistd.h>
 #include <errno.h>

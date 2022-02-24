@@ -1,5 +1,5 @@
-#include "utils/tests.h"
-#include "ws_server.h"
+#include "iwn_tests.h"
+#include "iwn_ws_server.h"
 
 #include <iowow/iwconv.h>
 

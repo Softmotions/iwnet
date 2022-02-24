@@ -1,12 +1,13 @@
-#include "ws_client.h"
+#include "iwn_ws_client.h"
 
-#include "poller.h"
-#include "poller/direct_poller_adapter.h"
+#include "iwn_poller.h"
+#include "poller/iwn_direct_poller_adapter.h"
+#include "ssl/iwn_brssl_poller_adapter.h"
+#include "iwn_base64.h"
+#include "iwn_url.h"
+#include "iwn_utils.h"
+
 #include "bearssl/bearssl_hash.h"
-#include "ssl/brssl_poller_adapter.h"
-#include "utils/base64.h"
-#include "utils/url.h"
-#include "utils/utils.h"
 #include "wslay/wslay.h"
 
 #include <iowow/iwlog.h>

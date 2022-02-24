@@ -1,5 +1,5 @@
-#include "ws.h"
-#include "wf.h"
+#include "iwn_ws.h"
+#include "iwn_wf.h"
 
 #include <stdarg.h>
 

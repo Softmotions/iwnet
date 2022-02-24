@@ -1,5 +1,5 @@
-#include "poller.h"
-#include "utils/khash.h"
+#include "iwn_poller.h"
+#include "khash.h"
 
 #include <iowow/iwutils.h>
 #include <iowow/iwlog.h>

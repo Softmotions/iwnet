@@ -1,6 +1,6 @@
-#include "wf_internal.h"
-#include "wf_sst_inmem.h"
-#include "utils/codec.h"
+#include "iwn_wf_internal.h"
+#include "iwn_wf_sst_inmem.h"
+#include "iwn_codec.h"
 
 #include <iowow/iwp.h>
 #include <iowow/iwxstr.h>

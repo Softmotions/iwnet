@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "base64.h"
+#include "iwn_base64.h"
 
 /* Base64 routines adapted from https://www.libsodium.org */
 

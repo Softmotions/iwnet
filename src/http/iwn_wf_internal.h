@@ -1,7 +1,7 @@
 #pragma once
 
-#include "wf.h"
-#include "http_server_internal.h"
+#include "iwn_wf.h"
+#include "iwn_http_server_internal.h"
 
 #include <iowow/iwre.h>
 #include <iowow/iwpool.h>

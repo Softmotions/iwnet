@@ -1,6 +1,6 @@
-#include "utils/tests.h"
-#include "wf_internal.h"
-#include "utils/codec.h"
+#include "iwn_tests.h"
+#include "iwn_wf_internal.h"
+#include "iwn_codec.h"
 
 #include <string.h>
 

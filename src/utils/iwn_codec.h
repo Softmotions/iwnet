@@ -1,7 +1,7 @@
 #pragma once
 
 #include <iowow/basedefs.h>
-#include "base64.h"
+#include "iwn_base64.h"
 
 IW_EXTERN_C_START
 

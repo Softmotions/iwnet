@@ -2,10 +2,10 @@
  * HTTP protocol parser is based on https://github.com/jeremycw/httpserver.h MIT code.
  */
 
-#include "http_server_internal.h"
-#include "poller_adapter.h"
-#include "poller/direct_poller_adapter.h"
-#include "ssl/brssl_poller_adapter.h"
+#include "iwn_http_server_internal.h"
+#include "iwn_poller_adapter.h"
+#include "poller/iwn_direct_poller_adapter.h"
+#include "ssl/iwn_brssl_poller_adapter.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwutils.h>

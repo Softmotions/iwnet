@@ -1,5 +1,5 @@
-#include "utils/tests.h"
-#include "proc.h"
+#include "iwn_tests.h"
+#include "iwn_proc.h"
 
 #include <iowow/iwxstr.h>
 

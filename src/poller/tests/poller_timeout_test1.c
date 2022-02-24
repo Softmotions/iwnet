@@ -1,6 +1,6 @@
-#include "utils/tests.h"
-#include "utils/utils.h"
-#include "poller.h"
+#include "iwn_tests.h"
+#include "iwn_utils.h"
+#include "iwn_poller.h"
 
 #include <iowow/iwp.h>
 

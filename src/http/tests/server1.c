@@ -1,6 +1,6 @@
 
-#include "utils/tests.h"
-#include "http_server.h"
+#include "iwn_tests.h"
+#include "iwn_http_server.h"
 
 #include <iowow/iwxstr.h>
 #include <iowow/iwconv.h>

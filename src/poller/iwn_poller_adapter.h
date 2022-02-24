@@ -1,6 +1,6 @@
 #pragma once
 
-#include "poller.h"
+#include "iwn_poller.h"
 
 IW_EXTERN_C_START
 

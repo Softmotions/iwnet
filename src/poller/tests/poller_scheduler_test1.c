@@ -1,6 +1,6 @@
-#include "utils/tests.h"
-#include "utils/utils.h"
-#include "scheduler.h"
+#include "iwn_tests.h"
+#include "iwn_utils.h"
+#include "iwn_scheduler.h"
 #include <iowow/iwtp.h>
 #include <inttypes.h>
 

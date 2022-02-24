@@ -1,6 +1,6 @@
-#include "utils/tests.h"
-#include "wf.h"
-#include "wf_files.h"
+#include "iwn_tests.h"
+#include "iwn_wf.h"
+#include "iwn_wf_files.h"
 
 #include <iowow/iwconv.h>
 

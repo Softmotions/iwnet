@@ -1,7 +1,7 @@
 
-#include "utils/tests.h"
-#include "proc.h"
-#include "ws/ws_client.h"
+#include "iwn_tests.h"
+#include "iwn_proc.h"
+#include "ws/iwn_ws_client.h"
 
 #include <stdlib.h>
 #include <string.h>

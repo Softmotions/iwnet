@@ -1,4 +1,4 @@
-#include "scheduler.h"
+#include "iwn_scheduler.h"
 
 #include <iowow/iwlog.h>
 

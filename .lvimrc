@@ -14,7 +14,7 @@ let $ROOT_DIR = g:root_dir
 let $UNCRUSTIFY_CONFIG = g:root_dir.'/uncrustify.cfg'
 let g:build_dir = g:root_dir.'/build'
 
-let &g:makeprg = 'cd '.g:build_dir.' && make -j1'
+let &g:makeprg = 'cd '.g:build_dir.' && make -j4'
 
 packadd termdebug
 let g:termdebug_wide = 1
@@ -22,7 +22,6 @@ let g:termdebug_wide = 1
 nnoremap <leader>cc :call asyncrun#run('',
         \ {'mode':'bang','cwd':g:build_dir,'save':2},
         \ 'cmake .. -DCMAKE_BUILD_TYPE='.g:build_type
-        \.' -DCMAKE_FIND_ROOT_PATH=/home/adam/.local/install'
         \.' -DBUILD_TESTS='.g:build_tests
         \.' -DCMAKE_CXX_COMPILER='.g:cxx
         \.' -DCMAKE_C_COMPILER='.g:cc

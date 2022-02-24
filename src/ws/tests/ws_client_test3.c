@@ -1,6 +1,6 @@
 
-#include "utils/tests.h"
-#include "ws/ws_client.h"
+#include "iwn_tests.h"
+#include "ws/iwn_ws_client.h"
 
 #include <stdlib.h>
 #include <string.h>

@@ -1,4 +1,4 @@
-#include "proc.h"
+#include "iwn_proc.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwhmap.h>

@@ -1,4 +1,4 @@
-#include "pairs.h"
+#include "iwn_pairs.h"
 
 #include <iowow/iwlog.h>
 

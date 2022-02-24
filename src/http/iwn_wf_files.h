@@ -1,5 +1,5 @@
 #pragma once
-#include "wf.h"
+#include "iwn_wf.h"
 
 IW_EXTERN_C_START
 

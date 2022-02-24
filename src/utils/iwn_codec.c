@@ -1,4 +1,4 @@
-#include "codec.h"
+#include "iwn_codec.h"
 
 #include <iowow/iwutils.h>
 
