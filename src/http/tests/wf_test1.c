@@ -54,13 +54,13 @@ static iwrc test_regexp_matching(void) {
 
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
-    .pattern = "^/fo{[^/]+}",
+    .pattern = "^/fo([^/]+)",
     .handler = _route_handler,
   }, &p));
 
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
-    .pattern = "^/b{a}{rr?}",
+    .pattern = "^/b(a)(rr?)",
     .handler = _route_handler,
     .tag = "bar0",
   }, 0));
@@ -168,7 +168,7 @@ static bool _ensure_multipart(
   const char       *data
   ) {
   IWN_ASSERT_FATAL(parts && name);
-  struct iwn_pair *part = iwn_pair_find(parts, name, -1), *p;
+  struct iwn_pair *part = iwn_pair_find(parts, name, -1), *p = 0;
   if (!part) {
     return false;
   }

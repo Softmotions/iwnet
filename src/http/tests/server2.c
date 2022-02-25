@@ -136,6 +136,10 @@ static int _handle_file_get(struct iwn_wf_req *req, void *user_data) {
   return iwn_wf_file_serve(req, 0, path);
 }
 
+static int _handle_regex1_get(struct iwn_wf_req *req, void *user_data) {
+  return 0;
+}
+
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();

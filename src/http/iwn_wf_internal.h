@@ -28,8 +28,8 @@ struct route {
   struct route       *child;
   struct route       *next;
   pthread_mutex_t     mtx;
-  char      *pattern;
-  struct re *pattern_re;
+  char *pattern;
+  struct iwre *pattern_re;
   int pattern_len;
 };
 

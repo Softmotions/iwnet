@@ -4,6 +4,7 @@
 
 #include <iowow/iwp.h>
 #include <iowow/iwxstr.h>
+#include <iowow/iwre.h>
 
 #include <assert.h>
 #include <stdlib.h>
@@ -27,22 +28,6 @@ IW_INLINE iwrc _init(void) {
   return 0;
 }
 
-IW_INLINE iwrc _iwre_code(int mret) {
-  switch (mret) {
-    case RE_ERROR_NOMEM:
-      return IW_ERROR_ALLOC;
-    case RE_ERROR_CHARSET:
-      return WF_ERROR_REGEXP_CHARSET;
-    case RE_ERROR_SUBEXP:
-      return WF_ERROR_REGEXP_SUBEXP;
-    case RE_ERROR_SUBMATCH:
-      return WF_ERROR_REGEXP_SUBMATCH;
-    case RE_ERROR_ENGINE:
-      return WF_ERROR_REGEXP_ENGINE;
-  }
-  return 0;
-}
-
 static void _route_destroy(struct route *route) {
   struct iwn_wf_route *base = &route->base;
   iwn_wf_handler_dispose handler_dispose = base->handler_dispose;
@@ -53,7 +38,7 @@ static void _route_destroy(struct route *route) {
   route->pattern = 0;
   route->pattern_len = 0;
   if (route->pattern_re) {
-    iwre_free(route->pattern_re);
+    iwre_destroy(route->pattern_re);
     route->pattern_re = 0;
   }
   pthread_mutex_destroy(&route->mtx);
@@ -111,9 +96,11 @@ static iwrc _route_init(struct route *route) {
   if (len) {
     if (*pattern == '^') { // We use regexp
       route->pattern++;    // skip `^`
-      RCA(route->pattern_re = iwre_new(route->pattern), finish);
-      // Check pattern matching
-      rc = _iwre_code(iwre_match(route->pattern_re, ""));
+      route->pattern_re = iwre_create(route->pattern);
+      if (!route->pattern_re) {
+        rc = WF_ERROR_REGEXP_INVALID;
+        goto finish;
+      }
     }
   } else {
     route->pattern = 0;
@@ -586,19 +573,20 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
 
   if (wreq->flags & r->base.flags) { // Request method matched
     if (r->pattern_re) {             // RE
+      const char *mpairs[64];
       pthread_mutex_lock(&r->mtx);
-      int mret = iwre_match(r->pattern_re, path_unmatched);
-      iwrc rc = _iwre_code(mret);
-      if (IW_LIKELY(!rc)) {
-        if (mret >= 0 && ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == mret)) {
-          mlen = mret == 0 ? -1 : mret;
-          for (int n = 0; n < r->pattern_re->nmatches; n += 2) {   // Record regexp submatches
+      int mret = iwre_match(r->pattern_re, path_unmatched, mpairs, 64);
+      if (mret > 0) {
+        int len = (intptr_t) (mpairs[1] - mpairs[0]);
+        if ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == len) {
+          mlen = len;
+          for (int i = 2; i < 2 * mret; i += 2) {
             struct route_re_submatch *sm = iwpool_alloc(sizeof(*sm), req->pool);
             if (sm) {
               sm->route = &r->base;
               sm->input = path_unmatched;
-              sm->sp = r->pattern_re->matches[n];
-              sm->ep = r->pattern_re->matches[n + 1];
+              sm->sp = mpairs[i];
+              sm->ep = mpairs[i + 1];
               if (wreq->last) {
                 wreq->last->next = sm;
                 wreq->last = sm;
@@ -608,9 +596,6 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
             }
           }
         }
-      } else {
-        iwlog_ecode_error(rc, "Route matching failed. Pattern: %s tag: %s", r->pattern_re->expression,
-                          (r->base.tag ? r->base.tag : ""));
       }
       pthread_mutex_unlock(&r->mtx);
     } else if (r->pattern) { // Simple path subpart match
@@ -1369,14 +1354,6 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
       return "Parent router from different context (WF_ERROR_PARENT_ROUTER_FROM_DIFFERENT_CONTEXT)";
     case WF_ERROR_REGEXP_INVALID:
       return "Invalid regular expression (WF_ERROR_REGEXP_INVALID)";
-    case WF_ERROR_REGEXP_CHARSET:
-      return "Invalid regular expression: expected ']' at end of character set (WF_ERROR_REGEXP_CHARSET)";
-    case WF_ERROR_REGEXP_SUBEXP:
-      return "Invalid regular expression: expected ')' at end of subexpression (WF_ERROR_REGEXP_SUBEXP)";
-    case WF_ERROR_REGEXP_SUBMATCH:
-      return "Invalid regular expression: expected '}' at end of submatch (WF_ERROR_REGEXP_SUBMATCH)";
-    case WF_ERROR_REGEXP_ENGINE:
-      return "Illegal instruction in compiled regular expression (please report this bug) (WF_ERROR_REGEXP_ENGINE)";
     case WF_ERROR_UNSUPPORTED_HTTP_METHOD:
       return "Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD)";
     case WF_ERROR_MAX_NESTED_ROUTES:

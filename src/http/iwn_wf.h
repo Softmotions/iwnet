@@ -13,16 +13,6 @@ typedef enum {
   /**< Parent route from different context
      (WF_ERROR_PARENT_ROUTE_FROM_DIFFERENT_CONTEXT). */
   WF_ERROR_REGEXP_INVALID,                      /**< Invalid regular expression (WF_ERROR_REGEXP_INVALID) */
-  WF_ERROR_REGEXP_CHARSET,
-  /**< Invalid regular expression: expected ']' at end of character set
-     (WF_ERROR_REGEXP_CHARSET) */
-  WF_ERROR_REGEXP_SUBEXP,
-  /**< Invalid regular expression: expected ')' at end of subexpression
-     (WF_ERROR_REGEXP_SUBEXP) */
-  WF_ERROR_REGEXP_SUBMATCH,
-  /**< Invalid regular expression: expected '}' at end of submatch
-     (WF_ERROR_REGEXP_SUBMATCH) */
-  WF_ERROR_REGEXP_ENGINE,
   /**< Illegal instruction in compiled regular expression (please report this
      bug) (WF_ERROR_REGEXP_ENGINE) */
   WF_ERROR_UNSUPPORTED_HTTP_METHOD, /**< Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD) */
