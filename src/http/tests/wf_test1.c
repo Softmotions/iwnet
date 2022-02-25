@@ -185,7 +185,10 @@ static bool _ensure_multipart(
     }
   }
   if (data) {
-    if (!p || strncmp(part->val, data, part->val_len) != 0) {
+    if ((file || ctype) && !p) {
+      return false;
+    }
+    if (strncmp(part->val, data, part->val_len) != 0) {
       return false;
     }
   }

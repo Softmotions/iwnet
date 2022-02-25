@@ -573,9 +573,9 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
 
   if (wreq->flags & r->base.flags) { // Request method matched
     if (r->pattern_re) {             // RE
-      const char *mpairs[64];
+      const char *mpairs[IWRE_MAX_MATCHES];
       pthread_mutex_lock(&r->mtx);
-      int mret = iwre_match(r->pattern_re, path_unmatched, mpairs, 64);
+      int mret = iwre_match(r->pattern_re, path_unmatched, mpairs, IWRE_MAX_MATCHES);
       if (mret > 0) {
         int len = (intptr_t) (mpairs[1] - mpairs[0]);
         if ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == len) {

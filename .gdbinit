@@ -1,6 +1,6 @@
 cd ./build/src/http/tests
-file ./server2
-set args --ssl
+file ./wf_test1
+#set args --ssl
 
 set confirm off
 set follow-fork-mode parent
