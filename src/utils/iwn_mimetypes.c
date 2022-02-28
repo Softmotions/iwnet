@@ -9,7 +9,7 @@ const char* iwn_mimetype_find_by_path2(const char *path, size_t len) {
   if (len < 2 || path[len - 1] == '.') {
     return 0;
   }
-  for (size_t i = len - 2; i >= 0; --i) {
+  for (int i = (int) len - 2; i >= 0; --i) {
     if (path[i] == '.') {
       return _mimetype_find(path + i + 1);
     }
