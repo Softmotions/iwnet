@@ -55,12 +55,12 @@ struct iwn_wf_req;
 typedef int (*iwn_wf_handler)(struct iwn_wf_req*, void *user_data);
 typedef void (*iwn_wf_handler_dispose)(struct iwn_wf_ctx*, void *user_data);
 
-struct route_re_submatch {          ///< Route regexp submatch node
-  const char *input;                ///< Matched input
-  const char *sp;                   ///< Pointer to start of submatch
-  const char *ep;                   ///< Pointer to the end of submatch (exclusive)
-  const struct iwn_wf_route *route; ///< Matched route
-  struct route_re_submatch  *next;
+struct iwn_wf_route_submatch {         ///< Route regexp submatch node
+  const char *input;                   ///< Matched input
+  const char *sp;                      ///< Pointer to start of submatch
+  const char *ep;                      ///< Pointer to the end of submatch (exclusive)
+  const struct iwn_wf_route    *route; ///< Matched route
+  struct iwn_wf_route_submatch *next;
 };
 
 /// HTTP request object.
@@ -72,8 +72,8 @@ struct iwn_wf_req {
   const char *path_matched;   ///< Start position of last match section of the path
   const char *body;
   size_t      body_len;
-  struct route_re_submatch *first;
-  struct route_re_submatch *last;
+  struct iwn_wf_route_submatch *first;
+  struct iwn_wf_route_submatch *last;
   struct iwn_pairs query_params;
   struct iwn_pairs form_params;
   uint32_t flags;             ///< Request method, form flags.

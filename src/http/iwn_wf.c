@@ -581,7 +581,7 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
         if ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == len) {
           mlen = len;
           for (int i = 2; i < 2 * mret; i += 2) {
-            struct route_re_submatch *sm = iwpool_alloc(sizeof(*sm), req->pool);
+            struct iwn_wf_route_submatch *sm = iwpool_alloc(sizeof(*sm), req->pool);
             if (sm) {
               sm->route = &r->base;
               sm->input = path_unmatched;
