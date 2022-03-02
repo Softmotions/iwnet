@@ -68,6 +68,27 @@ IW_ALLOC char* iwn_url_encode_new(const char *src, ssize_t src_len) {
   return ret;
 }
 
+size_t iwn_url_decode_inplace2(char *sp, char *ep) {
+  const char *rp = sp;
+  char *wp = sp;
+  char tmp[] = { 0, 0, 0 };
+  while (rp < ep) {
+    if (IW_UNLIKELY(*rp == '%')) {
+      rp++;
+      tmp[0] = *rp++;
+      tmp[1] = *rp;
+      *wp = (char) strtol(tmp, 0, 16);
+    } else if (IW_UNLIKELY(*rp == '+')) {
+      *wp = ' ';
+    } else {
+      *wp = *rp;
+    }
+    rp++;
+    wp++;
+  }
+  return rp - sp;
+}
+
 void iwn_url_decode_inplace(char *str) {
   const char *rp = str;
   char *wp = str;
