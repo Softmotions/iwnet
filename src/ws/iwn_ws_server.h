@@ -22,7 +22,7 @@ struct iwn_ws_handler_spec {
   int   (*on_http_init)(struct iwn_wf_req*, struct iwn_ws_handler_spec *spec);
   bool  (*on_session_init)(struct iwn_ws_sess*);
   void  (*on_session_dispose)(struct iwn_ws_sess*);
-  iwn_wf_handler_dispose handler_dispose;
+  iwn_wf_handler_dispose on_handler_dispose;
 };
 
 IW_EXPORT bool iwn_ws_server_write(struct iwn_ws_sess*, const char *buf, ssize_t buf_len);
