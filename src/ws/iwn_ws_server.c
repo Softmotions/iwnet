@@ -54,7 +54,12 @@ static void _ctx_destroy(struct ctx *ctx) {
 
 static void _route_handler_dispose(struct iwn_wf_ctx *ctx, void *user_data) {
   struct iwn_ws_handler_spec *spec = user_data;
-  free(spec);
+  if (spec) {
+    if (spec->handler_dispose) {
+      spec->handler_dispose(ctx, spec->user_data);
+    }
+    free(spec);
+  }
 }
 
 static void _on_request_dispose(struct iwn_http_req *hreq) {
