@@ -1,3 +1,5 @@
+#pragma once
+
 #include "iwn_ws.h"
 
 IW_EXTERN_C_START

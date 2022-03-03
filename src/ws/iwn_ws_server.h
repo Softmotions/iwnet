@@ -1,3 +1,5 @@
+#pragma once
+
 #include "iwn_ws.h"
 #include "iwn_wf.h"
 
