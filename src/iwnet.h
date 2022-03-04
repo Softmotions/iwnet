@@ -6,8 +6,8 @@
 
 IW_EXTERN_C_START
 
-extern const char* iwn_cacerts;
-extern size_t iwn_cacerts_len; 
+extern const char *iwn_cacerts;
+extern const size_t iwn_cacerts_len;
 
 IW_EXTERN_C_END
 #endif
