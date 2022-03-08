@@ -528,6 +528,7 @@ static void _client_destroy(struct client *client) {
   if (client->server) {
     _server_unref(client->server);
   }
+  pthread_mutex_destroy(&client->request.user_mtx);
   iwpool_destroy(client->pool);
 }
 
@@ -985,9 +986,16 @@ static iwrc _client_accept(struct server *server, int fd) {
   if (!client) {
     rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
     goto finish;
-  }
+  }  
   client->pool = pool;
   client->fd = fd;
+
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&client->request.user_mtx, &attr);
+  pthread_mutexattr_destroy(&attr);
+
   RCC(rc, finish, _server_ref(server, &client->server));
   client->request.server_user_data = client->server->spec.user_data;
 

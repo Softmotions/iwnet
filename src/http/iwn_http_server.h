@@ -5,6 +5,7 @@
 
 #include <iowow/iwxstr.h>
 
+#include <pthread.h>
 #include <stdarg.h>
 
 IW_EXTERN_C_START
@@ -17,7 +18,8 @@ struct iwn_http_server {
 };
 
 struct iwn_http_req {
-  void       *user_data;                            ///< Request specific user data.
+  void *user_data;                                  ///< Request specific user data.
+  pthread_mutex_t user_mtx;
   uint64_t    user_flags;
   void       *server_user_data;                     ///< User data specified in `iwn_http_server_spec`
   const char *session_cookie_params;                ///< Optional params used to store session cookie. Default: lax
