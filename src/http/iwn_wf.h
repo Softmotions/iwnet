@@ -23,13 +23,14 @@ typedef enum {
 #define IWN_WF_SESSION_ID_LEN     32
 #define IWN_WF_SESSION_COOKIE_KEY "sessionid"
 
-#define  IWN_WF_RES_NOT_PROCESSED    0
-#define  IWN_WF_RES_PROCESSED        1
-#define  IWN_WF_RES_CONNECTION_CLOSE -1
-#define  IWN_WF_RES_FORBIDDEN        403
-#define  IWN_WF_RES_BAD_REQUEST      400
-#define  IWN_WF_RES_INTERNAL_ERROR   500
-#define  IWN_WF_RES_NOT_IMPLEMENTED  501
+#define  IWN_WF_RES_NOT_PROCESSED     0
+#define  IWN_WF_RES_PROCESSED         1
+#define  IWN_WF_RES_CONNECTION_CLOSE  -1
+#define  IWN_WF_RES_SKIP_CHILD_ROUTES -2
+#define  IWN_WF_RES_FORBIDDEN         403
+#define  IWN_WF_RES_BAD_REQUEST       400
+#define  IWN_WF_RES_INTERNAL_ERROR    500
+#define  IWN_WF_RES_NOT_IMPLEMENTED   501
 
 // Methods
 #define IWN_WF_GET         0x01U
