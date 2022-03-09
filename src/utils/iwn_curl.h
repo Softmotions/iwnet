@@ -17,7 +17,7 @@ IW_EXTERN_C_START
   cc_ = op_;                                \
   if (cc_) {                                \
     iwlog_error2(curl_easy_strerror(cc_));  \
-    rc = IWN_ERROR_CURL_API_FAIL;           \
+    rc = WF_ERROR_CURL_API;                 \
     goto label_;                            \
   }
 
@@ -25,7 +25,7 @@ IW_EXTERN_C_START
   cc_ = xcurlcode(op_);                     \
   if (cc_) {                                \
     iwlog_error2(curl_easy_strerror(cc_));  \
-    rc = IWN_ERROR_CURL_API_FAIL;           \
+    rc = WF_ERROR_CURL_API;                 \
     goto label_;                            \
   }
 
