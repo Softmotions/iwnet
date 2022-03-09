@@ -1,5 +1,7 @@
 #pragma once
 
+#include "iwn_wf.h"
+
 #include <iowow/iwlog.h>
 #include <iowow/iwxstr.h>
 #include <iowow/iwarr.h>
