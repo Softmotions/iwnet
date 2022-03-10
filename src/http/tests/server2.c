@@ -119,7 +119,7 @@ static int _handle_session_put(struct iwn_wf_req *req, void *user_data) {
 }
 
 static int _handle_session_get(struct iwn_wf_req *req, void *user_data) {
-  char *val = iwn_wf_session_get(req, "mykey");
+  const char *val = iwn_wf_session_get(req, "mykey");
   if (val) {
     bool ret = iwn_http_response_write(req->http, 200, "text/plan", val, strlen(val));
     IWN_ASSERT(ret);

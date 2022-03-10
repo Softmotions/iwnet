@@ -1182,7 +1182,7 @@ int iwn_wf_server_fd_get(struct iwn_wf_ctx *ctx) {
   return ((struct ctx*) ctx)->server_fd;
 }
 
-char* iwn_wf_session_get(struct iwn_wf_req *req_, const char *key) {
+const char* iwn_wf_session_get(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {

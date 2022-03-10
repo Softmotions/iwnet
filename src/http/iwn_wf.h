@@ -152,7 +152,7 @@ IW_EXPORT struct iwn_pair iwn_wf_header_part_find(
 
 IW_EXPORT const char* iwn_wf_session_id(struct iwn_wf_req *req);
 
-IW_EXPORT char* iwn_wf_session_get(struct iwn_wf_req*, const char *key);
+IW_EXPORT const char* iwn_wf_session_get(struct iwn_wf_req*, const char *key);
 
 IW_EXPORT iwrc iwn_wf_session_put(struct iwn_wf_req*, const char *key, const char *data);
 
