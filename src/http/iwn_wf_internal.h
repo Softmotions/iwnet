@@ -6,6 +6,7 @@
 #include <iowow/iwre.h>
 #include <iowow/iwpool.h>
 #include <iowow/iwlog.h>
+#include <iowow/iwhmap.h>
 
 #include <stdio.h>
 
@@ -48,7 +49,9 @@ struct route_iter {
 struct request {
   struct iwn_wf_req base;
   struct route_iter it; ///< Routes matching iterator
-  IWPOOL     *pool;
+  IWPOOL *pool;
+  IWHMAP *sess_map;     ///< Cached session key-value map
+  pthread_mutex_t sess_map_mtx;
   FILE       *stream_file;
   const char *boundary; ///< Current multipart form boundary
   const char *stream_file_path;

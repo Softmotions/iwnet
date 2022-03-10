@@ -236,6 +236,11 @@ static void _request_stream_destroy(struct request *req) {
 static void _request_destroy(struct request *req) {
   if (req) {
     _request_stream_destroy(req);
+    pthread_mutex_destroy(&req->sess_map_mtx);
+    if (req->sess_map) {
+      iwhmap_destroy(req->sess_map);
+      req->sess_map = 0;
+    }
     if (req->pool) {
       iwpool_destroy(req->pool);
     }
@@ -693,6 +698,7 @@ static iwrc _request_create(struct iwn_http_req *hreq) {
   req->pool = pool;
   req->base.ctx = &ctx->base;
   req->base.http = hreq;
+  pthread_mutex_init(&req->sess_map_mtx, 0);
 
   RCC(rc, finish, _request_target_parse(req));
   RCC(rc, finish, _request_method_parse(req));
@@ -1180,17 +1186,53 @@ char* iwn_wf_session_get(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {
-    return ctx->sst.get(&ctx->sst, req->sid, key);
+    pthread_mutex_lock(&req->sess_map_mtx);
+    char *val = req->sess_map ? iwhmap_get(req->sess_map, key) : 0;
+    if (!val) {
+      val = ctx->sst.get(&ctx->sst, req->sid, key);
+      if (val) {
+        if (!req->sess_map) {
+          req->sess_map = iwhmap_create_str(iwhmap_kv_free);
+          if (!req->sess_map) {
+            pthread_mutex_unlock(&req->sess_map_mtx);
+            return 0;
+          }
+        }
+        char *k = strdup(key);
+        if (k) {
+          if (iwhmap_put(req->sess_map, k, val)) {
+            free(val);
+            free(k);
+            val = 0;
+          }
+        } else {
+          free(val);
+          val = 0;
+        }
+      }
+    }
+    pthread_mutex_unlock(&req->sess_map_mtx);
+    return val;
   } else {
     return 0;
   }
 }
 
 iwrc iwn_wf_session_put(struct iwn_wf_req *req_, const char *key, const char *data) {
+  if (data == 0) {
+    iwn_wf_session_del(req_, key);
+    return 0;
+  }
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
   RCR(_request_sid_ensure(req));
-  return ctx->sst.put(&ctx->sst, req->sid, key, data);
+  pthread_mutex_lock(&req->sess_map_mtx);
+  if (req->sess_map) {
+    iwhmap_remove(req->sess_map, key);
+  }
+  iwrc rc = ctx->sst.put(&ctx->sst, req->sid, key, data);
+  pthread_mutex_unlock(&req->sess_map_mtx);
+  return rc;
 }
 
 iwrc iwn_wf_session_printf_va(struct iwn_wf_req *req, const char *key, const char *fmt, va_list va) {
@@ -1236,7 +1278,12 @@ void iwn_wf_session_del(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {
+    pthread_mutex_lock(&req->sess_map_mtx);
+    if (req->sess_map) {
+      iwhmap_remove(req->sess_map, key);
+    }
     ctx->sst.del(&ctx->sst, req->sid, key);
+    pthread_mutex_unlock(&req->sess_map_mtx);
   }
 }
 
@@ -1246,6 +1293,9 @@ void iwn_wf_session_clear(struct iwn_wf_req *req_) {
   if (_request_sid_exists(req)) {
     ctx->sst.clear(&ctx->sst, req->sid);
     req->sid[0] = 0;
+    pthread_mutex_lock(&req->sess_map_mtx);
+    iwhmap_clear(req->sess_map);
+    pthread_mutex_unlock(&req->sess_map_mtx);
   }
 }
 
@@ -1358,7 +1408,7 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
       return "Unsupported HTTP method (WF_ERROR_UNSUPPORTED_HTTP_METHOD)";
     case WF_ERROR_MAX_NESTED_ROUTES:
       return "Reached the maximum number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES)";
-    case WF_ERROR_CURL_API: 
+    case WF_ERROR_CURL_API:
       return "CUrl API call error (WF_ERROR_CURL_API)";
   }
   return 0;

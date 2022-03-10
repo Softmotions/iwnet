@@ -123,7 +123,6 @@ static int _handle_session_get(struct iwn_wf_req *req, void *user_data) {
   if (val) {
     bool ret = iwn_http_response_write(req->http, 200, "text/plan", val, strlen(val));
     IWN_ASSERT(ret);
-    free(val);
     return 1;
   } else {
     return 500;
