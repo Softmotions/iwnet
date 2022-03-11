@@ -80,6 +80,8 @@ IW_EXPORT bool iwn_http_request_is_streamed(struct iwn_http_req*);
 
 IW_EXPORT bool iwn_http_request_is_secure(struct iwn_http_req*);
 
+IW_EXPORT const char* iwn_http_request_remote_ip(struct iwn_http_req*);
+
 IW_EXPORT void iwn_http_request_free(struct iwn_http_req*);
 
 IW_EXPORT struct iwn_val iwn_http_request_target(struct iwn_http_req*);

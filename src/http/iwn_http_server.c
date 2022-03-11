@@ -99,6 +99,7 @@ struct client {
   struct stream     stream;
   struct parser     parser;
   struct response   response;
+  struct sockaddr_storage sockaddr;
 
   // Web-framework implementation hooks (do not use these in app)
   // TODO: Review it
@@ -110,6 +111,8 @@ struct client {
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
+
+  char ip[46]; ///< Client ip address
 };
 
 // stream flags
@@ -974,7 +977,7 @@ static void _client_on_poller_adapter_dispose(struct iwn_poller_adapter *pa, voi
   _client_destroy(client);
 }
 
-static iwrc _client_accept(struct server *server, int fd) {
+static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storage *sockaddr) {
   iwrc rc = 0;
   IWPOOL *pool = iwpool_create_empty();
   if (!pool) {
@@ -986,9 +989,24 @@ static iwrc _client_accept(struct server *server, int fd) {
   if (!client) {
     rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
     goto finish;
-  }  
+  }
   client->pool = pool;
   client->fd = fd;
+  memcpy(&client->sockaddr, sockaddr, sizeof(client->sockaddr));
+
+  struct sockaddr *sa = (void*) sockaddr;
+
+  if (sa->sa_family == AF_INET) {
+    if (inet_ntop(AF_INET, &(((struct sockaddr_in*) sa)->sin_addr), client->ip, sizeof(client->ip)) == 0) {
+      client->ip[0] = '\0';
+    }
+  } else if (sa->sa_family == AF_INET6) {
+    if (inet_ntop(AF_INET6, &(((struct sockaddr_in6*) sa)->sin6_addr), client->ip, sizeof(client->ip)) == 0) {
+      client->ip[0] = '\0';
+    }
+  } else {
+    client->ip[0] = '\0';
+  }
 
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
@@ -1057,6 +1075,11 @@ bool iwn_http_request_is_streamed(struct iwn_http_req *request) {
 bool iwn_http_request_is_secure(struct iwn_http_req *request) {
   struct client *client = (void*) request;
   return client->server->https;
+}
+
+const char* iwn_http_request_remote_ip(struct iwn_http_req *request) {
+  struct client *client = (void*) request;
+  return client->ip;
 }
 
 void iwn_http_request_free(struct iwn_http_req *request) {
@@ -1746,13 +1769,15 @@ static void _server_destroy(struct server *server) {
 static int64_t _server_on_ready(const struct iwn_poller_task *t, uint32_t events) {
   struct server *server = t->user_data;
   int client_fd = 0;
+  struct sockaddr_storage sockaddr = { 0 };
+  socklen_t sockaddr_len = sizeof(sockaddr);
 
   do {
-    client_fd = accept(t->fd, 0, 0);
+    client_fd = accept(t->fd, (struct sockaddr*) &sockaddr, &sockaddr_len);
     if (client_fd == -1) {
       break;
     }
-    iwrc rc = _client_accept(server, client_fd);
+    iwrc rc = _client_accept(server, client_fd, &sockaddr);
     if (rc) {
       iwlog_ecode_error(rc, "Failed to initiate client connection fd: %d", client_fd);
     }
