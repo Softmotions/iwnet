@@ -98,7 +98,7 @@ static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
   }
   p = iwn_pair_find(&req->form_params, "baz", -1);
   IWN_ASSERT(p);
-  if (p) {  
+  if (p) {
     IWN_ASSERT(strncmp(p->val, "a%40z", p->val_len) == 0);
   }
   p = iwn_pair_find(&req->form_params, "bigparam", -1);
@@ -261,6 +261,13 @@ int main(int argc, char *argv[]) {
     .handler = _handle_file_get,
     .flags = IWN_WF_MATCH_PREFIX | IWN_WF_GET | IWN_WF_HEAD,
   }, 0));
+
+  RCC(rc, finish, iwn_wf_route(iwn_wf_route_dir_attach(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "/dir",
+    .flags = IWN_WF_MATCH_PREFIX | IWN_WF_HEAD | IWN_WF_GET
+  }, "./foo"), 0));
+
 
   // Start the server:
   RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));

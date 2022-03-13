@@ -85,6 +85,11 @@ run() {
   printf "\n\nSession get:\n"
   curl -isk -b ./cookie.jar ${BASE}/session/get | ${FILTER}
 
+  printf "\n\nDirectory serve:\n"
+  mkdir -p foo/bar
+  echo '{"msg":"Hello"}' > foo/bar/hello.json
+  curl -isk ${BASE}/dir/bar/hello.json | ${FILTER}
+
   printf "\n\nFile get:\n"
   curl -sk ${BASE}/file/test.dat -o r1.dat | ${FILTER}
   if ! cmp -s ./test.dat ./r1.dat; then

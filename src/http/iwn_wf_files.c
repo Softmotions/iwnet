@@ -1,4 +1,5 @@
 #include "iwn_wf_files.h"
+#include "iwn_mimetypes.h"
 
 #include <iowow/iwp.h>
 #include <iowow/iwlog.h>
@@ -9,6 +10,8 @@
 #include <string.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <sys/stat.h>
+
 
 #define BOUNDARY_MAX 32
 #define CTYPE_MAX    128
@@ -431,4 +434,64 @@ finish:
     _ctx_destroy(ctx);
   }
   return ret;
+}
+
+struct route_dir_spec {
+  char  *dir;
+  size_t dir_len;
+};
+
+static int _handler_dir_attach(struct iwn_wf_req *req, void *d) {
+  struct route_dir_spec *spec = d;
+  if (*req->path_unmatched == '\0' || !(req->flags & IWN_WF_GET)) {
+    return 0;
+  }
+  if (strstr(req->path_unmatched, "..")) {
+    return 0;
+  }
+  char fpath[4096];
+  size_t ulen = strlen(req->path_unmatched);
+  if (spec->dir_len + ulen > sizeof(fpath)) {
+    return 0;
+  }
+  memcpy(fpath, spec->dir, spec->dir_len);
+  memcpy(fpath + spec->dir_len, req->path_unmatched, ulen);
+  fpath[spec->dir_len + ulen] = '\0';
+
+  struct stat st;
+  if (stat(fpath, &st) == -1 || !S_ISREG(st.st_mode)) {
+    return 0;
+  }
+
+  const char *ctype = iwn_mimetype_find_by_path(fpath);
+  return iwn_wf_file_serve(req, ctype, fpath);
+}
+
+static void _handler_dir_attach_dispose(struct iwn_wf_ctx *ctx, void *d) {
+  struct route_dir_spec *spec = d;
+  if (spec) {
+    free(spec->dir);
+    free(spec);
+  }
+}
+
+struct iwn_wf_route* iwn_wf_route_dir_attach(struct iwn_wf_route *route, const char *dir) {
+  if (!route || !dir || *dir == '\0') {
+    return 0;
+  }
+  struct route_dir_spec *spec = malloc(sizeof(*spec));
+  if (!spec) {
+    return 0;
+  }
+  spec->dir = strdup(dir);
+  if (!spec->dir) {
+    free(spec);
+    return 0;
+  }
+  spec->dir_len = strlen(spec->dir);
+
+  route->handler = _handler_dir_attach;
+  route->handler_dispose = _handler_dir_attach_dispose;
+  route->user_data = spec;
+  return route;
 }

@@ -66,6 +66,16 @@ content-length: 36
 
 70b2a86f-025b-4805-b267-871f3e1bc170
 
+Directory serve:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-length: 16
+content-type: application/json
+accept-ranges: bytes
+
+{"msg":"Hello"}
+
+
 File get:
 
 
