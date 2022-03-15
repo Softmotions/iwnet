@@ -52,7 +52,7 @@ struct xcurlreq {
   uint64_t flags;
 };
 
-CURLcode xcurlcode(CURLUcode uc) {
+static CURLcode xcurlcode(CURLUcode uc) {
   switch (uc) {
     case CURLUE_OK:
       return CURLE_OK;
