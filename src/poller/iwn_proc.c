@@ -568,6 +568,22 @@ child_exit:
   exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
+char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
+  char *ret = 0;
+  IWXSTR *xstr = iwxstr_new();
+  if (!xstr) {
+    return 0;
+  }
+  int i = 0;
+  for (const char *arg = spec->args[0]; arg; arg = spec->args[++i]) {
+    iwxstr_cat(xstr, " ", 1);
+    iwxstr_cat2(xstr, arg);
+  }
+  ret = iwxstr_ptr(xstr);
+  iwxstr_destroy_keep_ptr(xstr);
+  return ret;
+}
+
 void iwn_proc_dispose(void) {
   IWHMAP *map = 0;
   iwn_proc_kill_all(SIGTERM);

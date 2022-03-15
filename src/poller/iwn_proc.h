@@ -61,4 +61,6 @@ IW_EXPORT void iwn_proc_kill_all(int signum);
 
 IW_EXPORT void iwn_proc_dispose(void);
 
+IW_EXPORT IW_ALLOC char* iwn_proc_command_get(const struct iwn_proc_spec *spec);
+
 IW_EXTERN_C_END
