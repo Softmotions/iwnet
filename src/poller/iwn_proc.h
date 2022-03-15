@@ -5,7 +5,6 @@
 IW_EXTERN_C_START
 
 struct iwn_proc_ctx {
-
   /// Child pid.
   int pid;
 
@@ -17,7 +16,6 @@ struct iwn_proc_ctx {
 };
 
 struct iwn_proc_spec {
-
   /// Poller associated with spec
   struct iwn_poller *poller;
 
@@ -58,6 +56,8 @@ IW_EXPORT iwrc iwn_proc_stdin_close(int pid);
 IW_EXPORT void iwn_proc_kill(int pid, int signum);
 
 IW_EXPORT void iwn_proc_kill_all(int signum);
+
+IW_EXPORT iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, int pid, int signum, int max_attempts, int last_signum);
 
 IW_EXPORT void iwn_proc_dispose(void);
 

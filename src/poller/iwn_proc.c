@@ -1,4 +1,5 @@
 #include "iwn_proc.h"
+#include "iwn_scheduler.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwhmap.h>
@@ -446,6 +447,80 @@ void iwn_proc_kill_all(int signum) {
   while (pids[len] != -1) {
     kill(pids[len++], signum);
   }
+}
+
+struct ktask {
+  int pid;
+  int signum;
+  int attempts;
+  int last_signum;
+  struct iwn_poller *poller;
+};
+
+static void _kill_ensure_task_cancel(void *arg) {
+  struct ktask *t = arg;
+  free(t);
+}
+
+static void _kill_ensure_task(void *arg) {
+  struct ktask *t = arg;
+  assert(t);
+  int pid = t->pid;
+  if (getpgid(pid) == -1) {
+    free(t);
+    return;
+  }
+  if (--t->attempts < 1) {
+    iwlog_warn("Last killing attempt, pid: %d, signal: %d", pid, t->last_signum);
+    kill(pid, t->last_signum);
+    free(t);
+    return;
+  }
+  kill(pid, t->signum);
+  iwrc rc = iwn_schedule(&(struct iwn_scheduler_spec) {
+    .poller = t->poller,
+    .timeout_ms = 1000,
+    .user_data = t,
+    .task_fn = _kill_ensure_task,
+    .on_cancel = _kill_ensure_task_cancel,
+  });
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    free(t);
+  }
+}
+
+iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, int pid, int signum, int max_attempts, int last_signum) {
+  if (getpgid(pid) == -1) {
+    return 0;
+  }
+  if (max_attempts == 0) {
+    max_attempts = 1;
+  }
+  struct ktask *t = malloc(sizeof(*t));
+  if (!t) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  *t = (struct ktask) {
+    .pid = pid,
+    .signum = signum,
+    .attempts = max_attempts,
+    .last_signum = last_signum > 0 ? last_signum : SIGKILL
+  };
+  kill(pid, signum);
+
+  iwrc rc = iwn_schedule(&(struct iwn_scheduler_spec) {
+    .poller = poller,
+    .timeout_ms = max_attempts < 0 ? -max_attempts * 1000 : 1000,
+    .user_data = t,
+    .task_fn = _kill_ensure_task,
+    .on_cancel = _kill_ensure_task_cancel,
+  });
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    free(t);
+  }
+  return rc;
 }
 
 iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
