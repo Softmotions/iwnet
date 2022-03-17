@@ -1189,7 +1189,7 @@ iwrc iwn_wf_session_id_set(struct iwn_wf_req *req_, const char *sid) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
   pthread_mutex_lock(&req->sess_map_mtx);
-  memcpy(req->sid, sid, IWN_WF_SESSION_ID_LEN + 1);  
+  memcpy(req->sid, sid, IWN_WF_SESSION_ID_LEN + 1);
   if (req->sess_map) {
     iwhmap_clear(req->sess_map);
   }
@@ -1401,10 +1401,12 @@ iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ct
 
 void iwn_wf_destroy(struct iwn_wf_ctx *ctx_) {
   struct ctx *ctx = (void*) ctx_;
-  if (ctx->poller && ctx->server_fd > -1) {
-    iwn_poller_remove(ctx->poller, ctx->server_fd);
-  } else {
-    _ctx_destroy(ctx);
+  if (ctx) {
+    if (ctx->poller && ctx->server_fd > -1) {
+      iwn_poller_remove(ctx->poller, ctx->server_fd);
+    } else {
+      _ctx_destroy(ctx);
+    }
   }
 }
 
