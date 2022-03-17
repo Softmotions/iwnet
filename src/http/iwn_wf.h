@@ -78,6 +78,7 @@ struct iwn_wf_req {
   struct iwn_wf_route_submatch *last;
   struct iwn_pairs query_params;
   struct iwn_pairs form_params;
+  int64_t  user_id;           ///< Application controlled user id. 
   uint32_t flags;             ///< Request method, form flags.
 };
 
