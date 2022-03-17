@@ -1182,6 +1182,21 @@ int iwn_wf_server_fd_get(struct iwn_wf_ctx *ctx) {
   return ((struct ctx*) ctx)->server_fd;
 }
 
+iwrc iwn_wf_session_id_set(struct iwn_wf_req *req_, const char *sid) {
+  if (!sid || strlen(sid) != IWN_WF_SESSION_ID_LEN) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  struct request *req = (void*) req_;
+  struct ctx *ctx = (void*) req->base.ctx;
+  pthread_mutex_lock(&req->sess_map_mtx);
+  memcpy(req->sid, sid, IWN_WF_SESSION_ID_LEN + 1);  
+  if (req->sess_map) {
+    iwhmap_clear(req->sess_map);
+  }
+  pthread_mutex_unlock(&req->sess_map_mtx);
+  return 0;
+}
+
 const char* iwn_wf_session_get(struct iwn_wf_req *req_, const char *key) {
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
@@ -1292,8 +1307,8 @@ void iwn_wf_session_clear(struct iwn_wf_req *req_) {
   struct ctx *ctx = (void*) req->base.ctx;
   if (_request_sid_exists(req)) {
     ctx->sst.clear(&ctx->sst, req->sid);
-    req->sid[0] = 0;
     pthread_mutex_lock(&req->sess_map_mtx);
+    req->sid[0] = 0;
     iwhmap_clear(req->sess_map);
     pthread_mutex_unlock(&req->sess_map_mtx);
   }

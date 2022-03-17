@@ -78,7 +78,6 @@ struct iwn_wf_req {
   struct iwn_wf_route_submatch *last;
   struct iwn_pairs query_params;
   struct iwn_pairs form_params;
-  int64_t  user_id;           ///< Application controlled user id. 
   uint32_t flags;             ///< Request method, form flags.
 };
 
@@ -152,6 +151,8 @@ IW_EXPORT struct iwn_pair iwn_wf_header_part_find(
   const char *part_name);
 
 IW_EXPORT const char* iwn_wf_session_id(struct iwn_wf_req *req);
+
+IW_EXPORT iwrc iwn_wf_session_id_set(struct iwn_wf_req *req, const char *sid);
 
 IW_EXPORT const char* iwn_wf_session_get(struct iwn_wf_req*, const char *key);
 

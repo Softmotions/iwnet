@@ -18,7 +18,8 @@ struct iwn_http_server {
 };
 
 struct iwn_http_req {
-  void *user_data;                                  ///< Request specific user data.
+  void   *user_data;          ///< Request specific user data.
+  int64_t user_id;            ///< Application controlled user id.
   pthread_mutex_t user_mtx;
   uint64_t    user_flags;
   void       *server_user_data;                     ///< User data specified in `iwn_http_server_spec`
