@@ -426,7 +426,7 @@ void iwn_proc_kill(int pid, int signum) {
 
 void iwn_proc_kill_all(int signum) {
   pthread_mutex_lock(&cc.mtx);
-  int len = iwhmap_count(cc.map);
+  int len = cc.map ? iwhmap_count(cc.map) : 0;
   if (len < 1) {
     pthread_mutex_unlock(&cc.mtx);
     return;
