@@ -1240,8 +1240,8 @@ iwrc iwn_wf_session_put(struct iwn_wf_req *req_, const char *key, const char *da
   }
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
-  RCR(_request_sid_ensure(req));
   pthread_mutex_lock(&req->sess_map_mtx);
+  RCR(_request_sid_ensure(req));
   if (req->sess_map) {
     iwhmap_remove(req->sess_map, key);
   }
