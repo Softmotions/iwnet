@@ -47,7 +47,7 @@ static void _route_destroy(struct route *route) {
 static void _route_destroy_deep(struct route *route) {
   for (struct route *r = route->child, *n = 0; r; r = n) {
     n = r->next;
-    _route_destroy(r);
+    _route_destroy_deep(r);
   }
   _route_destroy(route);
 }
