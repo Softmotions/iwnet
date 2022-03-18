@@ -130,6 +130,8 @@ IW_EXPORT WUR iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_r
 
 IW_EXPORT WUR iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec, struct iwn_wf_ctx *ctx);
 
+IW_EXPORT void iwn_wf_route_print(const struct iwn_wf_route*, FILE *out);
+
 IW_EXPORT struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx);
 
 IW_EXPORT int iwn_wf_server_fd_get(struct iwn_wf_ctx *ctx);

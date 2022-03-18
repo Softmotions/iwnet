@@ -287,6 +287,8 @@ int main(int argc, char *argv[]) {
     spec.ssl.certs_len = -1;
   }
 
+  iwn_wf_route_print(ctx->root, stderr);
+
   RCC(rc, finish, iwn_wf_server(&spec, ctx));
 
   iwn_poller_poll(poller);

@@ -1431,6 +1431,106 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
   return 0;
 }
 
+struct _pctx {
+  int   indent;
+  int  *num;
+  FILE *out;
+};
+
+static void _route_print_flags(IWXSTR *xstr, uint32_t f) {
+  int c = 0;
+  if ((f & IWN_WF_METHODS_ALL) == IWN_WF_METHODS_ALL) {
+    iwxstr_cat2(xstr, "ALL");
+    return;
+  }
+  if (f & IWN_WF_GET) {
+    if (c++) {
+      iwxstr_cat2(xstr, ",");
+    }
+    iwxstr_cat2(xstr, "GET");
+  }
+  if (f & IWN_WF_POST) {
+    if (c++) {
+      iwxstr_cat2(xstr, ",");
+    }
+    iwxstr_cat2(xstr, "POST");
+  }
+  if (f & IWN_WF_PUT) {
+    if (c++) {
+      iwxstr_cat2(xstr, ",");
+    }
+    iwxstr_cat2(xstr, "PUT");
+  }
+  if (f & IWN_WF_DELETE) {
+    if (c++) {
+      iwxstr_cat2(xstr, ",");
+    }
+    iwxstr_cat2(xstr, "DELETE");
+  }
+  if (f & IWN_WF_PATCH) {
+    if (c++) {
+      iwxstr_cat2(xstr, ",");
+    }
+    iwxstr_cat2(xstr, "PATCH");
+  }
+  if (f & IWN_WF_HEAD) {
+    if (c++) {
+      iwxstr_cat2(xstr, ",");
+    }
+    iwxstr_cat2(xstr, "HEAD");
+  }
+  if (f & IWN_WF_OPTIONS) {
+    if (c++) {
+      iwxstr_cat2(xstr, ",");
+    }
+    iwxstr_cat2(xstr, "OPTIONS");
+  }
+}
+
+static void _route_print(struct _pctx ctx, struct route *r) {
+  *ctx.num += 1;
+  fprintf(ctx.out, "%04d ", *ctx.num);
+  for (int i = 0; i < ctx.indent; ++i) {
+    fprintf(ctx.out, "  ");
+  }
+  IWXSTR *xstr = iwxstr_new();
+  if (!xstr) {
+    return;
+  }
+  iwxstr_cat2(xstr, r->pattern_re ? "{" : "[");  
+  if (r->base.tag) {
+    iwxstr_cat2(xstr, r->base.tag);
+    iwxstr_cat2(xstr, ":");
+  }
+  if (r->pattern) {
+    iwxstr_cat2(xstr, r->pattern);
+  } else {
+    iwxstr_cat2(xstr, "*");
+  }
+  iwxstr_cat2(xstr, (r->base.flags & IWN_WF_MATCH_PREFIX) ? "> " : "] ");
+  _route_print_flags(xstr, r->base.flags);
+  fprintf(ctx.out, "%s\n", iwxstr_ptr(xstr));
+  iwxstr_destroy(xstr);
+  for (struct route *n = r->child; n; n = n->next) {
+    _route_print((struct _pctx) {
+      .out = ctx.out,
+      .indent = ctx.indent + 1,
+      .num = ctx.num
+    }, n);
+  }
+}
+
+void iwn_wf_route_print(const struct iwn_wf_route *route, FILE *out) {
+  int num = 0;
+  struct route *r = (void*) route;
+  if (r) {
+    _route_print((struct _pctx) {
+      .out = out,
+      .num = &num,
+    }, r);
+  }
+}
+
 #ifdef IW_TESTS
 
 void dbg_route_iter_init(struct request *req, struct route_iter *it) {
