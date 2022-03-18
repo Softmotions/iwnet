@@ -1497,7 +1497,7 @@ static void _route_print(struct _pctx ctx, struct route *r) {
   if (!xstr) {
     return;
   }
-  iwxstr_cat2(xstr, r->pattern_re ? "{" : "[");  
+  iwxstr_cat2(xstr, r->pattern_re ? "{" : "[");
   if (r->base.tag) {
     iwxstr_cat2(xstr, r->base.tag);
     iwxstr_cat2(xstr, ":");
@@ -1508,7 +1508,9 @@ static void _route_print(struct _pctx ctx, struct route *r) {
     iwxstr_cat2(xstr, "*");
   }
   iwxstr_cat2(xstr, (r->base.flags & IWN_WF_MATCH_PREFIX) ? "> " : "] ");
-  _route_print_flags(xstr, r->base.flags);
+  if (r->parent != 0) {
+    _route_print_flags(xstr, r->base.flags);
+  }
   fprintf(ctx.out, "%s\n", iwxstr_ptr(xstr));
   iwxstr_destroy(xstr);
   for (struct route *n = r->child; n; n = n->next) {
