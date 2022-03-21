@@ -937,7 +937,7 @@ static bool _request_routes_process(struct request *req) {
 
   if (ok && rv == 0) { // Delegate all unhandled requests to the root route
     struct ctx *ctx = (void*) req->base.ctx;
-    if (ctx->root->base.handler) {      
+    if (ctx->root->base.handler) {
       req->base.route = &ctx->root->base;
       rv = ctx->root->base.handler(&req->base, ctx->root->base.user_data);
       if (rv > 1) {
@@ -1353,6 +1353,30 @@ iwrc iwn_wf_cookie_add(
 finish:
   iwxstr_destroy(xstr);
   return rc;
+}
+
+struct iwn_wf_route_submatch* iwn_wf_request_submatch_first(const struct iwn_wf_req *req) {
+  struct iwn_wf_route *r = req->route;
+  for (struct iwn_wf_route_submatch *s = req->first; s; s = s->next) {
+    if (s->route == r) {
+      return s;
+    }
+  }
+  return 0;
+}
+
+struct iwn_wf_route_submatch* iwn_wf_request_submatch_last(const struct iwn_wf_req *req) {
+  struct iwn_wf_route *r = req->route;
+  if (req->last->route == r) {
+    return req->last;
+  }
+  struct iwn_wf_route_submatch *ss = 0;
+  for (struct iwn_wf_route_submatch *s = req->first; s; s = s->next) {
+    if (s->route == r) {
+      ss = s;
+    }
+  }
+  return ss;
 }
 
 iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {

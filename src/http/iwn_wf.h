@@ -137,6 +137,10 @@ IW_EXPORT struct iwn_poller* iwn_wf_poller_get(struct iwn_wf_ctx *ctx);
 
 IW_EXPORT int iwn_wf_server_fd_get(struct iwn_wf_ctx *ctx);
 
+IW_EXPORT struct iwn_wf_route_submatch* iwn_wf_request_submatch_first(const struct iwn_wf_req*);
+
+IW_EXPORT struct iwn_wf_route_submatch* iwn_wf_request_submatch_last(const struct iwn_wf_req*);
+
 IW_EXPORT const char* iwn_wf_header_val_part_next(
   const char      *header_val,
   const char      *ptr,
