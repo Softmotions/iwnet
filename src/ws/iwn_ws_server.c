@@ -65,10 +65,10 @@ static void _route_handler_dispose(struct iwn_wf_ctx *ctx, void *user_data) {
 static void _on_request_dispose(struct iwn_http_req *hreq) {
   struct ctx *ctx = iwn_http_request_ws_data(hreq);
   void (*on_request_dispose)(struct iwn_http_req*) = ctx->on_request_dispose;
-  _ctx_destroy(ctx);
   if (on_request_dispose) {
     on_request_dispose(hreq);
   }
+  _ctx_destroy(ctx);
 }
 
 static ssize_t _wslay_recv_callback(
