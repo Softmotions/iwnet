@@ -999,7 +999,7 @@ static bool _request_stream_chunk_process(struct request *req, bool *again) {
       RCN(finish, fflush(req->stream_file));
       RCN(finish, fd = fileno(req->stream_file));
       void *mm = mmap(0, IW_ROUNDUP(req->streamed_bytes + 1, _aunit), PROT_READ | PROT_WRITE, MAP_PRIVATE, fd, 0);
-      if (!mm) {
+      if (mm == MAP_FAILED) {
         rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
         goto finish;
       }
