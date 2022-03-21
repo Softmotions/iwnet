@@ -182,7 +182,7 @@ static void _has_pending_write_bytes_probe(struct iwn_poller *p, void *slot_user
 };
 
 static bool _has_pending_write_bytes(struct iwn_poller_adapter *a) {
-  bool ret;
+  bool ret = false;
   iwn_poller_probe(a->poller, a->fd, _has_pending_write_bytes_probe, &ret);
   return ret;
 };
@@ -194,7 +194,7 @@ static void _arm_needed_probe(struct iwn_poller *p, void *slot_user_data, void *
 };
 
 static bool _arm_needed(struct iwn_poller_adapter *a) {
-  bool ret;
+  bool ret = false;
   iwn_poller_probe(a->poller, a->fd, _arm_needed_probe, &ret);
   return ret;
 };
