@@ -69,15 +69,16 @@ struct iwn_wf_route_submatch {         ///< Route regexp submatch node
 struct iwn_wf_req {
   struct iwn_wf_ctx   *ctx;
   struct iwn_http_req *http;
-  const char *path;           ///< Full request path except query string
+  const char *path;           ///< Full request path except query string.
   const char *path_unmatched; ///< Rest of path not consumed by previous router matcher.
-  const char *path_matched;   ///< Start position of last match section of the path
+  const char *path_matched;   ///< Start position of last match section of the path.
   const char *body;
   size_t      body_len;
   struct iwn_wf_route_submatch *first;
   struct iwn_wf_route_submatch *last;
-  struct iwn_pairs query_params;
-  struct iwn_pairs form_params;
+  struct iwn_wf_route *route; ///< Current route.
+  struct iwn_pairs     query_params;
+  struct iwn_pairs     form_params;
   uint32_t flags;             ///< Request method, form flags.
 };
 

@@ -917,6 +917,7 @@ static bool _request_routes_process(struct request *req) {
           pr = 0;
         }
       }
+      req->base.route = &r->base;
       rv = r->base.handler(&req->base, r->base.user_data);
       if (rv > 0) {
         if (rv > 1) {
@@ -936,7 +937,8 @@ static bool _request_routes_process(struct request *req) {
 
   if (ok && rv == 0) { // Delegate all unhandled requests to the root route
     struct ctx *ctx = (void*) req->base.ctx;
-    if (ctx->root->base.handler) {
+    if (ctx->root->base.handler) {      
+      req->base.route = &ctx->root->base;
       rv = ctx->root->base.handler(&req->base, ctx->root->base.user_data);
       if (rv > 1) {
         ok = iwn_http_response_by_code(req->base.http, rv);
