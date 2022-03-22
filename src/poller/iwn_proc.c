@@ -171,6 +171,7 @@ static struct proc* _proc_create(const struct iwn_proc_spec *spec) {
   proc->pool = pool;
   proc->pid = -1;
   proc->wstatus = -1;
+  proc->user_data = spec->user_data;
   memcpy(&proc->spec, spec, sizeof(*spec));
   for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
     proc->fds[i] = -1;
