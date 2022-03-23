@@ -1189,7 +1189,6 @@ iwrc iwn_wf_session_id_set(struct iwn_wf_req *req_, const char *sid) {
     return IW_ERROR_INVALID_ARGS;
   }
   struct request *req = (void*) req_;
-  struct ctx *ctx = (void*) req->base.ctx;
   pthread_mutex_lock(&req->sess_map_mtx);
   memcpy(req->sid, sid, IWN_WF_SESSION_ID_LEN + 1);
   if (req->sess_map) {
