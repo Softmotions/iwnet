@@ -1327,27 +1327,27 @@ iwrc iwn_wf_cookie_add(
   RCA(xstr = iwxstr_new(), finish);
   RCC(rc, finish, iwxstr_printf(xstr, "%s=\"%s\"", name, value));
   if (opts.max_age_sec < 0) {
-    RCC(rc, finish, iwxstr_cat(xstr, "; max-age=0", IW_LLEN("; max-age=0")));
+    RCC(rc, finish, iwxstr_cat(xstr, "; Max-Age=0", IW_LLEN("; Max-Age=0")));
   } else if (opts.max_age_sec > 0) {
-    RCC(rc, finish, iwxstr_printf(xstr, "; max-age=%d", opts.max_age_sec));
+    RCC(rc, finish, iwxstr_printf(xstr, "; Max-Age=%d", opts.max_age_sec));
   }
   if (opts.path) {
-    RCC(rc, finish, iwxstr_printf(xstr, "; path=\"%s\"", opts.path));
+    RCC(rc, finish, iwxstr_printf(xstr, "; Path=%s", opts.path));
   }
   if (opts.domain) {
-    RCC(rc, finish, iwxstr_printf(xstr, "; domain=\"%s\"", opts.domain));
+    RCC(rc, finish, iwxstr_printf(xstr, "; Domain=%s", opts.domain));
   }
   if (opts.httponly) {
-    RCC(rc, finish, iwxstr_cat(xstr, "; httponly", IW_LLEN("; httponly")));
+    RCC(rc, finish, iwxstr_cat(xstr, "; Httponly", IW_LLEN("; Httponly")));
   }
   if (opts.secure || iwn_http_request_is_secure(req->http)) {
-    RCC(rc, finish, iwxstr_cat(xstr, "; secure", IW_LLEN("; secure")));
+    RCC(rc, finish, iwxstr_cat(xstr, "; Secure", IW_LLEN("; Secure")));
   }
   if (opts.extra) {
     RCC(rc, finish, iwxstr_cat2(xstr, opts.extra));
   }
 
-  rc = iwn_http_response_header_add(req->http, "set-cookie", iwxstr_ptr(xstr), iwxstr_size(xstr));
+  rc = iwn_http_response_header_add(req->http, "Set-Cookie", iwxstr_ptr(xstr), iwxstr_size(xstr));
 
 finish:
   iwxstr_destroy(xstr);
