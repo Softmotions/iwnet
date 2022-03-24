@@ -23,7 +23,7 @@
 #define FDS_STDIN  2
 
 struct proc {
-  int   pid;
+  pid_t   pid;
   int   wstatus;
   void *user_data;
 
@@ -143,6 +143,14 @@ static void _proc_unref(pid_t pid, int wstatus) {
   }
   pthread_cond_broadcast(&cc.cond);
   pthread_mutex_unlock(&cc.mtx);
+}
+
+ void iwn_proc_ref(pid_t pid) {
+   _proc_ref(pid);
+ }
+
+void iwn_proc_unref(pid_t pid) {
+  _proc_unref(pid, -1);
 }
 
 static void _proc_wait_worker(void *arg) {
@@ -371,7 +379,7 @@ static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) 
   return ret;
 }
 
-iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close) {
+iwrc iwn_proc_stdin_write(pid_t pid, const void *buf, size_t len, bool close) {
   iwrc rc = 0;
   struct proc *proc = _proc_ref(pid);
   if (!proc) {
@@ -395,11 +403,11 @@ finish:
   return rc;
 }
 
-iwrc iwn_proc_stdin_close(int pid) {
+iwrc iwn_proc_stdin_close(pid_t pid) {
   return iwn_proc_stdin_write(pid, "", 0, true);
 }
 
-iwrc iwn_proc_wait(int pid) {
+iwrc iwn_proc_wait(pid_t pid) {
   pthread_mutex_lock(&cc.mtx);
   struct proc *proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
   if (!proc) {
@@ -421,7 +429,7 @@ iwrc iwn_proc_wait(int pid) {
   return 0;
 }
 
-void iwn_proc_kill(int pid, int signum) {
+void iwn_proc_kill(pid_t pid, int signum) {
   kill(pid, signum);
 }
 
@@ -491,7 +499,7 @@ static void _kill_ensure_task(void *arg) {
   }
 }
 
-iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, int pid, int signum, int max_attempts, int last_signum) {
+iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, pid_t pid, int signum, int max_attempts, int last_signum) {
   if (getpgid(pid) == -1) {
     return 0;
   }
@@ -524,7 +532,7 @@ iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, int pid, int signum, int ma
   return rc;
 }
 
-iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
+iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
   iwrc rc = 0;
   if (!spec || !spec->path || !spec->poller || !out_pid) {
     return IW_ERROR_INVALID_ARGS;
@@ -608,6 +616,9 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
         rc = 0;
       }
     }
+    if (spec->on_fork) {
+      spec->on_fork((void*) proc, pid);
+    }
   } else if (pid == 0) { // Child
     if (fds[1] > -1) {
       while ((dup2(fds[1], STDOUT_FILENO) == -1) && (errno == EINTR));
@@ -624,7 +635,9 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid) {
       close(fds[4]);
       close(fds[5]);
     }
-
+    if (spec->on_fork) {
+      spec->on_fork((void*) proc, 0);
+    }
     RCN(child_exit, execve(proc->path, proc->argv, proc->envp));
     goto child_exit;
   } else {

@@ -6,7 +6,7 @@ IW_EXTERN_C_START
 
 struct iwn_proc_ctx {
   /// Child pid.
-  int pid;
+  pid_t pid;
 
   /// Child process wait status: `man 2 wait`
   int wstatus;
@@ -41,23 +41,30 @@ struct iwn_proc_spec {
   /// On child process exit.
   void (*on_exit)(const struct iwn_proc_ctx *ctx_exit);
 
+  /// On fork handler. We are on the child side if pid is zero.
+  void (*on_fork)(const struct iwn_proc_ctx *ctx, pid_t pid);
+
   /// It true set the ability to write into stdin of the child process
   bool write_stdin;
 };
 
 IW_EXPORT iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid);
 
-IW_EXPORT iwrc iwn_proc_wait(int pid);
+IW_EXPORT iwrc iwn_proc_wait(pid_t pid);
 
-IW_EXPORT iwrc iwn_proc_stdin_write(int pid, const void *buf, size_t len, bool close);
+IW_EXPORT iwrc iwn_proc_stdin_write(pid_t pid, const void *buf, size_t len, bool close);
 
-IW_EXPORT iwrc iwn_proc_stdin_close(int pid);
+IW_EXPORT iwrc iwn_proc_stdin_close(pid_t pid);
 
-IW_EXPORT void iwn_proc_kill(int pid, int signum);
+IW_EXPORT void iwn_proc_kill(pid_t pid, int signum);
 
 IW_EXPORT void iwn_proc_kill_all(int signum);
 
-IW_EXPORT iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, int pid, int signum, int max_attempts, int last_signum);
+IW_EXPORT iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, pid_t pid, int signum, int max_attempts, int last_signum);
+
+IW_EXPORT void iwn_proc_ref(pid_t pid);
+
+IW_EXPORT void iwn_proc_unref(pid_t pid);
 
 IW_EXPORT void iwn_proc_dispose(void);
 
