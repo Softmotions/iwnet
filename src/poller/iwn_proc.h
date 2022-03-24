@@ -48,7 +48,7 @@ struct iwn_proc_spec {
   bool write_stdin;
 };
 
-IW_EXPORT iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, int *out_pid);
+IW_EXPORT iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid);
 
 IW_EXPORT iwrc iwn_proc_wait(pid_t pid);
 
