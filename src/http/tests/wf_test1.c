@@ -75,6 +75,16 @@ finish:
   return rc;
 }
 
+static iwrc test_header_parsing(void) {
+  iwrc rc = 0;
+  const char *rp = "_ga=GA1.2.258852180.1582174090; sessionid=AJyF7R984Ezziz7nYgmezxtxmMbT1Cyr\r\nU";
+  const char *ep = strchr(rp, '\r');
+  IWN_ASSERT_FATAL(ep);
+  struct iwn_pair pv = iwn_wf_header_val_part_find(rp, ep, "sessionid");
+  
+  return rc;
+}
+
 static iwrc test_simple_matching(void) {
   iwrc rc = 0;
   struct route_iter it = { 0 };
@@ -281,7 +291,7 @@ static void _multipart_parsing3(IWPOOL *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
+  IWN_ASSERT(cp);
   IWN_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
@@ -395,6 +405,7 @@ static iwrc test_multipart_parsing(void) {
 
 int main(int argc, char *argv[]) {
   iwrc rc = 0;
+  //RCC(rc, finish, test_header_parsing());
   RCC(rc, finish, test_simple_matching());
   RCC(rc, finish, test_regexp_matching());
   RCC(rc, finish, test_multipart_parsing());

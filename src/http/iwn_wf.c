@@ -385,6 +385,10 @@ static const char* _header_parse_next_parameter2(
   bool header_value, const char *rp, const char *ep,
   struct iwn_pair *kv
   ) {
+  if (rp >= ep || _c_is_lsep(*rp)) {
+    return 0;
+  }
+
   bool in_quote = false, in_key = true, expect_eq = false, val_escaped = false;
   const char *ks = rp, *ke = ks;
   const char *vs = 0, *ve = 0;
@@ -400,7 +404,11 @@ static const char* _header_parse_next_parameter2(
             ke = ++ks;
           }
           ++rp;
-        } else if (*rp == ';' || _c_is_lsep(*rp)) {
+        } else if (*rp == ';') {
+          vs = ve = rp;
+          ++rp;
+          break;
+        } else if (_c_is_lsep(*rp)) {
           vs = ve = rp;
           break;
         } else if ((*rp == '/' && ke != ks) || _c_is_token(*rp, false)) { // Allow '/' in header value
@@ -423,6 +431,7 @@ static const char* _header_parse_next_parameter2(
           ++rp;
         } else if (!expect_eq && *rp == ';') {
           vs = ve = rp;
+          ++rp;
           break;
         } else if (!expect_eq && _c_is_token(*rp, false)) {
           ++rp;
@@ -447,7 +456,11 @@ static const char* _header_parse_next_parameter2(
         in_quote = true;
         vs = ++rp;
         ve = vs;
-      } else if (*rp == ';' || _c_is_blank(*rp)) {
+      } else if (*rp == ';' || _c_is_space(*rp)) {
+        ve = rp;
+        ++rp;
+        break;
+      } else if (_c_is_lsep(*rp)) {
         ve = rp;
         break;
       } else if (_c_is_token(*rp, true)) {
@@ -479,14 +492,9 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
     return 0;
   }
   bool header_value = *rp == ':'; // Start if header value
-  if (!header_value) {
-    for ( ; rp < ep && *rp != ';'; ++rp) {
-      if (_c_is_lsep(*rp)) {
-        return 0;
-      }
-    }
+  if (header_value) {
+    ++rp;
   }
-  ++rp;
   return _header_parse_next_parameter2(header_value, rp, ep, kv);
 }
 
