@@ -861,6 +861,19 @@ bool iwn_poller_probe(struct iwn_poller *p, int fd, iwn_poller_probe_fn probe, v
   }
 }
 
+static void* _poll_worker(void *d) {
+  struct iwn_poller *p = d;
+  iwn_poller_poll(p);
+  return 0;
+}
+
+iwrc iwn_poller_poll_in_thread(struct iwn_poller *p, pthread_t *out_thr) {
+  iwrc rc = 0;
+  RCN(finish, pthread_create(out_thr, 0, _poll_worker, p));
+finish:
+  return rc;
+}
+
 void iwn_poller_poll(struct iwn_poller *p) {
   int max_events = p->max_poll_events;
 

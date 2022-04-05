@@ -2,6 +2,7 @@
 
 #include <iowow/basedefs.h>
 
+#include <pthread.h>
 #include <stdint.h>
 
 IW_EXTERN_C_START
@@ -67,6 +68,8 @@ IW_EXPORT void iwn_poller_destroy(struct iwn_poller **pp);
 IW_EXPORT iwrc iwn_poller_task(struct iwn_poller*, void (*task)(void*), void *arg);
 
 IW_EXPORT void iwn_poller_poll(struct iwn_poller*);
+
+IW_EXPORT iwrc iwn_poller_poll_in_thread(struct iwn_poller*, pthread_t *out_thr);
 
 IW_EXPORT bool iwn_poller_alive(struct iwn_poller*);
 
