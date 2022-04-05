@@ -467,6 +467,7 @@ void iwn_proc_kill_all(int signum) {
   while (pids[len] != -1) {
     kill(pids[len++], signum);
   }
+  free(pids);
 }
 
 struct ktask {
