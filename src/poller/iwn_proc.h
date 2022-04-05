@@ -52,6 +52,8 @@ IW_EXPORT iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid);
 
 IW_EXPORT iwrc iwn_proc_wait(pid_t pid);
 
+IW_EXPORT void iwn_proc_wait_all(void);
+
 IW_EXPORT iwrc iwn_proc_stdin_write(pid_t pid, const void *buf, size_t len, bool close);
 
 IW_EXPORT iwrc iwn_proc_stdin_close(pid_t pid);

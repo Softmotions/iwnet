@@ -23,7 +23,7 @@
 #define FDS_STDIN  2
 
 struct proc {
-  pid_t   pid;
+  pid_t pid;
   int   wstatus;
   void *user_data;
 
@@ -145,9 +145,9 @@ static void _proc_unref(pid_t pid, int wstatus) {
   pthread_mutex_unlock(&cc.mtx);
 }
 
- void iwn_proc_ref(pid_t pid) {
-   _proc_ref(pid);
- }
+void iwn_proc_ref(pid_t pid) {
+  _proc_ref(pid);
+}
 
 void iwn_proc_unref(pid_t pid) {
   _proc_unref(pid, -1);
@@ -427,6 +427,17 @@ iwrc iwn_proc_wait(pid_t pid) {
   }
   pthread_mutex_unlock(&cc.mtx);
   return 0;
+}
+
+void iwn_proc_wait_all(void) {
+  pthread_mutex_lock(&cc.mtx);
+  do {
+    if (!cc.map || iwhmap_count(cc.map) == 0) {
+      break;
+    }
+    pthread_cond_wait(&cc.cond, &cc.mtx);
+  } while (1);
+  pthread_mutex_unlock(&cc.mtx);
 }
 
 void iwn_proc_kill(pid_t pid, int signum) {
