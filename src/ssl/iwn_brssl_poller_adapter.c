@@ -288,7 +288,19 @@ finish:
   if (br_ssl_engine_current_state(cc) == BR_SSL_CLOSED) {
     int err = br_ssl_engine_last_error(cc);
     if (err != BR_ERR_OK) {
-      iwlog_warn("brssl | error code: %d", err);
+#ifdef _DEBUG
+      const char *comment = 0;
+      const char *error = find_error_name(err, &comment);
+      if (error) {
+        if (comment) {
+          iwlog_debug("brssl | error code: %d, %s, %s", err, error, comment);
+        } else {
+          iwlog_debug("brssl | error code: %d, %s", err, error);
+        }
+      } else {
+        iwlog_debug("brssl | error code: %d", err);
+      }
+#endif
     }
   }
 
