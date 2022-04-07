@@ -36,7 +36,7 @@ if(CMAKE_CROSSCOMPILING)
   endforeach()
 
 else(!CMAKE_CROSSCOMPILING)
-  add_custom_target(tools DEPENDS ${_TOOLS_LIST})
+  add_custom_target(host_tools DEPENDS ${_TOOLS_LIST})
 endif(CMAKE_CROSSCOMPILING)
 
 add_executable(strliteral strliteral.c)
