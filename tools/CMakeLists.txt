@@ -32,7 +32,12 @@ if(CMAKE_CROSSCOMPILING)
   include(${CMAKE_CURRENT_BINARY_DIR}/host_tools/host_tools.cmake)
 
   foreach(tgt IN ITEMS ${_TOOLS_LIST})
-    add_dependencies(host${tgt} host_tools)
+    add_custom_target(
+      host${tgt}ninja
+      COMMAND echo ''
+      DEPENDS host_tools
+      BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/host_tools/${tgt})
+    add_dependencies(host${tgt} host${tgt}ninja)
   endforeach()
 
 else(!CMAKE_CROSSCOMPILING)
@@ -66,14 +71,13 @@ add_custom_command(
     ${CMAKE_SOURCE_DIR}/tools/cacert.pem >
     "${CMAKE_BINARY_DIR}/include/data_cacert.inc")
 
- 
 add_custom_command(
   OUTPUT "${CMAKE_BINARY_DIR}/include/generated_mimegen.h"
   DEPENDS hostmimegen
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   USES_TERMINAL
   COMMAND cmake -E make_directory ${CMAKE_BINARY_DIR}/include
-  COMMAND $<TARGET_FILE:hostmimegen> "./mime.types" > "${CMAKE_BINARY_DIR}/include/generated_mimegen.h"
-)
+  COMMAND $<TARGET_FILE:hostmimegen> "./mime.types" >
+          "${CMAKE_BINARY_DIR}/include/generated_mimegen.h")
 
 add_custom_target(generated DEPENDS ${_TARGETS})
