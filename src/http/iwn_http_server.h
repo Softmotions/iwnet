@@ -1,5 +1,7 @@
 #pragma once
 
+/// Low level HTTP server.
+
 #include "iwn_poller_adapter.h"
 #include "iwn_pairs.h"
 
