@@ -77,7 +77,6 @@ struct header {
   char *name;
   char *value;
   struct header *next;
-  bool exclude;
 };
 
 struct response {
@@ -1082,13 +1081,6 @@ const char* iwn_http_request_remote_ip(struct iwn_http_req *request) {
   return client->ip;
 }
 
-void iwn_http_request_free(struct iwn_http_req *request) {
-  struct client *client = (void*) request;
-  _request_data_free(client);
-  _stream_free_buffer(client);
-  _tokens_free_buffer(client);
-}
-
 struct iwn_val iwn_http_request_target(struct iwn_http_req *request) {
   return _token_get_string((void*) request, HS_TOK_TARGET);
 }
@@ -1380,16 +1372,6 @@ iwrc iwn_http_response_header_printf(
   return rc;
 }
 
-void iwn_http_response_header_exclude(struct iwn_http_req *request, const char *header_name) {
-  struct client *client = (void*) request;
-  struct response *response = &client->response;
-  for (struct header *h = response->headers; h; h = h->next) {
-    if (header_name[0] == '\0' || strcasecmp(h->name, header_name) == 0) {
-      h->exclude = true;
-    }
-  }
-}
-
 void iwn_http_response_body_clear(struct iwn_http_req *request) {
   struct client *client = (void*) request;
   if (client->response.body) {
@@ -1489,11 +1471,6 @@ static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *x
 
 finish:
   return rc;
-}
-
-iwrc iwn_http_response_headers_flush_into(struct iwn_http_req *request, IWXSTR *xstr) {
-  struct client *client = (void*) request;
-  return _client_response_headers_write_http(client, xstr);
 }
 
 IW_INLINE void _client_response_setbuf(struct client *client, IWXSTR *xstr) {
