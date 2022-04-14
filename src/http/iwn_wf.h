@@ -81,8 +81,8 @@ struct iwn_wf_req;
 ///
 /// - If returned value is greater than `1` it will be interpreted as HTTP status code and
 ///   appropriate client response will be generated.
-/// - `0`  (IWN_WF_RES_NOT_PROCESSED) Handler doesn't write a response. Next matched routes will be processed.
-/// - `1`  (IWN_WF_RES_PROCESSED) Request was fully processed by handler and HTTP response has been sent to client.
+/// - ` 0` (IWN_WF_RES_NOT_PROCESSED) Handler doesn't write a response. Next matched routes will be processed.
+/// - ` 1` (IWN_WF_RES_PROCESSED) Request was fully processed by handler and HTTP response has been sent to client.
 /// - `-1` (IWN_WF_RES_CONNECTION_CLOSE) Request connection should be closed, response should be aborted.
 /// - `-2` (IWN_WF_RES_SKIP_CHILD_ROUTES) Skip processing of child routes.
 ///
