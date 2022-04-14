@@ -1,4 +1,4 @@
-# IWN_WF Asynchronous Web Server Framework
+# IWN_WF Asynchronous HTTP Framework
 
 ## Examples
 ### Simple echo server
@@ -99,7 +99,7 @@ finish:
   curl -XPUT -d'Hello' https://localhost:8080/echo
 ```
 
-### TODO list REST API server
+### Todo list REST API server
 
 [todolist_http_server.c](./examples/todolist_http_server.c)
 
