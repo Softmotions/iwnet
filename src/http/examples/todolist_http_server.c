@@ -108,9 +108,10 @@ static int _todo_list(struct iwn_wf_req *req, void *user_data) {
 
   // For the sake of simplicity response is not streamed and assembled as buffer.
   RCB(finish, xstr = iwxstr_new());
-
+  
+  iwxstr_printf(xstr, "#   Done\tTitle\tDescription\n");
   for (struct item *n = items; n; n = n->next) {
-    iwxstr_printf(xstr, "%03d %s\t%s\n", n->id, n->title, n->body);
+    iwxstr_printf(xstr, "%03d %s\t%s\t%s\n", n->id, (n->done ? "done" : ""), n->title, n->body);
   }
 
   if (iwn_http_response_write(req->http, 200, "text/plain", iwxstr_ptr(xstr), iwxstr_size(xstr))) {
