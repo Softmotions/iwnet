@@ -1,6 +1,9 @@
 #pragma once
 
-/// File/socket/etc descriptors poller reactor.
+/// File/socket/etc descriptors polling reactor.
+///
+/// - On Linux `epoll` used.
+/// - On Apple, FreeBSD `kqueue` used.
 
 #include <iowow/basedefs.h>
 
@@ -40,7 +43,7 @@ IW_EXTERN_C_START
 struct iwn_poller;
 
 /// File descriptor poller monitoring task.
-struct iwn_poller_task {                                         
+struct iwn_poller_task {
   int      fd;                                                   ///< File descriptor beeng polled
   void    *user_data;                                            ///< Arbitrary user data associated with poller_task
   int64_t  (*on_ready)(const struct iwn_poller_task*, uint32_t); ///< On fd event ready
@@ -62,9 +65,9 @@ typedef void (*iwn_poller_probe_fn)(struct iwn_poller*, void *slot_user_data, vo
 ///
 /// @param num_threads Number of threads to process polled events.
 ///                    If zero number of cpu cores will be used.
-/// @param one_shot_events Number of events to take for each poll iteration. 
-///                        If zero fallback value will be used. 
-/// @param[out] Output poller holder.                        
+/// @param one_shot_events Number of events to take for each poll iteration.
+///                        If zero fallback value will be used.
+/// @param[out] Output poller holder.
 ///
 IW_EXPORT iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iwn_poller **out_poller);
 
@@ -103,6 +106,8 @@ IW_EXPORT iwrc iwn_poller_poll_in_thread(struct iwn_poller*, pthread_t *out_thr)
 /// Returns `true` if poller event loop is alive.
 IW_EXPORT bool iwn_poller_alive(struct iwn_poller*);
 
+/// Runs a given `probe` callback in the context of polled filed descriptor `fd`.
+/// All fd related data structures will be alive during callback call.
 IW_EXPORT bool iwn_poller_probe(struct iwn_poller*, int fd, iwn_poller_probe_fn probe, void *fn_user_data);
 
 IW_EXTERN_C_END

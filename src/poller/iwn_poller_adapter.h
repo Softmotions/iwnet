@@ -1,5 +1,8 @@
 #pragma once
 
+/// Proxy layer for fd polled events.
+/// @see iwn_brssl_poller_adapter.c
+
 #include "iwn_poller.h"
 
 IW_EXTERN_C_START
