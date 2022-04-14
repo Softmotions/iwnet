@@ -105,7 +105,7 @@ finish:
 
 ### Todo list REST API server
 
-[todolist_http_server.c](./examples/todolist_http_server.c)
+[todolist_http_server.c](https://github.com/Softmotions/iwnet/tree/master/src/http/examples/todolist_http_server.c)
 
 ```sh
 ./todolist_http_server --ssl
@@ -139,6 +139,6 @@ finish:
 You may find many helpful code examples by looking into 
 [framework test code](./tests)
 
-* [server2.c](./tests/server2.c)
-* [server1.c](./tests/server1.c)
+* [server2.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server2.c)
+* [server1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server1.c)
 
