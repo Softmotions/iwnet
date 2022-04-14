@@ -17,6 +17,7 @@ Works on Linux, macOS, FreeBSD
 
 **Prerequisites**
 
+* Linux, macOS or FreeBSD
 * CMake 3.12 or greater
 * gcc or clang compiler 
 * GNU Make or Ninja 
