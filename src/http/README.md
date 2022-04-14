@@ -1,7 +1,7 @@
-# IWNET Asynchronous HTTP Framework
+## Asynchronous HTTP Framework
 
-## Examples
-### Simple echo server
+### Examples
+#### Simple echo server
 
 ```sh
   ./echo_http_server --ssl
@@ -103,7 +103,7 @@ finish:
 }
 ```
 
-### Todo list REST API server
+#### Todo list REST API server
 
 [todolist_http_server.c](https://github.com/Softmotions/iwnet/tree/master/src/http/examples/todolist_http_server.c)
 
@@ -134,10 +134,10 @@ finish:
 	curl -k -XPOST -d'id=2&done=1' https://localhost:8080/todo
 ```
 
-### More examples 
+#### More examples 
 
 You may find many helpful code examples by looking into 
-[framework test code](./tests)
+[framework test code]((https://github.com/Softmotions/iwnet/tree/master/src/http/tests)
 
 * [server2.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server2.c)
 * [server1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server1.c)
