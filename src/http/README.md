@@ -1,11 +1,9 @@
-/// Sample echo HTTP server.
-///
-/// Run server:
-///   ./echo_http_server --ssl
-///
-/// Client:
-///  curl -XPUT -d'Hello' http://localhost:8080/echo
+# IWN_WF Asynchronous Web Server Framework
 
+## Examples
+### Simple echo server
+
+```c
 #include "iwn_wf.h"
 
 #include <iowow/iwconv.h>
@@ -93,3 +91,41 @@ finish:
     return EXIT_SUCCESS;
   }
 }
+```
+
+```sh
+  ./echo_http_server --ssl
+ 
+  curl -XPUT -d'Hello' https://localhost:8080/echo
+```
+
+### TODO list REST API server
+
+[todolist_http_server.c](./examples/todolist_http_server.c)
+
+```sh
+./todolist_http_server --ssl
+0001 [root:*] 
+0002   [/todo> ALL
+0003     {create:/([a-zA-z]+[a-z0-9A-Z]*)] PUT
+0004     {get:/([0-9]+)] GET
+0005     {remove:/([0-9]+)] DELETE
+0006     [list:*] GET
+0007     [done:*] POST
+
+ Create a new 'Hello' todo entry:
+	curl -k -XPUT -d'Say Hello' https://localhost:8080/todo/Hello
+	curl -k -XPUT -d'Say Hello' https://localhost:8080/todo/Hello?done=1
+
+ List all todo list items:
+	curl -k https://localhost:8080/todo
+
+ Get task #1 details:
+	curl -k https://localhost:8080/todo/1
+
+ Remove task #2 from todo list:
+	curl -k -XDELETE https://localhost:8080/todo/2
+
+ Update done status of task #2:
+	curl -k -XPOST -d'id=2&done=1' https://localhost:8080/todo
+```
