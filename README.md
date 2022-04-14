@@ -13,7 +13,7 @@ Works on Linux, macOS, FreeBSD
 * Child process manager ([iwn_proc.h](./src/poller/iwn_proc.h))
 * Timer ([iwn_scheduler.h](./src/poller/iwn_scheduler.h))
 
-# Build from sources
+## Build from sources
 
 **Prerequisites**
 
@@ -36,7 +36,7 @@ make
 # Used by
 
 * [EJDB2 Embeddable JSON Database engine](https://ejdb.org)
-* [Wirow video conferencing server](https://wirow.io)
+* [Wirow video conferencing platform](https://wirow.io)
 
 
 
