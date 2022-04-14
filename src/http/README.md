@@ -1,7 +1,17 @@
-# IWN_WF Asynchronous HTTP Framework
+# IWNET Asynchronous HTTP Framework
 
 ## Examples
 ### Simple echo server
+
+```sh
+  ./echo_http_server --ssl
+ 
+  curl -XPUT -d'Hello' https://localhost:8080/echo
+  Hello
+  I'm an echo web server
+```
+
+echo_http_server.c
 
 ```c
 #include "iwn_wf.h"
@@ -93,12 +103,6 @@ finish:
 }
 ```
 
-```sh
-  ./echo_http_server --ssl
- 
-  curl -XPUT -d'Hello' https://localhost:8080/echo
-```
-
 ### Todo list REST API server
 
 [todolist_http_server.c](./examples/todolist_http_server.c)
@@ -129,3 +133,12 @@ finish:
  Update done status of task #2:
 	curl -k -XPOST -d'id=2&done=1' https://localhost:8080/todo
 ```
+
+### More examples 
+
+You may find many helpful code examples by looking into 
+[framework test code](./tests)
+
+* [server2.c](./tests/server2.c)
+* [server1.c](./tests/server1.c)
+

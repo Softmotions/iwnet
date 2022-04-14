@@ -204,8 +204,6 @@ static int _todo_remove(struct iwn_wf_req *req, void *user_data) {
 ///
 static int _todo_done(struct iwn_wf_req *req, void *user_data) {
   int id;
-  bool done;
-
   struct iwn_val val = iwn_pair_find_val(&req->form_params, "id", IW_LLEN("id"));
   if (!val.len) {
     return 400;

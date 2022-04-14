@@ -76,7 +76,7 @@ int main(int argc, char *argv[]) {
   // Configure HTTP server.
   RCC(rc, finish, iwn_wf_server(&spec, ctx));
   fprintf(stderr,
-          "\nOpen terminal and run:\n\tcurl -k -XPUT -d'Hello' %s://%s:%d\n",
+          "\nOpen terminal and run:\n\tcurl -k -XPUT -d'Hello' %s://%s:%d/echo\n",
           (ssl ? "https" : "http"),
           spec.listen,
           spec.port);
