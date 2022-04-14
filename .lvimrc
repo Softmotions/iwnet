@@ -23,6 +23,7 @@ nnoremap <leader>cc :call asyncrun#run('',
         \ {'mode':'bang','cwd':g:build_dir,'save':2},
         \ 'cmake .. -DCMAKE_BUILD_TYPE='.g:build_type
         \.' -DBUILD_TESTS='.g:build_tests
+        \.' -DBUILD_EXAMPLES=ON'
         \.' -DCMAKE_CXX_COMPILER='.g:cxx
         \.' -DCMAKE_C_COMPILER='.g:cc
         \.' -DCMAKE_EXPORT_COMPILE_COMMANDS=ON')

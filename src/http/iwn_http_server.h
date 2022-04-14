@@ -42,12 +42,12 @@ typedef bool (*iwn_http_server_request_handler)(struct iwn_http_req*);
 typedef bool (*iwn_http_server_chunk_handler)(struct iwn_http_req*, bool *again);
 
 struct iwn_http_server_ssl_spec {
-  const char *certs;
-  const char *private_key;
-  ssize_t     certs_len;
-  ssize_t     private_key_len;
-  bool private_key_in_buffer; ///< true if `certs_data` specified as data buffer rather a file name.
-  bool certs_in_buffer;       ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
+  const char *certs;           ///< PEM certificates text data or path to PEM file.
+  const char *private_key;     ///< PEM private key text data or path to PEM file.
+  ssize_t     certs_len;       ///< -1 If `certs` data is a file path.
+  ssize_t     private_key_len; ///< -1 If `private_key` data is a file path.
+  bool private_key_in_buffer;  ///< true if `certs_data` specified as data buffer rather a file name.
+  bool certs_in_buffer;        ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
 };
 
 struct iwn_http_server_spec {

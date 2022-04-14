@@ -3,7 +3,7 @@
 /// High level HTTP web-framework.
 
 #include "iwn_http_server.h"
-
+#include <iowow/iwlog.h>
 #include <stdio.h>
 
 IW_EXTERN_C_START
@@ -167,8 +167,9 @@ struct iwn_wf_ctx {
 /// Create a web-framework context.
 /// Web-framework context must be created with root route configuration.
 /// Root route handler will be called for requests not handled by other route handlers.
-/// @param root Root route configuration. Pattern doesn't makes sense for root router.
+/// @param root Optional. Root route configuration. Pattern doesn't makes sense for root router.
 /// @param[out] Output context. Should be disposed by `iwn_wf_destroy()`
+///
 IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root, struct iwn_wf_ctx **out_ctx);
 
 /// Register new route.

@@ -2,6 +2,7 @@
 #include "iwn_wf_sst_inmem.h"
 #include "iwn_codec.h"
 
+#include <iowow/iowow.h>
 #include <iowow/iwp.h>
 #include <iowow/iwxstr.h>
 #include <iowow/iwre.h>
@@ -22,6 +23,7 @@ static void _response_headers_write(struct iwn_http_req *hreq);
 IW_INLINE iwrc _init(void) {
   static bool _initialized;
   if (__sync_bool_compare_and_swap(&_initialized, false, true)) {
+    RCR(iw_init());
     RCR(iwlog_register_ecodefn(_ecodefn));
     _aunit = iwp_alloc_unit();
   }
@@ -1150,14 +1152,17 @@ iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_rou
 }
 
 iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx) {
+  RCR(_init());
   if (!out_ctx) {
     return IW_ERROR_INVALID_ARGS;
   }
+  struct iwn_wf_route default_root_route = {
+    .tag = "root"
+  };
   *out_ctx = 0;
   if (!root_route_spec) {
-    return IW_ERROR_INVALID_ARGS;
+    root_route_spec = &default_root_route;
   }
-  RCR(_init());
   IWPOOL *pool = iwpool_create_empty();
   if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
