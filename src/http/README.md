@@ -137,7 +137,7 @@ finish:
 #### More examples 
 
 You may find many helpful code examples by looking into 
-[framework test code]((https://github.com/Softmotions/iwnet/tree/master/src/http/tests)
+[framework test code](https://github.com/Softmotions/iwnet/tree/master/src/http/tests)
 
 * [server2.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server2.c)
 * [server1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server1.c)
