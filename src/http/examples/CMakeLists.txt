@@ -7,3 +7,4 @@ file(
   PATTERN "*.pem")
 
 add_executable(echo_http_server echo_http_server.c)
+add_executable(todolist_http_server todolist_http_server.c)

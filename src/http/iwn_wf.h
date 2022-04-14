@@ -73,12 +73,22 @@ struct iwn_wf_req;
 
 /// Route request handler.
 ///
-/// A handler function is called when request is matched the route configuration (path and method) associated with
-/// handler. Handler user data `user_data` is supplied from route configuration iwn_wf_route::user_data
+/// This handler function is called when request is matched to its route configuration:
+/// - iwn_wf_route::pattern
+/// - iwn_wf_route::flags
 ///
-/// - If return value greater than `1` it will be interpreted as response status code.
-/// - `-1` will abort response and close connection.
-/// - `1` Means request was processed handler and response wrote to client.
+/// Handler user data `user_data` is supplied from route configuration iwn_wf_route::user_data.
+///
+/// - If returned value is greater than `1` it will be interpreted as HTTP status code and
+///   appropriate client response will be generated.
+/// - `0`  (IWN_WF_RES_NOT_PROCESSED) Handler doesn't write a response. Next matched routes will be processed.
+/// - `1`  (IWN_WF_RES_PROCESSED) Request was fully processed handler and HTTP response sent to client.
+/// - `-1` (IWN_WF_RES_CONNECTION_CLOSE) Request connection should be closed, abort the response.
+/// - `-2` (IWN_WF_RES_SKIP_CHILD_ROUTES) Skip processing of child routes.
+///
+/// @warning Double check what handler function will always return `1` (IWN_WF_RES_PROCESSED)
+///          if `iwn_http_response_write()` or `iwn_http_response_printf()` was called by handler.
+///          Otherwise app will meet undefined memory access behavior.
 ///
 /// @see wf_handler_return_value
 typedef int (*iwn_wf_handler)(struct iwn_wf_req*, void *user_data);
@@ -106,10 +116,19 @@ struct iwn_wf_req {
   size_t      body_len;                ///< Length of request body.
   struct iwn_wf_route_submatch *first; ///< First regexp request path submatch.
   struct iwn_wf_route_submatch *last;  ///< Last regexp request path submatch.
-  struct iwn_wf_route *route;          ///< Current processed route.
-  struct iwn_pairs     query_params;   ///< Request URL query parameters list.
-  struct iwn_pairs     form_params;    ///< Request form data parameters list.
-  uint32_t flags;                      ///< Request method, form flags.
+  struct iwn_wf_route *route;          ///< Current route processed by route handler.
+
+  /// Request URL query parameters list.
+  /// @note key/value buffers are zero terminated strings.
+  struct iwn_pairs query_params;
+
+  /// Request form data parameters list.
+  /// @note key/value buffers are zero terminated strings.
+  struct iwn_pairs form_params;
+
+  /// Request method, form flags.
+  /// see IWN_WF_<METHOD>, IWN_WF_FORM_MULTIPART,IWN_WF_FORM_URL_ENCODED
+  uint32_t flags;
 };
 
 /// Web-framework Route configuration.
@@ -166,7 +185,7 @@ struct iwn_wf_ctx {
 
 /// Create a web-framework context.
 /// Web-framework context must be created with root route configuration.
-/// Root route handler will be called for requests not handled by other route handlers.
+/// @note Root route handler is called for requests not handled by other route handlers.
 /// @param root Optional. Root route configuration. Pattern doesn't makes sense for root router.
 /// @param[out] Output context. Should be disposed by `iwn_wf_destroy()`
 ///

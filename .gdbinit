@@ -1,5 +1,5 @@
 cd ./build/src/http/examples
-file ./echo_http_server
+file ./todolist_http_server
 #set args --ssl
 
 set confirm off

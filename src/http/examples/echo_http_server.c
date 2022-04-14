@@ -1,3 +1,11 @@
+/// Sample echo HTTP server.
+///
+/// Run server:
+///   ./echo_http_server --ssl
+///
+/// Client:
+///  curl -XPUT -d'Hello' http://
+
 #include "iwn_wf.h"
 
 #include <iowow/iwconv.h>
@@ -37,11 +45,6 @@ int main(int argc, char *argv[]) {
       ssl = true;
     } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
       port = iwatoi(argv[i + 1]);
-    } else if (strcmp(argv[i], "--help") == 0) {
-      fprintf(stderr,
-              "Sample echo HTTP server:\n"
-              );
-      return EXIT_SUCCESS;
     }
   }
   RCC(rc, finish, iw_init());              // Init iowow runtime, logging, etc..
