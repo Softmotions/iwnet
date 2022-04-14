@@ -73,7 +73,7 @@ struct iwn_wf_req;
 
 /// Route request handler.
 ///
-/// This handler function is called when request matched to its route configuration:
+/// A handler function is called when request matched to its route configuration:
 /// - iwn_wf_route::pattern
 /// - iwn_wf_route::flags
 ///
