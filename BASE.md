@@ -9,7 +9,7 @@ Works on Linux, macOS, FreeBSD
 * Websocket server ([iwn_ws_server.h](./src/ws/iwn_ws_server.h))
 * Websocket client ([iwn_ws_client.h](./src/ws/iwn_ws_client.h))
 * Poller reactor ([iwn_poller.h](./src/poller/iwn_poller.h))
-* SSL poller fd adapter based on BearSSL ([iwn_brssl_poller_adapter.h](./src/ssl/iwn_brssl_poller_adapter.h))
+* SSL Layer is based on BearSSL ([iwn_brssl_poller_adapter.h](./src/ssl/iwn_brssl_poller_adapter.h))
 * Child process manager ([iwn_proc.h](./src/poller/iwn_proc.h))
 * Timer ([iwn_scheduler.h](./src/poller/iwn_scheduler.h))
 
