@@ -51,7 +51,7 @@ make
 ```sh
   ./echo_http_server --ssl
  
-  curl -XPUT -d'Hello' https://localhost:8080/echo
+  curl -k -XPUT -d'Hello' https://localhost:8080/echo
   Hello
   I'm an echo web server
 ```
