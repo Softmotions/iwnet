@@ -35,7 +35,7 @@ make
 
 # Used by
 
-* [EJDB2 Embeddable JSON Database engine](https://ejdb.org)
-* [Wirow Video Conferencing Platform](https://wirow.io)
+* [EJDB2 Embeddable JSON Database engine](https://github.com/Softmotions/ejdb)
+* [Wirow Video Conferencing Platform](https://github.com/wirow-io/wirow-server)
 
 
