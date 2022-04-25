@@ -515,7 +515,6 @@ static bool _client_response_error(struct client *client, int code, char *respon
 }
 
 static void _client_reset(struct client *client) {
-  client->state = HTTP_SESSION_INIT;
   _request_data_free(client);
   _stream_free_buffer(client);
   _tokens_free_buffer(client);
@@ -603,11 +602,11 @@ again:
         client->flags |= HTTP_END_SESSION;
       }
     } else if (client->flags & HTTP_KEEP_ALIVE) {
+      client->state = HTTP_SESSION_INIT;
       if (client->server->spec.request_timeout_keepalive_sec > 0) {
         iwn_poller_set_timeout(client->server->spec.poller, client->fd,
                                client->server->spec.request_timeout_keepalive_sec);
       }
-      _client_reset(client);
     } else {
       client->flags |= HTTP_END_SESSION;
     }
