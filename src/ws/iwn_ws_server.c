@@ -204,7 +204,7 @@ static void _wslay_msg_recv_callback(
 
   struct msg *mm = ctx->msgs;
   if (mm) {
-    while (mm->next) mm = m->next;
+    while (mm->next) mm = mm->next;
     mm->next = m;
   } else {
     ctx->msgs = m;

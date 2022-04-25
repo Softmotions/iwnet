@@ -1,5 +1,5 @@
-iwnet (1.0.0) UNRELEASED; urgency=medium
+iwnet (1.0.1) UNRELEASED; urgency=medium
 
-  * Initial release.
+  * Fix: Endless loop in ws_server.c
 
- -- Anton Adamansky <adamansky@gmail.com>  Thu, 12 Aug 2021 12:24:53 +0700
+ -- Anton Adamansky <adamansky@gmail.com>  Mon, 25 Apr 2022 15:09:48 +0700
