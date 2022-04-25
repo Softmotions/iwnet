@@ -765,6 +765,7 @@ iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller *
 static void _worker_fn(void *arg) {
   int64_t n;
   int rci = 0;
+  long timeout = 0;
   bool destroy = false;
   struct poller_slot *s = arg;
   struct iwn_poller *p = s->poller;
@@ -827,6 +828,7 @@ start:
 #endif
 
   destroy = _slot_unref(s, REF_LOCKED);
+  timeout = s->timeout;
   pthread_mutex_unlock(&p->mtx);
 
 finish:
@@ -835,9 +837,10 @@ finish:
   } else {
     if (rci < 0) {
       iwn_poller_remove(p, fd);
-    } else if (s->timeout > 0) {
-      s->timeout_limit = _time_sec() + s->timeout;
-      _timer_check((void*) s, s->timeout_limit);
+    } else if (timeout > 0) {
+      long timeout_limit = _time_sec() + timeout;
+      s->timeout_limit = timeout_limit;
+      _timer_check((void*) s, timeout_limit);
     }
   }
 }
