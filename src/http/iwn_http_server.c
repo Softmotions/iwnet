@@ -27,6 +27,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <inttypes.h>
+#include <netinet/in.h>
 
 struct server {
   struct iwn_http_server      server;

@@ -1,5 +1,6 @@
 iwnet (1.0.1) UNRELEASED; urgency=medium
 
+  * Fix: FreeBSD build failed.
   * Fix: Endless loop in ws_server.c
 
  -- Anton Adamansky <adamansky@gmail.com>  Mon, 25 Apr 2022 15:09:48 +0700
