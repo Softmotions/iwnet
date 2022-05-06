@@ -177,22 +177,19 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
 }
 
 static iwrc _slot_ref(struct poller_slot *s) {
-  struct iwn_poller *p = s->poller;
-  struct poller_slot *old = 0;
-  bool old_destroy = false;
   iwrc rc = 0;
+  struct iwn_poller *p = s->poller;
 
   pthread_mutex_lock(&p->mtx);
   if (s->flags & SLOT_REMOVED) {
+    pthread_mutex_unlock(&p->mtx);
     return IW_ERROR_INVALID_STATE;
   }
   if (s->refs++ == 0) {
     khiter_t k = kh_get(SLOTS, p->slots, s->fd);
     if (k != kh_end(p->slots)) {
-      iwlog_error("FD: %d is in the poller already", s->fd);
-      old = kh_val(p->slots, k);
-      kh_value(p->slots, k) = s;
-      old_destroy = _slot_unref(old, REF_LOCKED);
+      rc = IW_ERROR_INVALID_STATE;
+      iwlog_ecode_error(rc, "File descriptor: %d is already managed by poller: %d", s->fd, p->fd);
     } else {
       int rci;
       k = kh_put(SLOTS, p->slots, s->fd, &rci);
@@ -205,9 +202,6 @@ static iwrc _slot_ref(struct poller_slot *s) {
     }
   }
   pthread_mutex_unlock(&p->mtx);
-  if (old_destroy) {
-    _slot_destroy(old);
-  }
   return rc;
 }
 
@@ -544,7 +538,7 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
 
   rc = _slot_ref(s);
   if (rc) {
-    if (s->fd > -1 && s->fd != task->fd) {
+    if ((task->events & IWN_POLLTIMEOUT) && s->fd > -1) {
       close(s->fd);
     }
     free(s);
@@ -603,6 +597,14 @@ finish:
     iwn_poller_remove(p, s->fd);
   }
   return rc;
+}
+
+bool iwn_poller_fd_is_managed(struct iwn_poller *p, int fd) {
+  bool ret = false;
+  pthread_mutex_lock(&p->mtx);
+  ret = kh_get(SLOTS, p->slots, fd) != kh_end(p->slots);
+  pthread_mutex_unlock(&p->mtx);
+  return ret;
 }
 
 void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
@@ -723,7 +725,7 @@ static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **ou
 #endif
   p->max_poll_events = max_poll_events;
 
-  pthread_mutex_init(&p->mtx, 0);
+  RCN(finish, pthread_mutex_init(&p->mtx, 0));
   RCA(p->slots = kh_init(SLOTS), finish);
   RCC(rc, finish, iwtp_start("poller-tp-", num_threads, 0, &p->tp));
 

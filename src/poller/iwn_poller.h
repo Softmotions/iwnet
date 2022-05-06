@@ -74,6 +74,9 @@ IW_EXPORT iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iw
 /// Registers polling fd task.
 IW_EXPORT iwrc iwn_poller_add(const struct iwn_poller_task *task);
 
+/// Returns true if the given `fd` managed by poller.
+IW_EXPORT bool iwn_poller_fd_is_managed(struct iwn_poller*, int fd);
+
 /// Activates a set of `events` defined by @ref iwn_poller_flags on managed `fd`.
 IW_EXPORT iwrc iwn_poller_arm_events(struct iwn_poller*, int fd, uint32_t events);
 
