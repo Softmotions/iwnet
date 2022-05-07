@@ -362,10 +362,6 @@ IW_INLINE bool _c_is_lsep(char c) {
   return c == '\r' || c == '\n';
 }
 
-IW_INLINE bool _c_is_blank(char c) {
-  return _c_is_space(c) || _c_is_lsep(c);
-}
-
 static const char* _header_parse_skip_name(const char *rp, const char *ep) {
   const char *sp = rp;
   while (rp < ep) {
@@ -935,7 +931,7 @@ static bool _request_routes_process(struct request *req) {
         }
         break;
       } else if (rv < 0) {
-        if (rv == -2) { // Stop further processing of child routes
+        if (rv == IWN_WF_RES_SKIP_CHILD_ROUTES) { // Stop further processing of child routes
           pr = r;
           continue;
         } else {
