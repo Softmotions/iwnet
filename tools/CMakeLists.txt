@@ -64,7 +64,6 @@ add_custom_command(
   OUTPUT "${CMAKE_BINARY_DIR}/include/data_cacert.inc"
   DEPENDS hoststrliteral
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-  USES_TERMINAL
   COMMAND cmake -E make_directory ${CMAKE_BINARY_DIR}/include
   COMMAND
     $<TARGET_FILE:hoststrliteral> -i "data_cacert"
@@ -75,7 +74,6 @@ add_custom_command(
   OUTPUT "${CMAKE_BINARY_DIR}/include/generated_mimegen.h"
   DEPENDS hostmimegen
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-  USES_TERMINAL
   COMMAND cmake -E make_directory ${CMAKE_BINARY_DIR}/include
   COMMAND $<TARGET_FILE:hostmimegen> "./mime.types" >
           "${CMAKE_BINARY_DIR}/include/generated_mimegen.h")
