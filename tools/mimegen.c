@@ -48,7 +48,7 @@ static void _line(char *sp) {
   while (*p2 != '\0') {
     while (*p2 > 32 && *p2 < 127) ++p2;
     if (p2 > p1) {
-      struct node *e = malloc(sizeof(*e));
+      struct node *e = calloc(1, sizeof(*e));
       e->name = strndup(p1, p2 - p1);
       uint32_t b = _h(e->name) % NSIZE;
       e->ctype = n;
