@@ -1965,7 +1965,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
       continue;
     }
     fcntl(task.fd, F_SETFD, FD_CLOEXEC);
-    setsockopt(task.fd, SOL_SOCKET, SO_REUSEPORT, &optval, sizeof(optval));
+    setsockopt(task.fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
     if (bind(task.fd, rp->ai_addr, rp->ai_addrlen) == 0) {
       break;
     }
