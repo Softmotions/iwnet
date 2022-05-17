@@ -1,5 +1,6 @@
 iwnet (1.0.1) UNRELEASED; urgency=medium
 
+  * Fix: Allow IPv6 server listening. (iwn_http_server.c)
   * Impl: Added iwn_poller_fd_is_managed() (iwn_poller.h)
   * Misc: Minors iwn_poller improvements.
   * Fix: FreeBSD build failed.
