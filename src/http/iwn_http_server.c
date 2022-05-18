@@ -1941,7 +1941,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
 
   struct addrinfo hints = {
     .ai_socktype = SOCK_STREAM,
-    .ai_family   = AF_INET,
+    .ai_family   = AF_UNSPEC,
     .ai_flags    = AI_PASSIVE
   };
 
