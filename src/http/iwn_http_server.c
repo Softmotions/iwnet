@@ -1022,7 +1022,7 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
 
   if (server->https) {
     pthread_mutex_lock(&server->mtx);
-    RCC(rc, finish, iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
+    rc = iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
       .certs = server->spec.ssl.certs,
       .certs_in_buffer = server->spec.ssl.certs_in_buffer,
       .certs_len = server->spec.ssl.certs_len,
@@ -1037,16 +1037,15 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
       .private_key_len = server->spec.ssl.private_key_len,
       .timeout_sec = server->spec.request_timeout_sec,
       .user_data = client,
-    }));
+    });
     pthread_mutex_unlock(&server->mtx);
   } else {
-    RCC(rc, finish,
-        iwn_direct_poller_adapter(
-          server->spec.poller, fd,
-          _client_on_poller_adapter_event,
-          _client_on_poller_adapter_dispose,
-          client, IWN_POLLIN, IWN_POLLET,
-          server->spec.request_timeout_sec));
+    rc = iwn_direct_poller_adapter(
+      server->spec.poller, fd,
+      _client_on_poller_adapter_event,
+      _client_on_poller_adapter_dispose,
+      client, IWN_POLLIN, IWN_POLLET,
+      server->spec.request_timeout_sec);
   }
 
 finish:
