@@ -1,9 +1,10 @@
 iwnet (1.0.1) UNRELEASED; urgency=medium
 
-  * Fix: Allow IPv6 server listening. (iwn_http_server.c)
-  * Impl: Added iwn_poller_fd_is_managed() (iwn_poller.h)
-  * Misc: Minors iwn_poller improvements.
-  * Fix: FreeBSD build failed.
-  * Fix: Endless loop in ws_server.c
+  * fix: Fixed possible deadlock in _client_accept() (iwn_http_server.c)
+  * fix: Allow IPv6 server listening. (iwn_http_server.c)
+  * impl: Added iwn_poller_fd_is_managed() (iwn_poller.h)
+  * misc: Minors iwn_poller improvements.
+  * fix: FreeBSD build failed.
+  * fix: Endless loop in ws_server.c
 
  -- Anton Adamansky <adamansky@gmail.com>  Mon, 25 Apr 2022 15:09:48 +0700
