@@ -214,8 +214,8 @@ static void _wslay_msg_recv_callback(
 
 error:
   if (m) {
-    free(m);
     free(m->buf);
+    free(m);
   }
 }
 
