@@ -68,6 +68,48 @@ IW_ALLOC char* iwn_url_encode_new(const char *src, ssize_t src_len) {
   return ret;
 }
 
+IW_ALLOC char* iwn_url_encode_printf_va(const char *fmt, va_list va) {
+  char *ret = 0;
+  char buf[1024];
+  char *wp = buf;
+
+  va_list cva;
+  va_copy(cva, va);
+
+  int size = vsnprintf(wp, sizeof(buf), fmt, va);
+  if (size < 0) {
+    // errno was set accordingly
+    goto finish;
+  }
+  if (size >= sizeof(buf)) {
+    wp = malloc(size + 1);
+    if (!wp) {
+      goto finish;
+    }
+    size = vsnprintf(wp, size + 1, fmt, cva);
+    if (size < 0) {
+      goto finish;
+    }
+  }
+
+  ret = iwn_url_encode_new(fmt, size);
+
+finish:
+  va_end(cva);
+  if (wp != buf) {
+    free(wp);
+  }
+  return ret;
+}
+
+IW_ALLOC char* iwn_url_encode_new_printf(const char *fmt, ...) {
+  va_list va;
+  va_start(va, fmt);
+  char *res = iwn_url_encode_printf_va(fmt, va);
+  va_end(va);
+  return res;
+}
+
 size_t iwn_url_decode_inplace2(char *sp, char *ep) {
   const char *rp = sp;
   char *wp = sp;
