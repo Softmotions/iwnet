@@ -24,7 +24,7 @@ static int _handle_root(struct iwn_wf_req *req, void *user_data) {
   return 0;
 }
 
-static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_len) {
+static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_len, uint8_t frame) {
   IWN_ASSERT_FATAL(sess && msg && msg_len);
   IWN_ASSERT(sess->spec->user_data == ctx);
   fprintf(stderr, "message: %s\n", msg);
@@ -124,5 +124,5 @@ finish:
   IWN_ASSERT(state & S_SESSION_INIT);
   IWN_ASSERT(state & S_SESSION_DISPOSE);
   iwn_poller_destroy(&poller);
-  return iwn_assertions_failed > 0 ? EXIT_FAILURE: EXIT_SUCCESS;
+  return iwn_assertions_failed > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }

@@ -23,6 +23,7 @@ struct msg {
   char       *buf;
   size_t      buf_len;
   struct msg *next;
+  uint8_t     opcode;
 };
 
 struct ctx {
@@ -164,7 +165,7 @@ finish:
   // In order to avoid deadlocks process message handlers out of `ctx->mtx`
   while (m) {
     struct msg *n = m->next;
-    if (ret != -1 && !ctx->spec->handler(&ctx->sess, m->buf, m->buf_len)) {
+    if (ret != -1 && !ctx->spec->handler(&ctx->sess, m->buf, m->buf_len, m->opcode)) {
       ret = -1;
     }
     free(m->buf);
@@ -183,9 +184,11 @@ static void _wslay_msg_recv_callback(
   struct ctx *ctx = user_data;
   struct msg *m = 0;
 
-  if (  wslay_is_ctrl_frame(arg->opcode)
-     || arg->msg_length == 0
-     || !ctx->spec->handler) {
+  if (  !ctx->spec->handler
+     || !(  (  arg->msg_length > 0
+            && (arg->opcode == WSLAY_TEXT_FRAME || arg->opcode == WSLAY_BINARY_FRAME))
+         || (  (ctx->spec->flags & WS_HANDLE_PING_PONG)
+            && (arg->opcode == WSLAY_PING || arg->opcode == WSLAY_PONG)))) {
     return;
   }
 
@@ -343,20 +346,20 @@ struct iwn_wf_route* iwn_ws_server_route_attach(struct iwn_wf_route *route, cons
   return route;
 }
 
-bool iwn_ws_server_write(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len) {
+static bool _ws_server_write(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len, enum wslay_opcode opc) {
   struct ctx *ctx = (void*) sess;
-  if (!ctx || !buf) {
+  if (!ctx) {
     return false;
   }
   if (buf_len < 0) {
-    buf_len = strlen(buf);
-  }
-  if (buf_len == 0) {
-    return true;
+    buf_len = buf ? strlen(buf) : 0;
   }
   pthread_mutex_lock(&ctx->mtx);
+  if (opc == WSLAY_CONNECTION_CLOSE) {
+    wslay_event_shutdown_read(ctx->wc);
+  }
   if (wslay_event_queue_msg(ctx->wc, &(struct wslay_event_msg) {
-    .opcode = WSLAY_TEXT_FRAME,
+    .opcode = opc,
     .msg = (void*) buf,
     .msg_length = buf_len
   })) {
@@ -366,6 +369,54 @@ bool iwn_ws_server_write(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_
   pthread_mutex_unlock(&ctx->mtx);
 
   return 0 == ctx->hreq->poller_adapter->arm(ctx->hreq->poller_adapter, IWN_POLLOUT);
+}
+
+struct write_fd_ctx {
+  const void *buf;
+  size_t      buf_len;
+  enum wslay_opcode opc;
+  bool ret;
+};
+
+static void _write_fd_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
+  struct iwn_http_req *request = slot_user_data;
+  struct iwn_ws_sess *sess = iwn_http_request_ws_data(request);
+  struct write_fd_ctx *ctx = fn_user_data;
+  ctx->ret = _ws_server_write(sess, ctx->buf, ctx->buf_len, ctx->opc);
+}
+
+static bool _ws_server_fd_write(struct iwn_poller *p, int fd, const char *buf, ssize_t buf_len, enum wslay_opcode opc) {
+  struct write_fd_ctx ctx = {
+    .buf     = buf,
+    .buf_len = buf_len,
+    .opc     = opc
+  };
+  iwn_poller_probe(p, fd, _write_fd_probe, &ctx);
+  return ctx.ret;
+}
+
+bool iwn_ws_server_ping(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len) {
+  return _ws_server_write(sess, buf, buf_len, WSLAY_PING);
+}
+
+bool iwn_ws_server_ping_fd(struct iwn_poller *p, int fd, const char *buf, ssize_t buf_len) {
+  return _ws_server_fd_write(p, fd, buf, buf_len, WSLAY_PING);
+}
+
+bool iwn_ws_server_write_binary(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len) {
+  return _ws_server_write(sess, buf, buf_len, WSLAY_BINARY_FRAME);
+}
+
+bool iwn_ws_server_write_binary_fd(struct iwn_poller *p, int fd, const char *buf, ssize_t buf_len) {
+  return _ws_server_fd_write(p, fd, buf, buf_len, WSLAY_BINARY_FRAME);
+}
+
+bool iwn_ws_server_write(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_len) {
+  return _ws_server_write(sess, buf, buf_len, WSLAY_TEXT_FRAME);
+}
+
+bool iwn_ws_server_write_fd(struct iwn_poller *p, int fd, const char *buf, ssize_t buf_len) {
+  return _ws_server_fd_write(p, fd, buf, buf_len, WSLAY_TEXT_FRAME);
 }
 
 bool iwn_ws_server_printf_va(struct iwn_ws_sess *sess, const char *fmt, va_list va) {
@@ -406,4 +457,13 @@ bool iwn_ws_server_printf(struct iwn_ws_sess *sess, const char *fmt, ...) {
   bool ret = iwn_ws_server_printf_va(sess, fmt, va);
   va_end(va);
   return ret;
+}
+
+void iwn_ws_server_session_close(struct iwn_ws_sess *sess) {
+  if (sess) {
+    if (!_ws_server_write(sess, 0, 0, WSLAY_CONNECTION_CLOSE)) {
+      // Fallback mode
+      iwn_poller_remove(sess->req->http->poller_adapter->poller, sess->req->http->poller_adapter->fd);
+    }
+  }
 }

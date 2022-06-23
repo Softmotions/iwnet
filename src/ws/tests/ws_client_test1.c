@@ -17,7 +17,7 @@ static void on_connected(const struct iwn_ws_client_ctx *ctx) {
   IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
 }
 
-static void on_message(const char *buf, size_t buf_len, const struct iwn_ws_client_ctx *ctx) {
+static void on_message(const struct iwn_ws_client_ctx *ctx, const char *buf, size_t buf_len, uint8_t frame) {
   fprintf(stderr, "on_message %.*s\n", (int) buf_len, buf);
   if (cnt++ < 3) {
     IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
@@ -48,7 +48,7 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     .poller = poller,
     .on_connected = on_connected,
     .on_message = on_message,
-    .on_dispose = on_dispose
+    .on_dispose = on_dispose,
   }, &ws);
   IWN_ASSERT(rc == 0);
   if (rc) {

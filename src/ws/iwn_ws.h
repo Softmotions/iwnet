@@ -6,6 +6,16 @@ IW_EXTERN_C_START
 
 #define WS_MAGIC13 "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+#define WS_FRAME_TEXT   0x01U
+#define WS_FRAME_BINARY 0x02U
+#define WS_FRAME_PING   0x09U
+#define WS_FRAME_PONG   0x0AU
+
+#define WS_VERIFY_PEER      0x01U /// Verify peer when SSL connection.
+#define WS_VERIFY_HOST      0x02U /// Verify host when SSL connection.
+#define WS_CONNECT_ASYNC    0x04U /// Use async client connect()
+#define WS_HANDLE_PING_PONG 0x08U /// Handle ping/pong ws messages by `on_message()`
+
 typedef enum {
   _WS_ERROR_START = (IW_ERROR_START + 203000UL),
   WS_ERROR_INVALID_URL,          ///< Invalid URL (WS_ERROR_INVALID_URL)

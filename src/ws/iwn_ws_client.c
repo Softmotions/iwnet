@@ -87,7 +87,20 @@ static void _destroy(struct iwn_ws_client *ws) {
   free(ws);
 }
 
-static iwrc _connect(const char *host, int port_, int *out_fd) {
+static iwrc _make_non_blocking(int fd) {
+  int rci, flags;
+  while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR);
+  if (flags == -1) {
+    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+  }
+  while ((rci = fcntl(fd, F_SETFL, flags | O_NONBLOCK)) == -1 && errno == EINTR);
+  if (rci == -1) {
+    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+  }
+  return 0;
+}
+
+static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
   assert(host && out_fd);
 
   *out_fd = 0;
@@ -98,15 +111,18 @@ static iwrc _connect(const char *host, int port_, int *out_fd) {
 
   iwrc rc = 0;
   int fd = -1, rci;
+
   struct addrinfo *si, *p, hints = {
     .ai_family   = PF_UNSPEC,
     .ai_socktype = SOCK_STREAM
   };
+
   rci = getaddrinfo(host, port, &hints, &si);
   if (rci) {
     iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | %s", gai_strerror(rci));
     return WS_ERROR_PEER_CONNECT;
   }
+
   for (p = si; p; p = p->ai_next) {
     char tmp[INET6_ADDRSTRLEN + 50];
     struct sockaddr *sa = p->ai_addr;
@@ -128,13 +144,25 @@ static iwrc _connect(const char *host, int port_, int *out_fd) {
       iwlog_warn("ws | Error opening socket %s:%s %s %s", host, port, tmp, strerror(errno));
       continue;
     }
-    if (connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
-      iwlog_warn("ws | Error connecting %s:%s %s %s", host, port, tmp, strerror(errno));
-      close(fd);
-      continue;
+
+    if (async) {
+      RCC(rc, finish, _make_non_blocking(fd));
+    }
+
+    do {
+      rci = connect(fd, p->ai_addr, p->ai_addrlen);
+    } while (errno == EINTR);
+
+    if (rci == -1) {
+      if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
+        iwlog_warn("ws | Error connecting %s:%s %s %s", host, port, tmp, strerror(errno));
+        close(fd);
+        continue;
+      }
     }
     break;
   }
+
   if (p) {
     *out_fd = fd;
   } else {
@@ -143,20 +171,10 @@ static iwrc _connect(const char *host, int port_, int *out_fd) {
 
 finish:
   freeaddrinfo(si);
+  if (!rc && !async) { // Non-blocking after connection established
+    rc = _make_non_blocking(fd);
+  }
   return rc;
-}
-
-static iwrc _make_non_blocking(int fd) {
-  int rci, flags;
-  while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR);
-  if (flags == -1) {
-    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
-  }
-  while ((rci = fcntl(fd, F_SETFL, flags | O_NONBLOCK)) == -1 && errno == EINTR);
-  if (rci == -1) {
-    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
-  }
-  return 0;
 }
 
 static iwrc _make_tcp_nodelay(int fd) {
@@ -208,18 +226,34 @@ finish:
 static iwrc _handshake_output_fill(struct iwn_ws_client *ws) {
   iwxstr_clear(ws->output);
   iwrc rc = RCR(_handshake_write_client_key_b64(ws->client_key));
+
+  static char *er_default = "";
+  char *er = er_default;
+  if (ws->spec.on_handshake) {
+    er = ws->spec.on_handshake(&ws->ctx);
+    if (!er) {
+      er = er_default;
+    }
+  }
+
   RCR(iwxstr_printf(
         ws->output,
         "GET %s%s%s HTTP/1.1\r\n"
         "Host: %s:%d\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
+        "%s"
         "Sec-Websocket-Key: %s\r\n"
         "Sec-Websocket-Version: 13\r\n"
         "\r\n",
         ws->path, (ws->query ? "?" : ""), (ws->query ? ws->query : ""),
         ws->host, ws->port,
+        er,  
         ws->client_key));
+
+  if (er != er_default) {
+    free(er);
+  }
   return rc;
 }
 
@@ -425,11 +459,11 @@ static void _wslay_event_on_msg_recv_callback(
   void                                     *user_data
   ) {
   struct iwn_ws_client *ws = user_data;
-  if (wslay_is_ctrl_frame(arg->opcode)) {
-    return;
-  }
-  if (arg->msg_length > 0) {
-    ws->spec.on_message((void*) arg->msg, arg->msg_length, &ws->ctx);
+  if (  (  arg->msg_length > 0
+        && (arg->opcode == WSLAY_TEXT_FRAME || arg->opcode == WSLAY_BINARY_FRAME))
+     || (  (ws->spec.flags & WS_HANDLE_PING_PONG)
+        && (arg->opcode == WSLAY_PING || arg->opcode == WSLAY_PONG))) {
+    ws->spec.on_message(&ws->ctx, (void*) arg->msg, arg->msg_length, arg->opcode);
   }
 }
 
@@ -448,7 +482,7 @@ static int _wslay_genmask_callback(
   return 0;
 }
 
-bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
+static bool _write(struct iwn_ws_client *ws, const void *buf, size_t buf_len, enum wslay_opcode opc) {
   if (!ws || !buf) {
     return false;
   }
@@ -457,7 +491,7 @@ bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t 
   }
   pthread_mutex_lock(&ws->mtx);
   if (wslay_event_queue_msg(ws->wc, &(struct wslay_event_msg) {
-    .opcode = WSLAY_TEXT_FRAME,
+    .opcode = opc,
     .msg = (void*) buf,
     .msg_length = buf_len
   })) {
@@ -466,6 +500,53 @@ bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t 
   }
   pthread_mutex_unlock(&ws->mtx);
   return 0 == ws->pa->arm(ws->pa, IWN_POLLOUT);
+}
+
+struct write_fd_ctx {
+  const void *buf;
+  size_t      buf_len;
+  enum wslay_opcode opc;
+  bool ret;
+};
+
+static void _write_fd_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
+  struct iwn_ws_client *ws = slot_user_data; // It is a struct iwn_poller_adapter->user_data actually
+  struct write_fd_ctx *ctx = fn_user_data;
+  ctx->ret = _write(ws, ctx->buf, ctx->buf_len, ctx->opc);
+}
+
+static bool _write_fd(struct iwn_poller *p, int fd, const void *buf, size_t buf_len, enum wslay_opcode opc) {
+  struct write_fd_ctx ctx = {
+    .buf     = buf,
+    .buf_len = buf_len,
+    .opc     = opc
+  };
+  iwn_poller_probe(p, fd, _write_fd_probe, &ctx);
+  return ctx.ret;
+}
+
+bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
+  return _write(ws, buf, buf_len, WSLAY_TEXT_FRAME);
+}
+
+bool iwn_ws_client_write_text_fd(struct iwn_poller *p, int fd, const void *buf, size_t buf_len) {
+  return _write_fd(p, fd, buf, buf_len, WSLAY_TEXT_FRAME);
+}
+
+bool iwn_ws_client_write_binary(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
+  return _write(ws, buf, buf_len, WSLAY_BINARY_FRAME);
+}
+
+bool iwn_ws_client_write_binary_fd(struct iwn_poller *p, int fd, const void *buf, size_t buf_len) {
+  return _write_fd(p, fd, buf, buf_len, WSLAY_BINARY_FRAME);
+}
+
+bool iwn_ws_client_ping(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
+  return _write(ws, buf, buf_len, WSLAY_PING);
+}
+
+bool iwn_ws_client_ping_fd(struct iwn_poller *p, int fd, const void *buf, size_t buf_len) {
+  return _write_fd(p, fd, buf, buf_len, WSLAY_PING);
 }
 
 iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_client **out_ws) {
@@ -532,8 +613,7 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   }
 
   // Now do the initial handshake
-  RCC(rc, finish, _connect(ws->host, ws->port, &ws->fd));
-  RCC(rc, finish, _make_non_blocking(ws->fd));
+  RCC(rc, finish, _connect(ws->host, ws->port, (spec->flags & WS_CONNECT_ASYNC), &ws->fd));
 
   RCC(rc, finish, _wslayrc(wslay_event_context_client_init(&ws->wc, &(struct wslay_event_callbacks) {
     .recv_callback = _wslay_event_recv_callback,
@@ -553,8 +633,8 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
       .events = IWN_POLLOUT,
       .events_mod = IWN_POLLET,
       .fd = ws->fd,
-      .verify_peer = spec->flags & IWN_WS_VERIFY_PEER,
-      .verify_host = spec->flags & IWN_WS_VERIFY_HOST
+      .verify_peer = spec->flags & WS_VERIFY_PEER,
+      .verify_host = spec->flags & WS_VERIFY_HOST
     }));
   } else {
     RCC(rc, finish,
@@ -577,6 +657,10 @@ finish:
 
 void iwn_ws_client_close(struct iwn_ws_client *ws) {
   iwn_poller_remove(ws->spec.poller, ws->fd);
+}
+
+int iwn_ws_client_fd_get(struct iwn_ws_client *ws) {
+  return ws ? ws->fd : -1;
 }
 
 static const char* _ecodefn(locale_t locale, uint32_t ecode) {
