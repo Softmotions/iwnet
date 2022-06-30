@@ -20,7 +20,7 @@ project(
     "Asynchronous HTTP framework with support of websockets client/server, SSL and routing"
   HOMEPAGE_URL https://github.com/Softmotions/iwnet
   LANGUAGES C)
-set(CMAKE_C_STANDARD 11)
+
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 
 include(GNUInstallDirs)
