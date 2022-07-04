@@ -1028,7 +1028,7 @@ finish:
 
 static bool _request_stream_chunk_next(struct iwn_http_req *hreq, bool *again) {
   struct request *req = iwn_http_request_wf_data(hreq);
-  return _request_stream_chunk_process(req, again) == true;
+  return req && _request_stream_chunk_process(req, again) == true;
 }
 
 static bool _request_handler(struct iwn_http_req *hreq) {
@@ -1079,7 +1079,7 @@ static iwrc _request_sid_fill(char fout[IWN_WF_SESSION_ID_LEN]) {
 }
 
 IW_INLINE bool _request_sid_exists(struct request *req) {
-  return req->sid[0] != 0;
+  return req && req->sid[0] != 0;
 }
 
 const char* iwn_wf_session_id(struct iwn_wf_req *req_) {
