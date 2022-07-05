@@ -683,9 +683,7 @@ char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
     iwxstr_cat(xstr, " ", 1);
     iwxstr_cat2(xstr, arg);
   }
-  ret = iwxstr_ptr(xstr);
-  iwxstr_destroy_keep_ptr(xstr);
-  return ret;
+  return iwxstr_destroy_keep_ptr(xstr);
 }
 
 void iwn_proc_dispose(void) {

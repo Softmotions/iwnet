@@ -268,8 +268,7 @@ static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req, bool *aga
   }
 
   buf_len = iwxstr_size(xstr);
-  buf = iwxstr_ptr(xstr);
-  iwxstr_destroy_keep_ptr(xstr);
+  buf = iwxstr_destroy_keep_ptr(xstr);
   xstr = 0;
 
   iwn_http_response_stream_write(req, buf, buf_len, free, ch, again);

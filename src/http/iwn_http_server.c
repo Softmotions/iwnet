@@ -1475,11 +1475,10 @@ finish:
 IW_INLINE void _client_response_setbuf(struct client *client, IWXSTR *xstr) {
   _stream_free_buffer(client);
   struct stream *s = &client->stream;
-  s->buf = iwxstr_ptr(xstr);
   s->length = iwxstr_size(xstr);
+  s->buf = iwxstr_destroy_keep_ptr(xstr);
   s->capacity = s->length;
   client->state = HTTP_SESSION_WRITE;
-  iwxstr_destroy_keep_ptr(xstr);
   _response_free(client);
 }
 
