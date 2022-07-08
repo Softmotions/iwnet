@@ -17,6 +17,7 @@ check_include_file("winsock2.h" HAVE_WINSOCK2_H)
 test_big_endian(WORDS_BIGENDIAN)
 
 add_definitions(-DHAVE_CONFIG_H)
+add_definitions(-D_FILE_OFFSET_BITS=64)
 
 include(AddIowow)
 find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
@@ -56,11 +57,6 @@ set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_ASAN} -O3 -DNDEBUG")
 set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-Wl,-s")
 set(CMAKE_C_FLAGS_RELWITHDEBINFO "${CMAKE_C_FLAGS_RELEASE} -g")
 set(CMAKE_C_FLAGS_RELEASEWITHDEBINFO ${CMAKE_C_FLAGS_RELWITHDEBINFO})
-
-if(CMAKE_COMPILER_IS_GNUCC)
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-endif()
-
 set(PROJECT_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
@@ -153,7 +149,6 @@ foreach(MODULE IN LISTS MODULES)
 endforeach(MODULE)
 
 if(NOT BUILD_SHARED_LIBS)
-  add_definitions(-DIW_NODLL)
   add_library(iwnet STATIC ${ALL_SRC})
   add_library(iwnet_s ALIAS iwnet)
 else()

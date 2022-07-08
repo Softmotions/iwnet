@@ -96,6 +96,12 @@ run() {
     echo "./test.dat and ./r1.dat differs"
   fi
 
+  printf "\n\nFile2 get:\n"
+  curl -sk ${BASE}/file2/test.dat -o r1.dat | ${FILTER}
+  if ! cmp -s ./test.dat ./r1.dat; then
+    echo "./test.dat and ./r1.dat differs"
+  fi
+
   printf "\n\nFile get HEAD:\n"
   curl -sk -I ${BASE}/file/test.dat | ${FILTER}
 

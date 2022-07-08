@@ -135,6 +135,20 @@ static int _handle_file_get(struct iwn_wf_req *req, void *user_data) {
   return iwn_wf_file_serve(req, 0, path);
 }
 
+static void _handle_file_get2_completed(void *d) {
+  FILE *f = d;
+  IWN_ASSERT_FATAL(f);
+  fclose(f);
+}
+
+static int _handle_file_get2(struct iwn_wf_req *req, void *user_data) {
+  const char *path = req->path_unmatched;
+  while (*path == '/') ++path;
+  FILE *f = fopen(path, "r");
+  IWN_ASSERT_FATAL(f);
+  return iwn_wf_fileobj_serve(req, 0, f, _handle_file_get2_completed, f);
+}
+
 static int _handle_regex1_get(struct iwn_wf_req *req, void *user_data) {
   return 0;
 }
@@ -259,6 +273,13 @@ int main(int argc, char *argv[]) {
     .ctx = ctx,
     .pattern = "/file",
     .handler = _handle_file_get,
+    .flags = IWN_WF_MATCH_PREFIX | IWN_WF_GET | IWN_WF_HEAD,
+  }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "/file2",
+    .handler = _handle_file_get2,
     .flags = IWN_WF_MATCH_PREFIX | IWN_WF_GET | IWN_WF_HEAD,
   }, 0));
 

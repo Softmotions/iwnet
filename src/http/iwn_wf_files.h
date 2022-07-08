@@ -18,6 +18,10 @@ IW_EXTERN_C_START
 ///
 IW_EXPORT int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *path);
 
+IW_EXPORT int iwn_wf_fileobj_serve(
+  struct iwn_wf_req *req, const char *ctype, FILE *file,
+  void (*on_completed)(void*), void *on_completed_data);
+
 /// Creates route configuration what servers files located under specified `dir` and parent `route`.
 IW_EXPORT struct iwn_wf_route* iwn_wf_route_dir_attach(struct iwn_wf_route *route, const char *dir);
 

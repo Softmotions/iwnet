@@ -29,6 +29,8 @@ struct ctx {
   struct iwn_wf_req *req;
   FILE *file;
   struct range *ranges;
+  void  (*on_completed)(void*);
+  void *on_completed_data;
   IWP_FILE_STAT fs;
   bool range_processed;
   char boundary[BOUNDARY_MAX];
@@ -40,7 +42,9 @@ static void _ctx_destroy(struct ctx *ctx) {
   if (ctx) {
     ctx->req->http->user_data = 0;
     ctx->req->http->on_request_dispose = 0;
-    if (ctx->file) {
+    if (ctx->on_completed) {
+      ctx->on_completed(ctx->on_completed_data);
+    } else if (ctx->file) {
       fclose(ctx->file);
     }
     for (struct range *r = ctx->ranges; r; ) {
@@ -379,17 +383,36 @@ static iwrc _file_serve(struct ctx *ctx) {
   }
 }
 
-int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *path) {
+static int _wf_file_serve(
+  struct iwn_wf_req *req,
+  const char        *ctype,
+  void              *file,
+  void (            *on_completed )(void*),
+  void              *on_completed_data
+  ) {
   iwrc rc = 0;
   int ret = 0;
   struct ctx *ctx;
 
   RCA(ctx = calloc(1, sizeof(*ctx)), finish);
   ctx->req = req;
-  rc = iwp_fstat(path, &ctx->fs);
-  if (rc || ctx->fs.ftype != IWP_TYPE_FILE) {
-    rc = 0;
-    goto finish;
+  ctx->on_completed = on_completed;
+  ctx->on_completed_data = on_completed_data;
+
+  if (!on_completed) {
+    rc = iwp_fstat((const char*) file, &ctx->fs);
+    if (rc || ctx->fs.ftype != IWP_TYPE_FILE) {
+      rc = 0;
+      goto finish;
+    }
+  } else {
+    off_t off;
+    FILE *f = file;
+    RCN(finish, fseeko(f, 0, SEEK_END));
+    RCN(finish, off = ftello(f));
+    RCN(finish, fseeko(f, 0, SEEK_SET));
+    ctx->fs.ftype = IWP_TYPE_FILE;
+    ctx->fs.size = off;
   }
 
   if (ctype && *ctype != '\0') {
@@ -417,9 +440,13 @@ int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *pat
   }
   RCC(rc, finish, iwn_http_response_header_set(req->http, "accept-ranges", "bytes", IW_LLEN("bytes")));
 
-  ctx->file = fopen(path, "r");
-  if (!ctx->file) {
-    goto finish;
+  if (!on_completed) {
+    ctx->file = fopen((const char*) file, "r");
+    if (!ctx->file) {
+      goto finish;
+    }
+  } else {
+    ctx->file = (FILE*) file;
   }
 
   RCC(rc, finish, _file_serve(ctx));
@@ -433,6 +460,17 @@ finish:
     _ctx_destroy(ctx);
   }
   return ret;
+}
+
+int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *path) {
+  return _wf_file_serve(req, ctype, (char*) path, 0, 0);
+}
+
+int iwn_wf_fileobj_serve(
+  struct iwn_wf_req *req, const char *ctype, FILE *file,
+  void (*on_completed)(void*), void *on_completed_data
+  ) {
+  return _wf_file_serve(req, ctype, file, on_completed, on_completed_data);
 }
 
 struct route_dir_spec {

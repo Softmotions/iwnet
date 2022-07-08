@@ -79,6 +79,9 @@ accept-ranges: bytes
 File get:
 
 
+File2 get:
+
+
 File get HEAD:
 HTTP/1.1 200 OK
 connection: keep-alive
