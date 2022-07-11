@@ -466,10 +466,16 @@ int iwn_wf_file_serve(struct iwn_wf_req *req, const char *ctype, const char *pat
   return _wf_file_serve(req, ctype, (char*) path, 0, 0);
 }
 
+static void _fileobj_serve_oncomplete_noop(void *d) {
+}
+
 int iwn_wf_fileobj_serve(
   struct iwn_wf_req *req, const char *ctype, FILE *file,
   void (*on_completed)(void*), void *on_completed_data
   ) {
+  if (!on_completed) { 
+    on_completed = _fileobj_serve_oncomplete_noop;    
+  }
   return _wf_file_serve(req, ctype, file, on_completed, on_completed_data);
 }
 
