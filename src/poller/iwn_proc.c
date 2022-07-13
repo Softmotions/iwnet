@@ -670,7 +670,6 @@ child_exit:
 }
 
 char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
-  char *ret = 0;
   IWXSTR *xstr = iwxstr_new();
   if (!xstr) {
     return 0;
