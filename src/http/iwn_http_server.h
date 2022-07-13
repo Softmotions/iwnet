@@ -6,6 +6,7 @@
 #include "iwn_pairs.h"
 
 #include <iowow/iwxstr.h>
+#include <iowow/iwjson.h>
 
 #include <pthread.h>
 #include <stdarg.h>
@@ -241,6 +242,18 @@ IW_EXPORT bool iwn_http_response_write(
   const char *content_type,
   const char *body,
   ssize_t     body_len);
+
+/// Writes a given JSON object and completes response for specified request.
+IW_EXPORT bool iwn_http_response_write_jbl(
+  struct iwn_http_req*,
+  int status_code,
+  JBL jbl);
+
+/// Writes a given JSON object and completes response for specified request.
+IW_EXPORT bool iwn_http_response_write_jbn(
+    struct iwn_http_req*,
+    int status_code,
+    JBL_NODE n);
 
 /// Writes a given response as prinf formatted value and completes response for specified request.
 IW_EXPORT bool iwn_http_response_printf(

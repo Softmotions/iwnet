@@ -1666,6 +1666,52 @@ finish:
   return true;
 }
 
+bool iwn_http_response_write_jbl(
+  struct iwn_http_req *request,
+  int                  status_code,
+  JBL                  jbl
+  ) {
+  iwrc rc = 0;
+  IWXSTR *xstr = 0;
+  RCB(finish, xstr = iwxstr_new());
+  RCC(rc, finish, jbl_as_json(jbl, jbl_xstr_json_printer, xstr, 0));
+  RCC(rc, finish,
+      iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));
+  iwn_http_response_body_set(request, iwxstr_ptr(xstr), iwxstr_size(xstr), 0);
+  rc = iwn_http_response_end(request);
+
+finish:
+  iwxstr_destroy(xstr);
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    return false;
+  }
+  return true;
+}
+
+bool iwn_http_response_write_jbn(
+  struct iwn_http_req *request,
+  int                  status_code,
+  JBL_NODE             n
+  ) {
+  iwrc rc = 0;
+  IWXSTR *xstr = 0;
+  RCB(finish, xstr = iwxstr_new());
+  RCC(rc, finish, jbn_as_json(n, jbl_xstr_json_printer, xstr, 0));
+  RCC(rc, finish,
+      iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));
+  iwn_http_response_body_set(request, iwxstr_ptr(xstr), iwxstr_size(xstr), 0);
+  rc = iwn_http_response_end(request);
+
+finish:
+  iwxstr_destroy(xstr);
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    return false;
+  }
+  return true;
+}
+
 bool iwn_http_response_by_code(struct iwn_http_req *request, int code) {
   const char *text = _status_text[code];
   return iwn_http_response_write(request, code, "text/plain", text, -1);

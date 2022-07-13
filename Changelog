@@ -1,5 +1,6 @@
 iwnet (1.0.1) UNRELEASED; urgency=medium
 
+  * impl: Added iwn_http_response_write_jbn() and iwn_http_response_write_jbl() (iwn_http_server.h)
   * impl: Added iwn_wf_fileobj_serve() (iwn_wf_files.h)
   * impl: Added iwn_url_encode_new_printf() (iwn_codec.h)
   * fix: Fixed possible deadlock in _client_accept() (iwn_http_server.c)  
