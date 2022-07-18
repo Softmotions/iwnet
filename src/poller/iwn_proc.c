@@ -71,7 +71,7 @@ static void _kv_free(void *key, void *val) {
 static iwrc _init_lk(void) {
   iwrc rc = 0;
   if (!cc.map) {
-    RCB(finish, cc.map = iwhmap_create_i32(_kv_free));
+    RCB(finish, cc.map = iwhmap_create_u32(_kv_free));
   }
   if (!cc.stw) {
     rc = iwstw_start("proc_stw", 0, false, &cc.stw);
@@ -446,8 +446,8 @@ void iwn_proc_kill(pid_t pid, int signum) {
 
 void iwn_proc_kill_all(int signum) {
   pthread_mutex_lock(&cc.mtx);
-  int len = cc.map ? iwhmap_count(cc.map) : 0;
-  if (len < 1) {
+  uint32_t len = cc.map ? iwhmap_count(cc.map) : 0;
+  if (len == 0) {
     pthread_mutex_unlock(&cc.mtx);
     return;
   }
