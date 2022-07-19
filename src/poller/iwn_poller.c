@@ -1,10 +1,10 @@
 #include "iwn_poller.h"
-#include "khash.h"
 
 #include <iowow/iwutils.h>
 #include <iowow/iwlog.h>
 #include <iowow/iwp.h>
 #include <iowow/iwtp.h>
+#include <iowow/iwhmap.h>
 
 #include <pthread.h>
 #include <stdbool.h>
@@ -14,6 +14,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#include <limits.h>
+#include <string.h>
 #include <sys/socket.h>
 
 #if defined(IWN_KQUEUE)
@@ -23,8 +25,6 @@
 #include <sys/timerfd.h>
 #include <sys/eventfd.h>
 #endif
-
-KHASH_MAP_INIT_INT(SLOTS, struct poller_slot*)
 
 #define SLOT_REMOVE_PENDING 0x01U
 #define SLOT_REMOVED        0x02U
@@ -51,8 +51,8 @@ struct iwn_poller {
   atomic_long timeout_next;      ///< Next timeout check
   atomic_long timeout_checktime; ///< Last time of timeout check
 
-  khash_t(SLOTS) * slots;
-  IWTP tp;
+  IWTP    tp;
+  IWHMAP *slots;
   pthread_mutex_t mtx;
   volatile bool   stop;
   volatile bool   housekeeping;        ///< CAS barrier for timeout cleaner
@@ -149,14 +149,12 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
   if (!(flags & REF_LOCKED)) {
     pthread_mutex_lock(&p->mtx);
   }
-  bool destroy = --s->refs == 0;
+  --s->refs;
+  bool destroy = s->refs == 0;
   if (destroy) {
-    _rw_fd_unsubscribe(p->fd, s->fd);
     s->flags |= SLOT_REMOVED;
-    khiter_t k = kh_get(SLOTS, p->slots, s->fd);
-    if (k != kh_end(p->slots)) {
-      s = kh_value(p->slots, k);
-      kh_del(SLOTS, p->slots, k);
+    _rw_fd_unsubscribe(p->fd, s->fd);
+    if (iwhmap_remove_u32(p->slots, s->fd)) {
       --p->fds_count;
 #if defined(IWN_EPOLL)
       if (p->fds_count < 3) {
@@ -185,19 +183,15 @@ static iwrc _slot_ref(struct poller_slot *s) {
     pthread_mutex_unlock(&p->mtx);
     return IW_ERROR_INVALID_STATE;
   }
-  if (s->refs++ == 0) {
-    khiter_t k = kh_get(SLOTS, p->slots, s->fd);
-    if (k != kh_end(p->slots)) {
+  ++s->refs;
+  if (s->refs == 1) {
+    if (iwhmap_get_u32(p->slots, s->fd)) {
       rc = IW_ERROR_INVALID_STATE;
       iwlog_ecode_error(rc, "File descriptor: %d is already managed by poller: %d", s->fd, p->fd);
     } else {
-      int rci;
-      k = kh_put(SLOTS, p->slots, s->fd, &rci);
-      if (rci != -1) {
-        kh_value(p->slots, k) = s;
+      rc = iwhmap_put_u32(p->slots, s->fd, s);
+      if (!rc) {
         ++p->fds_count;
-      } else {
-        rc = IW_ERROR_FAIL;
       }
     }
   }
@@ -206,14 +200,11 @@ static iwrc _slot_ref(struct poller_slot *s) {
 }
 
 static struct poller_slot* _slot_ref_id(struct iwn_poller *p, int fd, uint8_t flags) {
-  struct poller_slot *s = 0;
+  struct poller_slot *s;
   if (!(flags & REF_LOCKED)) {
     pthread_mutex_lock(&p->mtx);
   }
-  khiter_t k = kh_get(SLOTS, p->slots, fd);
-  if (k != kh_end(p->slots)) {
-    s = kh_value(p->slots, k);
-  }
+  s = iwhmap_get_u32(p->slots, fd);
   if (s) {
     if (s->flags & SLOT_REMOVED) {
       s = 0;
@@ -227,14 +218,9 @@ static struct poller_slot* _slot_ref_id(struct iwn_poller *p, int fd, uint8_t fl
   return s;
 }
 
-static inline struct poller_slot* _slot_peek_leave_locked(struct iwn_poller *p, int fd) {
-  struct poller_slot *s = 0;
+IW_INLINE struct poller_slot* _slot_peek_leave_locked(struct iwn_poller *p, int fd) {
   pthread_mutex_lock(&p->mtx);
-  khiter_t k = kh_get(SLOTS, p->slots, fd);
-  if (k != kh_end(p->slots)) {
-    s = kh_value(p->slots, k);
-  }
-  return s;
+  return iwhmap_get_u32(p->slots, fd);
 }
 
 static iwrc _slot_remove_unref(struct iwn_poller *p, int fd) {
@@ -277,21 +263,34 @@ void iwn_poller_remove(struct iwn_poller *p, int fd) {
 }
 
 static void _poller_cleanup(struct iwn_poller *p) {
+  int *fds, i;
+  int buf[1024];
+  IWHMAP_ITER iter;
+
   pthread_mutex_lock(&p->mtx);
-  int i = 0;
-  int sz = kh_size(p->slots);
-  int *fds = calloc(sz, sizeof(int));
-  for (khiter_t k = kh_begin(p->slots); k != kh_end(p->slots) && i < sz; ++k) {
-    if (!kh_exist(p->slots, k)) {
-      continue;
+  uint32_t sz = iwhmap_count(p->slots);
+  if (sz <= sizeof(buf) / sizeof(buf[0])) {
+    fds = buf;
+  } else {
+    fds = calloc(sz, sizeof(*fds));
+    if (!fds) {
+      pthread_mutex_unlock(&p->mtx);
+      return;
     }
-    fds[i++] = kh_key(p->slots, k);
+  }
+  iwhmap_iter_init(p->slots, &iter);
+  for (i = 0; iwhmap_iter_next(&iter); ++i) {
+    fds[i] = (int) (intptr_t) iter.key;
   }
   pthread_mutex_unlock(&p->mtx);
+
   while (--i >= 0) {
     iwn_poller_remove(p, fds[i]);
   }
-  free(fds);
+
+  if (fds != buf) {
+    free(fds);
+  }
 }
 
 static void _destroy(struct iwn_poller *p) {
@@ -314,9 +313,7 @@ static void _destroy(struct iwn_poller *p) {
     _service_fds_unsubcribe(p);
 #endif
 
-    if (p->slots) {
-      kh_destroy(SLOTS, p->slots);
-    }
+    iwhmap_destroy(p->slots);
     pthread_mutex_destroy(&p->mtx);
     free(p);
   }
@@ -325,15 +322,16 @@ static void _destroy(struct iwn_poller *p) {
 static void _timer_ready_impl(struct iwn_poller *p) {
   time_t ctime = _time_sec();
   time_t timeout_next = ctime + 24 * 60 * 60;
+
   if (ctime != p->timeout_checktime) {
-    p->timeout_checktime = ctime;
+    IWHMAP_ITER iter;
     struct poller_slot *h = 0;
+    p->timeout_checktime = ctime;
+
     pthread_mutex_lock(&p->mtx);
-    for (khiter_t k = kh_begin(p->slots); k != kh_end(p->slots); ++k) {
-      if (!kh_exist(p->slots, k)) {
-        continue;
-      }
-      struct poller_slot *s = kh_value(p->slots, k);
+    iwhmap_iter_init(p->slots, &iter);
+    while (iwhmap_iter_next(&iter)) {
+      struct poller_slot *s = (struct poller_slot*) iter.val;
       if (s->timeout_limit <= ctime) {
         ++s->refs;
         s->timeout_limit = INT_MAX;
@@ -343,6 +341,7 @@ static void _timer_ready_impl(struct iwn_poller *p) {
         timeout_next = s->timeout_limit;
       }
     }
+
     p->timeout_next = timeout_next;
     pthread_mutex_unlock(&p->mtx);
 
@@ -548,6 +547,7 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
   if (IW_UNLIKELY(task->events & IWN_POLLTIMEOUT)) {
     rc = _poller_timeout_add(s);
   } else {
+
 #if defined(IWN_KQUEUE)
 
     int i = 0;
@@ -600,9 +600,9 @@ finish:
 }
 
 bool iwn_poller_fd_is_managed(struct iwn_poller *p, int fd) {
-  bool ret = false;
+  bool ret;
   pthread_mutex_lock(&p->mtx);
-  ret = kh_get(SLOTS, p->slots, fd) != kh_end(p->slots);
+  ret = iwhmap_get_u32(p->slots, fd) != 0;
   pthread_mutex_unlock(&p->mtx);
   return ret;
 }
@@ -726,7 +726,7 @@ static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **ou
   p->max_poll_events = max_poll_events;
 
   RCN(finish, pthread_mutex_init(&p->mtx, 0));
-  RCA(p->slots = kh_init(SLOTS), finish);
+  RCB(finish, p->slots = iwhmap_create_u32(0));
   RCC(rc, finish, iwtp_start("poller-tp-", num_threads, 0, &p->tp));
 
 #if defined(IWN_KQUEUE)
