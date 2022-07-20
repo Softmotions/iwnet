@@ -183,16 +183,10 @@ static iwrc _slot_ref(struct poller_slot *s) {
     pthread_mutex_unlock(&p->mtx);
     return IW_ERROR_INVALID_STATE;
   }
-  ++s->refs;
-  if (s->refs == 1) {
-    if (iwhmap_get_u32(p->slots, s->fd)) {
-      rc = IW_ERROR_INVALID_STATE;
-      iwlog_ecode_error(rc, "File descriptor: %d is already managed by poller: %d", s->fd, p->fd);
-    } else {
-      rc = iwhmap_put_u32(p->slots, s->fd, s);
-      if (!rc) {
-        ++p->fds_count;
-      }
+  if (++s->refs == 1) {
+    rc = iwhmap_put_u32(p->slots, s->fd, s);
+    if (!rc) {
+      ++p->fds_count;
     }
   }
   pthread_mutex_unlock(&p->mtx);
@@ -547,7 +541,6 @@ iwrc iwn_poller_add(const struct iwn_poller_task *task) {
   if (IW_UNLIKELY(task->events & IWN_POLLTIMEOUT)) {
     rc = _poller_timeout_add(s);
   } else {
-
 #if defined(IWN_KQUEUE)
 
     int i = 0;
