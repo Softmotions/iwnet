@@ -149,6 +149,10 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
   if (!(flags & REF_LOCKED)) {
     pthread_mutex_lock(&p->mtx);
   }
+  if (s->flags & SLOT_REMOVED) {
+    pthread_mutex_unlock(&p->mtx);
+    return false;
+  }
   --s->refs;
   bool destroy = s->refs == 0;
   if (destroy) {
@@ -177,13 +181,13 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
 static iwrc _slot_ref(struct poller_slot *s) {
   iwrc rc = 0;
   struct iwn_poller *p = s->poller;
-
   pthread_mutex_lock(&p->mtx);
-  if (s->flags & SLOT_REMOVED) {
-    pthread_mutex_unlock(&p->mtx);
-    return IW_ERROR_INVALID_STATE;
-  }
   if (++s->refs == 1) {
+    if (iwhmap_get_u32(p->slots, s->fd)) {
+      pthread_mutex_unlock(&p->mtx);
+      iwlog_error("FD: %d is managed already, poller: %d", s->fd, p->fd);
+      return IW_ERROR_INVALID_STATE;
+    }
     rc = iwhmap_put_u32(p->slots, s->fd, s);
     if (!rc) {
       ++p->fds_count;
@@ -200,7 +204,7 @@ static struct poller_slot* _slot_ref_id(struct iwn_poller *p, int fd, uint8_t fl
   }
   s = iwhmap_get_u32(p->slots, fd);
   if (s) {
-    if (s->flags & SLOT_REMOVED) {
+    if (s->flags & (SLOT_REMOVED | SLOT_REMOVE_PENDING)) {
       s = 0;
     } else {
       ++s->refs;
@@ -217,11 +221,11 @@ IW_INLINE struct poller_slot* _slot_peek_leave_locked(struct iwn_poller *p, int 
   return iwhmap_get_u32(p->slots, fd);
 }
 
-static iwrc _slot_remove_unref(struct iwn_poller *p, int fd) {
+static void _slot_remove_unref(struct iwn_poller *p, int fd) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
-  if (!s || (s->flags & SLOT_REMOVE_PENDING)) {
+  if (!s || (s->flags & (SLOT_REMOVE_PENDING | SLOT_REMOVED))) {
     pthread_mutex_unlock(&p->mtx);
-    return IW_ERROR_INVALID_STATE;
+    return;
   }
   s->flags |= SLOT_REMOVE_PENDING;
   bool destroy = _slot_unref(s, REF_LOCKED);
@@ -232,7 +236,7 @@ static iwrc _slot_remove_unref(struct iwn_poller *p, int fd) {
   if (destroy) {
     _slot_destroy(s);
   }
-  return 0;
+  return;
 }
 
 void iwn_poller_remove(struct iwn_poller *p, int fd) {
@@ -326,16 +330,17 @@ static void _timer_ready_impl(struct iwn_poller *p) {
     iwhmap_iter_init(p->slots, &iter);
     while (iwhmap_iter_next(&iter)) {
       struct poller_slot *s = (struct poller_slot*) iter.val;
-      if (s->timeout_limit <= ctime) {
-        ++s->refs;
-        s->timeout_limit = INT_MAX;
-        s->next = h;
-        h = s;
-      } else if (s->timeout_limit < timeout_next) {
-        timeout_next = s->timeout_limit;
+      if (!(s->flags & (SLOT_REMOVED | SLOT_REMOVE_PENDING | SLOT_PROCESSING))) {
+        if (s->timeout_limit <= ctime) {
+          ++s->refs;
+          s->timeout_limit = INT_MAX;
+          s->next = h;
+          h = s;
+        } else if (s->timeout_limit < timeout_next) {
+          timeout_next = s->timeout_limit;
+        }
       }
     }
-
     p->timeout_next = timeout_next;
     pthread_mutex_unlock(&p->mtx);
 
