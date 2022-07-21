@@ -38,6 +38,10 @@ IW_EXTERN_C_START
 #else
 #error "Unsupported operating system"
 #endif
+
+/// Start poller loop even with no managed fds.
+#define IWN_POLLER_POLL_NO_FDS 0x01U
+
 /// @}
 
 struct iwn_poller;
@@ -98,6 +102,11 @@ IW_EXPORT void iwn_poller_destroy(struct iwn_poller **pp);
 
 /// Submits a poller task to the given poller.
 IW_EXPORT iwrc iwn_poller_task(struct iwn_poller*, void (*task)(void*), void *arg);
+
+/// Set one of the following poller flags:
+/// - IWN_POLLER_POLL_NO_FDS - Start poller loop even with no managed fds. 
+//
+IW_EXPORT void iwn_poller_flags_set(struct iwn_poller*, uint32_t flags);
 
 /// Starts poller poll event loop.
 /// @note Current thread will be blocked until event loop finished.

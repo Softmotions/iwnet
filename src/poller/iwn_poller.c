@@ -56,8 +56,10 @@ struct iwn_poller {
   char   *thread_name;
 
   pthread_mutex_t mtx;
-  volatile bool   stop;
-  volatile bool   housekeeping;        ///< CAS barrier for timeout cleaner
+  uint32_t flags; ///< Poller mode flags. See iwn_poller_flags_set()
+
+  volatile bool stop;
+  volatile bool housekeeping;          ///< CAS barrier for timeout cleaner
 };
 
 struct poller_slot {
@@ -883,6 +885,10 @@ finish:
   return rc;
 }
 
+void iwn_poller_flags_set(struct iwn_poller *p, uint32_t flags) {
+  p->flags = flags;
+}
+
 void iwn_poller_poll(struct iwn_poller *p) {
   if (p->thread_name) {
     iwp_set_current_thread_name(p->thread_name);
@@ -901,6 +907,10 @@ void iwn_poller_poll(struct iwn_poller *p) {
   p->stop = p->fds_count < 3;
   struct epoll_event event[max_events];
 #endif
+
+  if (p->flags & IWN_POLLER_POLL_NO_FDS) {
+    p->stop = false;
+  }
 
   while (!p->stop) {
 #if defined(IWN_KQUEUE)
