@@ -104,7 +104,7 @@ IW_EXPORT iwrc iwn_poller_task(struct iwn_poller*, void (*task)(void*), void *ar
 IW_EXPORT void iwn_poller_poll(struct iwn_poller*);
 
 /// Starts poller poll event loop in separate thread.
-IW_EXPORT iwrc iwn_poller_poll_in_thread(struct iwn_poller*, pthread_t *out_thr);
+IW_EXPORT iwrc iwn_poller_poll_in_thread(struct iwn_poller*, const char *thr_name, pthread_t *out_thr);
 
 /// Returns `true` if poller event loop is alive.
 IW_EXPORT bool iwn_poller_alive(struct iwn_poller*);

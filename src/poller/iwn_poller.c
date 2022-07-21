@@ -53,6 +53,8 @@ struct iwn_poller {
 
   IWTP    tp;
   IWHMAP *slots;
+  char   *thread_name;
+
   pthread_mutex_t mtx;
   volatile bool   stop;
   volatile bool   housekeeping;        ///< CAS barrier for timeout cleaner
@@ -870,14 +872,24 @@ static void* _poll_worker(void *d) {
   return 0;
 }
 
-iwrc iwn_poller_poll_in_thread(struct iwn_poller *p, pthread_t *out_thr) {
+iwrc iwn_poller_poll_in_thread(struct iwn_poller *p, const char *thr_name, pthread_t *out_thr) {
   iwrc rc = 0;
+  if (thr_name) {
+    p->thread_name = strdup(thr_name);
+  }
   RCN(finish, pthread_create(out_thr, 0, _poll_worker, p));
+
 finish:
   return rc;
 }
 
 void iwn_poller_poll(struct iwn_poller *p) {
+  if (p->thread_name) {
+    iwp_set_current_thread_name(p->thread_name);
+    free(p->thread_name);
+    p->thread_name = 0;
+  }
+
   int max_events = p->max_poll_events;
 
 #if defined(IWN_KQUEUE)
