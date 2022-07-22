@@ -37,8 +37,8 @@
 struct iwn_poller {
   int fd;
 #ifdef IWN_EPOLL
-  int event_fd;               ///< fd to signal internal changes on poller.
-  int timer_fd;               ///< fd to set up timeouts
+  atomic_int event_fd;        ///< fd to signal internal changes on poller.
+  atomic_int timer_fd;        ///< fd to set up timeouts
 #endif
 
 #ifdef IWN_KQUEUE
@@ -674,7 +674,10 @@ static iwrc _eventfd_ensure(struct iwn_poller *p) {
   if (p->event_fd > -1) {
     return 0;
   }
-  RCN(finish, p->event_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK));
+  int fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+  RCN(finish, fd);
+  p->event_fd = fd;
+
    #if EFD_CLOEXEC == 0
 #endif
   RCN(finish, fcntl(p->event_fd, F_SETFD, FD_CLOEXEC));
@@ -698,7 +701,10 @@ static iwrc _timerfd_ensure(struct iwn_poller *p) {
   if (p->timer_fd > -1) {
     return 0;
   }
-  RCN(finish, p->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK));
+  int fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
+  RCN(finish, fd);
+  p->timer_fd = fd;
+
   RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
     .poller = p,
     .fd = p->timer_fd,
