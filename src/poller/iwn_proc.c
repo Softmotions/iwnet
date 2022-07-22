@@ -86,7 +86,7 @@ static iwrc _proc_add(struct proc *proc) {
   pthread_mutex_lock(&cc.mtx);
   RCC(rc, finish, _init_lk());
   proc->refs = 1;
-  rc = iwhmap_put(cc.map, (void*) (intptr_t) proc->pid, proc);
+  rc = iwhmap_put_u32(cc.map, proc->pid, proc);
 
 finish:
   pthread_mutex_unlock(&cc.mtx);
@@ -96,7 +96,7 @@ finish:
 static struct proc* _proc_ref(pid_t pid) {
   struct proc *proc;
   pthread_mutex_lock(&cc.mtx);
-  proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
+  proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
   if (proc) {
     if (proc->refs == 0) {
       proc = 0; // proc has been removed
@@ -111,7 +111,7 @@ static struct proc* _proc_ref(pid_t pid) {
 static void _proc_unref(pid_t pid, int wstatus) {
   struct proc *proc = 0;
   pthread_mutex_lock(&cc.mtx);
-  proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
+  proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
   if (!proc || proc->refs == 0) {
     pthread_mutex_unlock(&cc.mtx);
     return;
@@ -139,7 +139,7 @@ static void _proc_unref(pid_t pid, int wstatus) {
 
   pthread_mutex_lock(&cc.mtx);
   if (cc.map) {
-    iwhmap_remove(cc.map, (void*) (intptr_t) pid);
+    iwhmap_remove_u32(cc.map, pid);
   }
   pthread_cond_broadcast(&cc.cond);
   pthread_mutex_unlock(&cc.mtx);
@@ -409,7 +409,7 @@ iwrc iwn_proc_stdin_close(pid_t pid) {
 
 iwrc iwn_proc_wait(pid_t pid) {
   pthread_mutex_lock(&cc.mtx);
-  struct proc *proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
+  struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
   if (!proc) {
     pthread_mutex_unlock(&cc.mtx);
     return IW_ERROR_NOT_EXISTS;
@@ -420,7 +420,7 @@ iwrc iwn_proc_wait(pid_t pid) {
   }
   while (1) {
     pthread_cond_wait(&cc.cond, &cc.mtx);
-    proc = cc.map ? iwhmap_get(cc.map, (void*) (intptr_t) pid) : 0;
+    proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
     if (!proc) {
       break;
     }
