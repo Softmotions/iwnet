@@ -37,8 +37,8 @@
 struct iwn_poller {
   int fd;
 #ifdef IWN_EPOLL
-  atomic_int event_fd;        ///< fd to signal internal changes on poller.
-  atomic_int timer_fd;        ///< fd to set up timeouts
+  int event_fd;        ///< fd to signal internal changes on poller.
+  int timer_fd;        ///< fd to set up timeouts
 #endif
 
 #ifdef IWN_KQUEUE
