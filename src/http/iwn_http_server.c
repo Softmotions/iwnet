@@ -269,8 +269,8 @@ static int8_t const _token_start_states[] = {
   0, HS_TOK_METHOD, 0, HS_TOK_TARGET, 0, HS_TOK_VERSION, 0, 0, HS_TOK_HEADER_KEY,
 //HS HV                 HR HE ER HN BD           CS CB                 CE CR CN
   0, HS_TOK_HEADER_VAL, 0, 0, 0, 0, HS_TOK_BODY, 0, HS_TOK_CHUNK_BODY, 0, 0, 0,
-//CD C1 C2
-  0, 0, 0,
+//CD C1 C2 BR
+  0, 0, 0, 0
 };
 
 static char const *_status_text[] = {
