@@ -191,7 +191,9 @@ static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user
   if (__sync_bool_compare_and_swap(&ws->dispose_cas, false, true)) {
     pthread_mutex_lock(&ws->mtx);
     ws->fd = -1;
-    ws->spec.on_dispose(&ws->ctx);
+    if (ws->spec.on_dispose) {
+      ws->spec.on_dispose(&ws->ctx);
+    }
     pthread_mutex_unlock(&ws->mtx);
     _destroy(ws);
   }
@@ -248,7 +250,7 @@ static iwrc _handshake_output_fill(struct iwn_ws_client *ws) {
         "\r\n",
         ws->path, (ws->query ? "?" : ""), (ws->query ? ws->query : ""),
         ws->host, ws->port,
-        er,  
+        er,
         ws->client_key));
 
   if (er != er_default) {
@@ -556,7 +558,7 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   if (out_ws) {
     *out_ws = 0;
   }
-  if (!spec || !spec->url || !spec->poller || !spec->on_dispose || !spec->on_message) {
+  if (!spec || !spec->url || !spec->poller || !spec->on_message) {
     return IW_ERROR_INVALID_ARGS;
   }
 
