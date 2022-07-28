@@ -128,6 +128,12 @@ IW_EXPORT struct iwn_val iwn_http_request_method(struct iwn_http_req*);
 ///
 IW_EXPORT struct iwn_val iwn_http_request_body(struct iwn_http_req*);
 
+/// Take a lock on generic user mutex associated with givene request.
+IW_EXPORT void iwn_http_request_user_lock(struct iwn_http_req*);
+
+/// Unlock generic user 
+IW_EXPORT void iwn_http_request_user_unlock(struct iwn_http_req*);
+
 /// Get the first occurrence of request heade`r value with given `header_name`.
 /// If no header is found the zero `iwn_val` structure will be returned.
 ///

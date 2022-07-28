@@ -1100,6 +1100,14 @@ struct iwn_val iwn_http_request_body(struct iwn_http_req *request) {
   return _token_get_string((void*) request, HS_TOK_BODY);
 }
 
+void iwn_http_request_user_lock(struct iwn_http_req *request) {
+  pthread_mutex_lock(&request->user_mtx);
+}
+
+void iwn_http_request_user_unlock(struct iwn_http_req *request) {
+  pthread_mutex_unlock(&request->user_mtx);
+}
+
 void iwn_http_request_chunk_next(struct iwn_http_req *request, iwn_http_server_chunk_handler chunk_cb) {
   struct client *client = (void*) request;
   client->chunk_cb = chunk_cb;
