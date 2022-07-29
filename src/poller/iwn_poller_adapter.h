@@ -19,6 +19,7 @@ struct iwn_poller_adapter {
   ssize_t (*write)(struct iwn_poller_adapter *a, const uint8_t *buf, size_t len);
   iwrc    (*arm)(struct iwn_poller_adapter *a, uint32_t events);
   bool    (*has_pending_write_bytes)(struct iwn_poller_adapter *a);
+  void   *user_data;
   int     fd;
 };
 

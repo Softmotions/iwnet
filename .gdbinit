@@ -1,5 +1,5 @@
-cd ./build/src/http/examples
-file ./todolist_http_server
+cd ./build/src/ws/tests
+file ./ws_client_test2
 #set args --ssl
 
 set confirm off

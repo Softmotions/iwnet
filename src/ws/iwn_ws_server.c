@@ -379,7 +379,8 @@ struct write_fd_ctx {
 };
 
 static void _write_fd_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
-  struct iwn_http_req *request = slot_user_data;
+  struct iwn_poller_adapter *pa = slot_user_data;
+  struct iwn_http_req *request = pa->user_data;
   struct iwn_ws_sess *sess = iwn_http_request_ws_data(request);
   struct write_fd_ctx *ctx = fn_user_data;
   ctx->ret = _ws_server_write(sess, ctx->buf, ctx->buf_len, ctx->opc);

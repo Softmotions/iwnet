@@ -512,7 +512,8 @@ struct write_fd_ctx {
 };
 
 static void _write_fd_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
-  struct iwn_ws_client *ws = slot_user_data; // It is a struct iwn_poller_adapter->user_data actually
+  struct iwn_poller_adapter *pa = slot_user_data;
+  struct iwn_ws_client *ws = pa->user_data; // It is a struct iwn_poller_adapter->user_data actually
   struct write_fd_ctx *ctx = fn_user_data;
   ctx->ret = _write(ws, ctx->buf, ctx->buf_len, ctx->opc);
 }

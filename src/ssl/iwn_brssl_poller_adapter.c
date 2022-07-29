@@ -20,7 +20,6 @@ struct pa {
   struct iwn_poller_adapter     b;
   iwn_on_poller_adapter_event   on_event;
   iwn_on_poller_adapter_dispose on_dispose;
-  void *user_data;
   br_ssl_engine_context *eng;
   pthread_mutex_t mtx;
   pthread_key_t   ready_fd_tl;
@@ -129,7 +128,7 @@ IW_INLINE void _destroy(struct pa *a) {
 static void _on_dispose(const struct iwn_poller_task *t) {
   struct pa *a = t->user_data;
   if (a->on_dispose) {
-    a->on_dispose((void*) a, a->user_data);
+    a->on_dispose((void*) a, a->b.user_data);
   }
   _destroy(a);
 }
@@ -260,7 +259,7 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
     }
 
     while (br_ssl_engine_current_state(cc) & BR_SSL_SENDAPP) {
-      int64_t n = a->on_event((void*) a, a->user_data, IWN_POLLOUT);
+      int64_t n = a->on_event((void*) a, a->b.user_data, IWN_POLLOUT);
       if (n == -1) {
         goto finish;
       } else if (!(n & IWN_POLLOUT)) {
@@ -269,7 +268,7 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
     }
 
     while (br_ssl_engine_current_state(cc) & BR_SSL_RECVAPP) {
-      int64_t n = a->on_event((void*) a, a->user_data, IWN_POLLIN);
+      int64_t n = a->on_event((void*) a, a->b.user_data, IWN_POLLIN);
       if (n == -1) {
         goto finish;
       } else if (!(n & IWN_POLLIN)) {
@@ -421,9 +420,9 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   a->b.write = _write;
   a->b.arm = _arm;
   a->b.has_pending_write_bytes = _has_pending_write_bytes;
+  a->b.user_data = spec->user_data;
   a->on_event = spec->on_event;
   a->on_dispose = spec->on_dispose;
-  a->user_data = spec->user_data;
 
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
@@ -539,10 +538,10 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
   a->b.read = _read;
   a->b.write = _write;
   a->b.arm = _arm;
+  a->b.user_data = spec->user_data;
   a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = spec->on_event;
   a->on_dispose = spec->on_dispose;
-  a->user_data = spec->user_data;
 
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
