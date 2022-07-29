@@ -197,6 +197,7 @@ static void _wslay_msg_recv_callback(
     goto error;
   }
   m->next = 0;
+  m->opcode = arg->opcode;
   m->buf_len = arg->msg_length;
   m->buf = malloc(m->buf_len + 1);
   if (!m->buf) {
