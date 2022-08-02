@@ -122,8 +122,7 @@ struct wslay_event_context {
   /* The sum of message length in send_queue */
   size_t queued_msg_length;
   /* Buffer used for fragmented messages */
-  uint8_t _obuf[4096];
-  uint8_t *obuf;
+  uint8_t obuf[4096];
   uint8_t *obuflimit;
   uint8_t *obufmark;
   /* payload length of frame currently being sent. */
