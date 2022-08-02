@@ -419,7 +419,7 @@ again:
       wslay_event_set_error(ws->wc, WSLAY_ERR_CALLBACK_FAILURE);
     }
   } else if (rci == 0) {
-    errno = EIO;
+    wslay_event_shutdown_read(ws->wc);
     rci = -1;
   }
   return rci;
@@ -449,7 +449,7 @@ again:
       wslay_event_set_error(ws->wc, WSLAY_ERR_CALLBACK_FAILURE);
     }
   } else if (rci == 0) {
-    errno = EIO;
+    wslay_event_shutdown_write(ws->wc);
     rci = -1;
   }
   return rci;

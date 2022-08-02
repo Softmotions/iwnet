@@ -95,7 +95,7 @@ again:
       wslay_event_set_error(ctx->wc, WSLAY_ERR_CALLBACK_FAILURE);
     }
   } else if (rci == 0) {
-    errno = EIO;
+    wslay_event_shutdown_read(ctx->wc);
     rci = -1;
   }
   return rci;
@@ -125,7 +125,7 @@ again:
       wslay_event_set_error(ctx->wc, WSLAY_ERR_CALLBACK_FAILURE);
     }
   } else if (rci == 0) {
-    errno = EIO;
+    wslay_event_shutdown_write(ctx->wc);
     rci = -1;
   }
   return rci;

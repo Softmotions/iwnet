@@ -25,7 +25,6 @@ content-length: 15
 foo=bar&baz=a@z
 
 Get fail:
-* Empty reply from server
 
 
 Post urlencoded:

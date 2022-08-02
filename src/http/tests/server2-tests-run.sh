@@ -57,7 +57,7 @@ run() {
   curl -isk "${BASE}/get/query?foo=bar&baz=a%40z" | ${FILTER}
   
   printf "\n\nGet fail:\n"
-  curl -vsk "${BASE}/fail" 2>&1 | grep -i empty
+  curl -isk "${BASE}/fail" 2>&1 | ${FILTER} 
 
   printf "\n\nPost urlencoded:\n"
   curl -isk -d'foo=bar&baz=a%40z' ${BASE}/post/urlencoded | ${FILTER}
