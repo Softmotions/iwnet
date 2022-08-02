@@ -34,7 +34,6 @@
 enum wslay_frame_state {
   PREP_HEADER,
   PREP_HEADER_NOBUF,
-  SEND_HEADER,
   SEND_PAYLOAD,
   RECV_HEADER1,
   RECV_PAYLOADLEN,
@@ -49,6 +48,8 @@ struct wslay_frame_opcode_memo {
   uint8_t rsv;
 };
 
+#define WSLAY_FRAME_HDR_SIZ 14
+
 struct wslay_frame_context {
   uint8_t ibuf[4096];
   uint8_t *ibufmark;
@@ -61,11 +62,11 @@ struct wslay_frame_context {
   enum wslay_frame_state istate;
   size_t ireqread;
 
-  uint8_t oheader[14];
-  uint8_t *oheadermark;
-  uint8_t *oheaderlimit;
+  uint8_t oheader[WSLAY_FRAME_HDR_SIZ];
   uint64_t opayloadlen;
   uint64_t opayloadoff;
+  uint64_t opayloadmaskoff;
+  uint8_t hdrtow;
   uint8_t omask;
   uint8_t omaskkey[4];
   enum wslay_frame_state ostate;

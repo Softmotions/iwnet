@@ -1,5 +1,5 @@
 cd ./build/src/ws/tests
-file ./ws_client_test2
+file ./ws_client_test1
 #set args --ssl
 
 set confirm off

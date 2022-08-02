@@ -172,7 +172,7 @@ struct wslay_frame_iocb {
   /* 1 for masked frame, 0 for unmasked */
   uint8_t mask;
   /* part of payload data */
-  const uint8_t *data;
+  uint8_t *data;
   /* bytes of data defined above */
   size_t data_length;
 };
