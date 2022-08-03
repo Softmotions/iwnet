@@ -121,30 +121,7 @@ ssize_t wslay_frame_send(
     iocb->data -= ctx->hdrtow;
     iocb->data_length += ctx->hdrtow;
   }
-  if (ctx->ostate == SEND_HEADER) {
-    ptrdiff_t len = ctx->oheaderlimit - ctx->oheadermark;
-    ssize_t r;
-    int flags = 0;
-    if (iocb->data_length > 0) {
-      flags |= WSLAY_MSG_MORE;
-    };
-    r = ctx->callbacks.send_callback(ctx->oheadermark, (size_t)len, flags,
-                                     ctx->user_data);
-    if (r > 0) {
-      if (r > len) {
-        return WSLAY_ERR_INVALID_CALLBACK;
-      } else {
-        ctx->oheadermark += r;
-        if (ctx->oheadermark == ctx->oheaderlimit) {
-          ctx->ostate = SEND_PAYLOAD;
-        } else {
-          return WSLAY_ERR_WANT_WRITE;
-        }
-      }
-    } else {
-      return WSLAY_ERR_WANT_WRITE;
-    }
-  }
+
   if (ctx->ostate == SEND_PAYLOAD) {
     ssize_t totallen = 0;
 
@@ -153,6 +130,7 @@ ssize_t wslay_frame_send(
         uint8_t temp[4096];
         const uint8_t *datamark = iocb->data,
                       *datalimit = iocb->data + iocb->data_length;
+
         while (datamark < datalimit) {
           size_t i, datalen = (size_t) (datalimit - datamark);
           const uint8_t *writelimit
@@ -163,7 +141,13 @@ ssize_t wslay_frame_send(
           for (i = 0; i < writelen && i < ctx->hdrtow; ++i) {
             temp[i] = datamark[i];
           }
-          r = ctx->callbacks.send_callback(temp, writelen, 0, ctx->user_data);
+
+          /* payload */
+          for (size_t l = 0; i < writelen; ++i, ++l) {
+            temp[i] = datamark[i] ^ ctx->omaskkey[(ctx->opayloadmaskoff + l) % 4];
+          }
+
+          ssize_t r = ctx->callbacks.send_callback(temp, writelen, 0, ctx->user_data);
           if (r > 0) {
             datamark += r;
             ctx->opayloadoff += (uint64_t) r;

@@ -188,7 +188,7 @@ static int wslay_event_omsg_non_fragmented_init(struct wslay_event_omsg **m,
                                                 uint8_t opcode, uint8_t rsv,
                                                 const uint8_t *msg,
                                                 size_t msg_length) {
-  *m = malloc(sizeof(struct wslay_event_omsg) + msg_length);
+  *m = malloc(sizeof(struct wslay_event_omsg) + msg_length + WSLAY_FRAME_HDR_SIZ);
   if (!*m) {
     return WSLAY_ERR_NOMEM;
   }
@@ -197,8 +197,8 @@ static int wslay_event_omsg_non_fragmented_init(struct wslay_event_omsg **m,
   (*m)->opcode = opcode;
   (*m)->rsv = rsv;
   (*m)->type = WSLAY_NON_FRAGMENTED;
+  (*m)->data = (uint8_t *)(*m) + sizeof(**m) + WSLAY_FRAME_HDR_SIZ;
   if (msg_length) {
-    (*m)->data = (uint8_t *)(*m) + sizeof(**m);
     memcpy((*m)->data, msg, msg_length);
     (*m)->data_length = msg_length;
   }
@@ -397,6 +397,7 @@ wslay_event_context_init(wslay_event_context_ptr *ctx,
     wslay_event_imsg_reset(&(*ctx)->imsgs[i]);
   }
   (*ctx)->imsg = &(*ctx)->imsgs[0];
+  (*ctx)->obuf = (*ctx)->_obuf + WSLAY_FRAME_HDR_SIZ;
   (*ctx)->obufmark = (*ctx)->obuflimit = (*ctx)->obuf;
   (*ctx)->status_code_sent = WSLAY_CODE_ABNORMAL_CLOSURE;
   (*ctx)->status_code_recv = WSLAY_CODE_ABNORMAL_CLOSURE;
@@ -816,7 +817,7 @@ int wslay_event_send(wslay_event_context_ptr ctx) {
     } else {
       if (ctx->omsg->fin == 0 && ctx->obuflimit == ctx->obufmark) {
         int eof = 0;
-        r = ctx->omsg->read_callback(ctx, ctx->obuf, sizeof(ctx->obuf),
+        r = ctx->omsg->read_callback(ctx, ctx->obuf, sizeof(ctx->_obuf) - WSLAY_FRAME_HDR_SIZ,
                                      &ctx->omsg->source, &eof, ctx->user_data);
         if (r == 0 && eof == 0) {
           break;
