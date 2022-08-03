@@ -62,13 +62,14 @@ struct wslay_frame_context {
   enum wslay_frame_state istate;
   size_t ireqread;
 
-  uint8_t oheader[WSLAY_FRAME_HDR_SIZ];
   uint64_t opayloadlen;
   uint64_t opayloadoff;
   uint64_t opayloadmaskoff;
+
   uint8_t hdrtow;
   uint8_t omask;
   uint8_t omaskkey[4];
+
   enum wslay_frame_state ostate;
 
   struct wslay_frame_callbacks callbacks;

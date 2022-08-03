@@ -195,7 +195,7 @@ static int wslay_event_omsg_non_fragmented_init(struct wslay_event_omsg **m,
   memset(*m, 0, sizeof(struct wslay_event_omsg));
   (*m)->fin = 1;
   (*m)->opcode = opcode;
-  (*m)->rsv = rsv;  
+  (*m)->rsv = rsv;
   (*m)->type = WSLAY_NON_FRAGMENTED;
   (*m)->data = (uint8_t *)(*m) + sizeof(**m) + WSLAY_FRAME_HDR_SIZ;
   if (msg_length) {
@@ -289,6 +289,7 @@ static int wslay_event_queue_close_wrapper(wslay_event_context_ptr ctx,
                                            const uint8_t *reason,
                                            size_t reason_length) {
   int r;
+  fprintf(stderr, "QQCW\n");
   ctx->read_enabled = 0;
   if ((r = wslay_event_queue_close(ctx, status_code, reason, reason_length)) &&
       r != WSLAY_ERR_NO_MORE_MSG) {

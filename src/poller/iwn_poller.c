@@ -29,6 +29,7 @@
 #define SLOT_REMOVE_PENDING 0x01U
 #define SLOT_REMOVED        0x02U
 #define SLOT_PROCESSING     0x04U
+#define SLOT_UNSUBSCRIBED   0x08U
 
 #define REF_SET_LOCKED    0x01U
 #define REF_LOCKED        0x02U
@@ -123,12 +124,15 @@ IW_INLINE unsigned short _events_to_kflags(uint32_t events) {
   return action;
 }
 
-IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
-  struct kevent ev[] = {
-    { fd, EVFILT_READ,  EV_DELETE },
-    { fd, EVFILT_WRITE, EV_DELETE },
-  };
-  kevent(pfd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0);
+IW_INLINE void _rw_fd_unsubscribe(struct poller_slot *s) {
+  if (!(s->flags & SLOT_UNSUBSCRIBED)) {
+    s->flags |= SLOT_UNSUBSCRIBED;
+    struct kevent ev[] = {
+      { fd, EVFILT_READ,  EV_DELETE },
+      { fd, EVFILT_WRITE, EV_DELETE },
+    };
+    kevent(pfd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0);
+  }
 }
 
 IW_INLINE void _service_fds_unsubcribe(struct iwn_poller *p) {
@@ -142,8 +146,11 @@ IW_INLINE void _service_fds_unsubcribe(struct iwn_poller *p) {
 
 #else
 
-IW_INLINE void _rw_fd_unsubscribe(int pfd, int fd) {
-  epoll_ctl(pfd, EPOLL_CTL_DEL, fd, 0);
+IW_INLINE void _rw_fd_unsubscribe(struct poller_slot *s) {
+  if (!(s->flags & SLOT_UNSUBSCRIBED)) {
+    s->flags |= SLOT_UNSUBSCRIBED;
+    epoll_ctl(s->poller->fd, EPOLL_CTL_DEL, s->fd, 0);
+  }
 }
 
 #endif
@@ -161,7 +168,7 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
   bool destroy = s->refs == 0;
   if (destroy) {
     s->flags |= SLOT_REMOVED;
-    _rw_fd_unsubscribe(p->fd, s->fd);
+    _rw_fd_unsubscribe(s);
     if (iwhmap_remove_u32(p->slots, s->fd)) {
       --p->fds_count;
 #if defined(IWN_EPOLL)
@@ -187,7 +194,8 @@ static iwrc _slot_ref(struct poller_slot *s) {
   struct iwn_poller *p = s->poller;
   pthread_mutex_lock(&p->mtx);
   if (++s->refs == 1) {
-    if (iwhmap_get_u32(p->slots, s->fd)) {
+    struct poller_slot *os = iwhmap_get_u32(p->slots, s->fd);
+    if (os) {
       pthread_mutex_unlock(&p->mtx);
       iwlog_error("FD: %d is managed already, poller: %d", s->fd, p->fd);
       return IW_ERROR_INVALID_STATE;
@@ -257,6 +265,7 @@ void iwn_poller_remove(struct iwn_poller *p, int fd) {
     return;
   }
   s->flags |= SLOT_REMOVE_PENDING;
+  _rw_fd_unsubscribe(s);
   bool destroy = _slot_unref(s, REF_LOCKED);
   pthread_mutex_unlock(&p->mtx);
   if (destroy) {

@@ -53,39 +53,37 @@ void wslay_frame_context_free(wslay_frame_context_ptr ctx) { free(ctx); }
 
 ssize_t wslay_frame_send(wslay_frame_context_ptr ctx,
                          struct wslay_frame_iocb *iocb) {
-  if (iocb->data_length > iocb->payload_length) {
-    return WSLAY_ERR_INVALID_ARGUMENT;
-  }
 
   uint8_t hdrtow = ctx->hdrtow;
 
   if (ctx->ostate == PREP_HEADER) {
-    uint8_t *hdptr = ctx->oheader;
-    memset(ctx->oheader, 0, sizeof(ctx->oheader));
-    *hdptr |= (uint8_t)((uint8_t)(iocb->fin << 7) & 0x80u);
-    *hdptr |= (uint8_t)((uint8_t)(iocb->rsv << 4) & 0x70u);
+    uint8_t buf[WSLAY_FRAME_HDR_SIZ] = { 0 };
+    uint8_t *wp = buf;
+
+    *wp |= (uint8_t)((uint8_t)(iocb->fin << 7) & 0x80u);
+    *wp |= (uint8_t)((uint8_t)(iocb->rsv << 4) & 0x70u);
     /* Suppress stubborn gcc-10 warning */
-    *hdptr |= (uint8_t)((uint8_t)(iocb->opcode << 0) & 0xfu);
-    ++hdptr;
-    *hdptr |= (uint8_t)((uint8_t)(iocb->mask << 7) & 0x80u);
+    *wp |= (uint8_t)((uint8_t)(iocb->opcode << 0) & 0xfu);
+    ++wp;
+    *wp |= (uint8_t)((uint8_t)(iocb->mask << 7) & 0x80u);
     if (wslay_is_ctrl_frame(iocb->opcode) && iocb->payload_length > 125) {
       return WSLAY_ERR_INVALID_ARGUMENT;
     }
     if (iocb->payload_length < 126) {
-      *hdptr |= (uint8_t)iocb->payload_length;
-      ++hdptr;
+      *wp |= (uint8_t)iocb->payload_length;
+      ++wp;
     } else if (iocb->payload_length < (1 << 16)) {
       uint16_t len = htons((uint16_t)iocb->payload_length);
-      *hdptr |= 126;
-      ++hdptr;
-      memcpy(hdptr, &len, 2);
-      hdptr += 2;
+      *wp |= 126;
+      ++wp;
+      memcpy(wp, &len, 2);
+      wp += 2;
     } else if (iocb->payload_length < (1ull << 63)) {
       uint64_t len = hton64(iocb->payload_length);
-      *hdptr |= 127;
-      ++hdptr;
-      memcpy(hdptr, &len, 8);
-      hdptr += 8;
+      *wp |= 127;
+      ++wp;
+      memcpy(wp, &len, 8);
+      wp += 8;
     } else {
       /* Too large payload length */
       return WSLAY_ERR_INVALID_ARGUMENT;
@@ -96,21 +94,22 @@ ssize_t wslay_frame_send(wslay_frame_context_ptr ctx,
         return WSLAY_ERR_INVALID_CALLBACK;
       } else {
         ctx->omask = 1;
-        memcpy(hdptr, ctx->omaskkey, 4);
-        hdptr += 4;
+        memcpy(wp, ctx->omaskkey, 4);
+        wp += 4;
       }
     }
 
-    ptrdiff_t hdrlen = hdptr - ctx->oheader;    
-    assert(hdrlen <= sizeof(ctx->oheader));
-    iocb->data -= hdrlen;
-    iocb->data_length += hdrlen;    
-    iocb->payload_length += hdrlen;      
-    hdrtow = ctx->hdrtow = hdrlen;
-    ctx->opayloadlen = iocb->payload_length;
+    hdrtow = ctx->hdrtow = wp - buf;
+    assert(hdrtow <= sizeof(buf));
+
+    iocb->data -= hdrtow;
+    iocb->data_length += hdrtow;
+    memcpy(iocb->data, buf, hdrtow);
+
+    ctx->opayloadlen = iocb->data_length;
     ctx->opayloadoff = 0;
     ctx->opayloadmaskoff = 0;
-    memcpy(iocb->data, ctx->oheader, hdrlen);
+
     ctx->ostate = SEND_PAYLOAD;
   }
 
@@ -127,10 +126,10 @@ ssize_t wslay_frame_send(wslay_frame_context_ptr ctx,
           const uint8_t *writelimit =
               datamark + wslay_min(sizeof(temp), datalen);
           size_t writelen = (size_t)(writelimit - datamark);
-          
+
           /* header part */
           for (i = 0; i < writelen && i < ctx->hdrtow; ++i) {
-            temp[i] = datamark[i];            
+            temp[i] = datamark[i];
           }
 
           /* payload */
@@ -140,18 +139,17 @@ ssize_t wslay_frame_send(wslay_frame_context_ptr ctx,
 
           ssize_t r = ctx->callbacks.send_callback(temp, writelen, 0, ctx->user_data);
           if (r > 0) {
-            if ((size_t)r > writelen) {
-              return WSLAY_ERR_INVALID_CALLBACK;
-            } else {
-              datamark += r;
-              ctx->opayloadoff += (uint64_t)r;
-              totallen += (size_t)r;
-              if (r < hdrtow) {              
-                ctx->hdrtow -= r;
-              } else {
-                ctx->hdrtow = 0;
-                ctx->opayloadmaskoff += r - hdrtow;
-              }
+            datamark += r;
+            ctx->opayloadoff += (uint64_t)r;
+            totallen += (size_t)r;
+
+            ctx->opayloadmaskoff += r;
+            if (ctx->hdrtow) {
+              uint64_t hp = wslay_min(ctx->hdrtow, r);
+              ctx->opayloadmaskoff -= hp;
+              ctx->hdrtow -= hp;
+              iocb->data += hp;
+              iocb->data_length -= hp;
             }
           } else {
             if (totallen > 0) {
@@ -161,21 +159,17 @@ ssize_t wslay_frame_send(wslay_frame_context_ptr ctx,
             }
           }
         }
+
       } else {
-        ssize_t r;
-        r = ctx->callbacks.send_callback(iocb->data, iocb->data_length, 0,
-                                         ctx->user_data);
+        ssize_t r = ctx->callbacks.send_callback(iocb->data, iocb->data_length, 0, ctx->user_data);
         if (r > 0) {
-          if ((size_t)r > iocb->data_length) {
-            return WSLAY_ERR_INVALID_CALLBACK;
-          } else {
-            ctx->opayloadoff += (uint64_t)r;
-            totallen = (size_t)r;
-            if (r < hdrtow) {              
-              ctx->hdrtow -= r;
-            } else {
-              ctx->hdrtow = 0;
-            }
+          ctx->opayloadoff += (uint64_t)r;
+          totallen = (size_t)r;
+          if (ctx->hdrtow) {
+            uint64_t hp = wslay_min(ctx->hdrtow, r);
+            ctx->hdrtow -= hp;
+            iocb->data += hp;
+            iocb->data_length -= hp;
           }
         } else {
           return WSLAY_ERR_WANT_WRITE;
@@ -183,15 +177,15 @@ ssize_t wslay_frame_send(wslay_frame_context_ptr ctx,
       }
     }
 
-    if (ctx->opayloadoff == ctx->opayloadlen) {
-      ctx->ostate = PREP_HEADER;      
-    }
-  
-    if (ctx->hdrtow) { 
+    if (ctx->hdrtow) {
       /* Only part of header was sent */
       return WSLAY_ERR_WANT_WRITE;
     }
-    
+
+    if (ctx->opayloadoff == ctx->opayloadlen) {
+      ctx->ostate = PREP_HEADER;
+    }
+
     return (ssize_t) totallen - hdrtow;
   }
 
