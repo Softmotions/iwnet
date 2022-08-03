@@ -48,7 +48,7 @@ struct wslay_frame_opcode_memo {
   uint8_t rsv;
 };
 
-#define WSLAY_FRAME_HDR_SIZ 14
+#define WSLAY_FRAME_HDR_SIZ 16
 
 struct wslay_frame_context {
   uint8_t ibuf[4096];
