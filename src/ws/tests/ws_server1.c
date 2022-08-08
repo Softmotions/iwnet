@@ -25,6 +25,11 @@ static int _handle_root(struct iwn_wf_req *req, void *user_data) {
 }
 
 static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_len, uint8_t frame) {
+
+  if (strcmp(msg, "disconnect") == 0) {
+    return false;
+  }
+
   IWN_ASSERT_FATAL(sess && msg && msg_len);
   IWN_ASSERT(sess->spec->user_data == ctx);
   fprintf(stderr, "message: %s\n", msg);

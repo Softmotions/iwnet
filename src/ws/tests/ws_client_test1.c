@@ -1,7 +1,7 @@
 
 #include "iwn_tests.h"
 #include "iwn_proc.h"
-#include "ws/iwn_ws_client.h"
+#include "iwn_ws_client.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -32,10 +32,11 @@ static void _on_ws_server_exit(const struct iwn_proc_ctx *ctx) {
 }
 
 static void on_dispose(const struct iwn_ws_client_ctx *ctx) {
-  ws = 0;
   fprintf(stderr, "Killing ws server: %d\n", ws_server_pid);
   iwn_proc_kill(ws_server_pid, SIGINT);
   iwn_proc_wait(ws_server_pid);
+  IWN_ASSERT(iwn_ws_client_destroy(ctx->ws));
+  ws = 0;
 }
 
 static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf, size_t len) {
@@ -51,6 +52,7 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     .on_dispose = on_dispose,
   }, &ws);
   IWN_ASSERT(rc == 0);
+  IWN_ASSERT(ws);
   if (rc) {
     iwn_proc_kill(ws_server_pid, SIGINT);
   }

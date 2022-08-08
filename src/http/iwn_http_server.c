@@ -1785,10 +1785,6 @@ static void _server_destroy(struct server *server) {
   if (server->spec.on_server_dispose) {
     server->spec.on_server_dispose((void*) server);
   }
-  if (server->fd > -1) {
-    close(server->fd);
-    server->fd = -1;
-  }
   free((void*) server->spec.ssl.certs);
   free((void*) server->spec.ssl.private_key);
   pthread_mutex_destroy(&server->mtx);
@@ -2038,7 +2034,12 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   server->server.port = spec->port;
   server->server.user_data = spec->user_data;
 
-  RCC(rc, finish, iwn_poller_add(&task));
+  rc = iwn_poller_add(&task);
+  if (rc) {
+    close(task.fd);
+    goto finish;
+  }
+
   if (listen(task.fd, spec->socket_queue_size) == -1) {
     rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
     iwn_poller_remove(task.poller, task.fd);

@@ -101,11 +101,9 @@ static void _slot_destroy(struct poller_slot *s) {
     if (s->on_dispose) {
       s->on_dispose((void*) s);
     }
-    int fd = s->fd;
-    if (fd > -1) {
-      s->fd = -1;
-      shutdown(fd, SHUT_RDWR);
-      close(fd);
+    if (s->fd > -1) {
+      shutdown(s->fd, SHUT_RDWR);
+      close(s->fd);
     }
     free(s);
   }

@@ -3,9 +3,11 @@
 #include "iwn_poller.h"
 #include "poller/iwn_direct_poller_adapter.h"
 #include "ssl/iwn_brssl_poller_adapter.h"
+
 #include "iwn_base64.h"
 #include "iwn_url.h"
 #include "iwn_utils.h"
+#include "iwn_scheduler.h"
 
 #include "bearssl/bearssl_hash.h"
 #include "wslay/wslay.h"
@@ -15,6 +17,7 @@
 #include <iowow/iwutils.h>
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
@@ -40,14 +43,16 @@ struct iwn_ws_client {
   char *path;
   char *query;
   char *urlbuf;
-  wslay_event_context_ptr wc;
+  wslay_event_context_ptr wsl;
   IWXSTR *output;
   IWXSTR *input;
   pthread_mutex_t mtx;
   int     port;
   int     fd;
-  uint8_t state;
   bool    secure;
+  uint8_t state;
+  atomic_uchar  reconnect_attempt;
+  volatile bool close_cas;
   volatile bool dispose_cas;
   char client_key[32];
 };
@@ -71,20 +76,16 @@ IW_INLINE iwrc _wslayrc(enum wslay_error err) {
   }
 }
 
-static void _destroy(struct iwn_ws_client *ws) {
-  if (!ws) {
-    return;
+static void _ws_destroy(struct iwn_ws_client *ws) {
+  if (ws) {
+    free(ws->path);
+    free(ws->urlbuf);
+    wslay_event_context_free(ws->wsl);
+    iwxstr_destroy(ws->output);
+    iwxstr_destroy(ws->input);
+    pthread_mutex_destroy(&ws->mtx);
+    free(ws);
   }
-  if (ws->fd > -1) {
-    close(ws->fd);
-  }
-  free(ws->path);
-  free(ws->urlbuf);
-  wslay_event_context_free(ws->wc);
-  iwxstr_destroy(ws->output);
-  iwxstr_destroy(ws->input);
-  pthread_mutex_destroy(&ws->mtx);
-  free(ws);
 }
 
 static iwrc _make_non_blocking(int fd) {
@@ -186,17 +187,93 @@ static iwrc _make_tcp_nodelay(int fd) {
   }
 }
 
-static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
+static ssize_t _wslay_event_recv_callback(
+  wslay_event_context_ptr ctx,
+  uint8_t                *buf,
+  size_t                  len,
+  int                     flags,
+  void                   *user_data
+  ) {
+  ssize_t rci = -1;
   struct iwn_ws_client *ws = user_data;
-  if (__sync_bool_compare_and_swap(&ws->dispose_cas, false, true)) {
-    pthread_mutex_lock(&ws->mtx);
-    ws->fd = -1;
-    if (ws->spec.on_dispose) {
-      ws->spec.on_dispose(&ws->ctx);
+  struct iwn_poller_adapter *pa = ws->pa;
+  assert(pa);
+
+again:
+  rci = pa->read(pa, buf, len);
+  if (rci == -1) {
+    if (errno == EINTR) {
+      goto again;
     }
-    pthread_mutex_unlock(&ws->mtx);
-    _destroy(ws);
+    if (errno == EAGAIN) {
+      wslay_event_set_error(ws->wsl, WSLAY_ERR_WOULDBLOCK);
+    } else {
+      wslay_event_set_error(ws->wsl, WSLAY_ERR_CALLBACK_FAILURE);
+    }
+  } else if (rci == 0) {
+    wslay_event_shutdown_read(ws->wsl);
+    rci = -1;
   }
+  return rci;
+}
+
+static ssize_t _wslay_event_send_callback(
+  wslay_event_context_ptr ctx,
+  const uint8_t          *buf,
+  size_t                  len,
+  int                     flags,
+  void                   *user_data
+  ) {
+  ssize_t rci = -1;
+  struct iwn_ws_client *ws = user_data;
+  struct iwn_poller_adapter *pa = ws->pa;
+  assert(pa);
+
+again:
+  rci = pa->write(pa, buf, len);
+  if (rci == -1) {
+    if (errno == EINTR) {
+      goto again;
+    }
+    if (errno == EAGAIN) {
+      wslay_event_set_error(ws->wsl, WSLAY_ERR_WOULDBLOCK);
+    } else {
+      wslay_event_set_error(ws->wsl, WSLAY_ERR_CALLBACK_FAILURE);
+    }
+  } else if (rci == 0) {
+    wslay_event_shutdown_write(ws->wsl);
+    rci = -1;
+  }
+  return rci;
+}
+
+static void _wslay_event_on_msg_recv_callback(
+  wslay_event_context_ptr                   ctx,
+  const struct wslay_event_on_msg_recv_arg *arg,
+  void                                     *user_data
+  ) {
+  struct iwn_ws_client *ws = user_data;
+  if (  (  arg->msg_length > 0
+        && (arg->opcode == WSLAY_TEXT_FRAME || arg->opcode == WSLAY_BINARY_FRAME))
+     || (  (ws->spec.flags & WS_HANDLE_PING_PONG)
+        && (arg->opcode == WSLAY_PING || arg->opcode == WSLAY_PONG))) {
+    ws->spec.on_message(&ws->ctx, (void*) arg->msg, arg->msg_length, arg->opcode);
+  }
+}
+
+static int _wslay_genmask_callback(
+  wslay_event_context_ptr ctx, uint8_t *buf, size_t len,
+  void *user_data
+  ) {
+  size_t tow = len;
+  while (tow > 0) {
+    uint32_t rn = iwu_rand_u32();
+    size_t wl = tow > sizeof(rn) ? sizeof(rn) : tow;
+    memcpy(buf, &rn, wl);
+    tow -= wl;
+    buf += wl;
+  }
+  return 0;
 }
 
 static iwrc _handshake_write_client_key_b64(char out[32]) {
@@ -376,17 +453,17 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
     ret = _on_handshake_event(pa, user_data, events);
     goto finish;
   }
-  if (wslay_event_want_write(ws->wc) && wslay_event_send(ws->wc) < 0) {
+  if (wslay_event_want_write(ws->wsl) && wslay_event_send(ws->wsl) < 0) {
     goto finish;
   }
-  if (wslay_event_want_read(ws->wc) && wslay_event_recv(ws->wc) < 0) {
+  if (wslay_event_want_read(ws->wsl) && wslay_event_recv(ws->wsl) < 0) {
     goto finish;
   }
 
-  if (wslay_event_want_read(ws->wc)) {
+  if (wslay_event_want_read(ws->wsl)) {
     ret |= IWN_POLLIN;
   }
-  if (wslay_event_want_write(ws->wc)) {
+  if (wslay_event_want_write(ws->wsl)) {
     ret |= IWN_POLLOUT;
   }
 
@@ -395,93 +472,123 @@ finish:
   return ret == 0 ? -1 : ret;
 }
 
-static ssize_t _wslay_event_recv_callback(
-  wslay_event_context_ptr ctx,
-  uint8_t                *buf,
-  size_t                  len,
-  int                     flags,
-  void                   *user_data
-  ) {
-  ssize_t rci = -1;
-  struct iwn_ws_client *ws = user_data;
-  struct iwn_poller_adapter *pa = ws->pa;
-  assert(pa);
+static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data);
 
-again:
-  rci = pa->read(pa, buf, len);
-  if (rci == -1) {
-    if (errno == EINTR) {
-      goto again;
+static iwrc _ws_connect(struct iwn_ws_client *ws) {
+  iwrc rc = 0;
+  const struct iwn_ws_client_spec *spec = &ws->spec;
+
+  ws->state = 0;
+  iwxstr_clear(ws->output);
+  iwxstr_clear(ws->input);
+  if (ws->wsl) {
+    wslay_event_context_free(ws->wsl);
+    ws->wsl = 0;
+  }
+
+  // Now do the initial handshake
+  RCC(rc, finish, _connect(ws->host, ws->port, (spec->flags & WS_CONNECT_ASYNC), &ws->fd));
+
+
+  RCC(rc, finish, _wslayrc(wslay_event_context_client_init(&ws->wsl, &(struct wslay_event_callbacks) {
+    .recv_callback = _wslay_event_recv_callback,
+    .send_callback = _wslay_event_send_callback,
+    .on_msg_recv_callback = _wslay_event_on_msg_recv_callback,
+    .genmask_callback = _wslay_genmask_callback
+  }, ws)));
+
+  if (ws->secure) {
+    RCC(rc, finish, iwn_brssl_client_poller_adapter(&(struct iwn_brssl_client_poller_adapter_spec) {
+      .poller = spec->poller,
+      .host = ws->host,
+      .on_event = _on_poller_adapter_event,
+      .on_dispose = _on_poller_adapter_dispose,
+      .user_data = ws,
+      .timeout_sec = spec->timeout_sec,
+      .events = IWN_POLLOUT,
+      .events_mod = IWN_POLLET,
+      .fd = ws->fd,
+      .verify_peer = spec->flags & WS_VERIFY_PEER,
+      .verify_host = spec->flags & WS_VERIFY_HOST
+    }));
+  } else {
+    RCC(rc, finish,
+        iwn_direct_poller_adapter(spec->poller, ws->fd,
+                                  _on_poller_adapter_event,
+                                  _on_poller_adapter_dispose,
+                                  ws, IWN_POLLOUT, IWN_POLLET,
+                                  spec->timeout_sec));
+  }
+
+finish:
+  if (rc) {
+    if (ws->fd > -1) {
+      shutdown(ws->fd, SHUT_RDWR);
+      close(ws->fd);
     }
-    if (errno == EAGAIN) {
-      wslay_event_set_error(ws->wc, WSLAY_ERR_WOULDBLOCK);
+  }
+  return rc;
+}
+
+static void _ws_dispose(struct iwn_ws_client *ws) {
+  if (__sync_bool_compare_and_swap(&ws->dispose_cas, false, true)) {
+    if (ws->spec.on_dispose) {
+      ws->spec.on_dispose(&ws->ctx);
+    }
+  }
+}
+
+bool iwn_ws_client_is_can_destroy(struct iwn_ws_client *ws) {
+  return ws && ws->dispose_cas;
+}
+
+bool iwn_ws_client_destroy(struct iwn_ws_client *ws) {
+  if (ws && ws->dispose_cas) {
+    _ws_destroy(ws);
+    return true;
+  } else {
+    return false;
+  }
+}
+
+static void _ws_reconnect(void *d) {
+  struct iwn_ws_client *ws = d;
+  if (ws->reconnect_attempt++ < ws->spec.reconnect_attempts_num) {
+    iwrc rc = _ws_connect(ws);
+    if (!rc) {
+      ws->reconnect_attempt = 0;
+      return;
     } else {
-      wslay_event_set_error(ws->wc, WSLAY_ERR_CALLBACK_FAILURE);
+      iwlog_ecode_error3(rc);
     }
-  } else if (rci == 0) {
-    wslay_event_shutdown_read(ws->wc);
-    rci = -1;
   }
-  return rci;
+  _on_poller_adapter_dispose(ws->pa, ws);
 }
 
-static ssize_t _wslay_event_send_callback(
-  wslay_event_context_ptr ctx,
-  const uint8_t          *buf,
-  size_t                  len,
-  int                     flags,
-  void                   *user_data
-  ) {
-  ssize_t rci = -1;
+static void _ws_reconnect_cancel(void *d) {
+  struct iwn_ws_client *ws = d;
+  _ws_dispose(ws);
+}
+
+static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
   struct iwn_ws_client *ws = user_data;
-  struct iwn_poller_adapter *pa = ws->pa;
-  assert(pa);
-
-again:
-  rci = pa->write(pa, buf, len);
-  if (rci == -1) {
-    if (errno == EINTR) {
-      goto again;
+  if (  ws->close_cas
+     || wslay_event_get_close_received(ws->wsl)
+     || wslay_event_get_close_sent(ws->wsl)
+     || ws->reconnect_attempt >= ws->spec.reconnect_attempts_num) {
+    _ws_dispose(ws);
+  } else {
+    // Try reconnect
+    if (iwn_schedule(&(struct iwn_scheduler_spec) {
+      .user_data = ws,
+      .poller = ws->spec.poller,
+      .timeout_ms = (uint32_t) ws->spec.reconnect_attempt_pause_sec * 1000,
+      .on_cancel = _ws_reconnect_cancel,
+      .task_fn = _ws_reconnect
+    })) {
+      _ws_dispose(ws);
     }
-    if (errno == EAGAIN) {
-      wslay_event_set_error(ws->wc, WSLAY_ERR_WOULDBLOCK);
-    } else {
-      wslay_event_set_error(ws->wc, WSLAY_ERR_CALLBACK_FAILURE);
-    }
-  } else if (rci == 0) {
-    wslay_event_shutdown_write(ws->wc);
-    rci = -1;
   }
-  return rci;
-}
-
-static void _wslay_event_on_msg_recv_callback(
-  wslay_event_context_ptr                   ctx,
-  const struct wslay_event_on_msg_recv_arg *arg,
-  void                                     *user_data
-  ) {
-  struct iwn_ws_client *ws = user_data;
-  if (  (  arg->msg_length > 0
-        && (arg->opcode == WSLAY_TEXT_FRAME || arg->opcode == WSLAY_BINARY_FRAME))
-     || (  (ws->spec.flags & WS_HANDLE_PING_PONG)
-        && (arg->opcode == WSLAY_PING || arg->opcode == WSLAY_PONG))) {
-    ws->spec.on_message(&ws->ctx, (void*) arg->msg, arg->msg_length, arg->opcode);
-  }
-}
-
-static int _wslay_genmask_callback(
-  wslay_event_context_ptr ctx, uint8_t *buf, size_t len,
-  void *user_data
-  ) {
-  size_t tow = len;
-  while (tow > 0) {
-    uint32_t rn = iwu_rand_u32();
-    size_t wl = tow > sizeof(rn) ? sizeof(rn) : tow;
-    memcpy(buf, &rn, wl);
-    tow -= wl;
-    buf += wl;
-  }
-  return 0;
 }
 
 static bool _write(struct iwn_ws_client *ws, const void *buf, size_t buf_len, enum wslay_opcode opc) {
@@ -492,7 +599,7 @@ static bool _write(struct iwn_ws_client *ws, const void *buf, size_t buf_len, en
     return true;
   }
   pthread_mutex_lock(&ws->mtx);
-  if (wslay_event_queue_msg(ws->wc, &(struct wslay_event_msg) {
+  if (wslay_event_queue_msg(ws->wsl, &(struct wslay_event_msg) {
     .opcode = opc,
     .msg = (void*) buf,
     .msg_length = buf_len
@@ -576,6 +683,10 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   ws->ctx.ws = ws;
   ws->fd = -1;
 
+  if (!ws->spec.reconnect_attempt_pause_sec) {
+    ws->spec.reconnect_attempt_pause_sec = 5;
+  }
+
   pthread_mutexattr_t attr;
   pthread_mutexattr_init(&attr);
   pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
@@ -615,51 +726,31 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
     ws->port = ws->secure ? 443 : 80;
   }
 
-  // Now do the initial handshake
-  RCC(rc, finish, _connect(ws->host, ws->port, (spec->flags & WS_CONNECT_ASYNC), &ws->fd));
-
-  RCC(rc, finish, _wslayrc(wslay_event_context_client_init(&ws->wc, &(struct wslay_event_callbacks) {
-    .recv_callback = _wslay_event_recv_callback,
-    .send_callback = _wslay_event_send_callback,
-    .on_msg_recv_callback = _wslay_event_on_msg_recv_callback,
-    .genmask_callback = _wslay_genmask_callback
-  }, ws)));
-
-  if (ws->secure) {
-    RCC(rc, finish, iwn_brssl_client_poller_adapter(&(struct iwn_brssl_client_poller_adapter_spec) {
-      .poller = spec->poller,
-      .host = ws->host,
-      .on_event = _on_poller_adapter_event,
-      .on_dispose = _on_poller_adapter_dispose,
-      .user_data = ws,
-      .timeout_sec = spec->timeout_sec,
-      .events = IWN_POLLOUT,
-      .events_mod = IWN_POLLET,
-      .fd = ws->fd,
-      .verify_peer = spec->flags & WS_VERIFY_PEER,
-      .verify_host = spec->flags & WS_VERIFY_HOST
-    }));
-  } else {
-    RCC(rc, finish,
-        iwn_direct_poller_adapter(spec->poller, ws->fd,
-                                  _on_poller_adapter_event,
-                                  _on_poller_adapter_dispose,
-                                  ws, IWN_POLLOUT, IWN_POLLET,
-                                  spec->timeout_sec));
-  }
+  rc = _ws_connect(ws);
 
 finish:
   if (rc) {
-    if (out_ws) {
-      *out_ws = 0;
-    }
-    _destroy(ws);
+    _ws_destroy(ws);
+  } else {
+    *out_ws = ws;
   }
   return rc;
 }
 
 void iwn_ws_client_close(struct iwn_ws_client *ws) {
-  iwn_poller_remove(ws->spec.poller, ws->fd);
+  if (__sync_bool_compare_and_swap(&ws->close_cas, false, true)) {
+    iwn_poller_remove(ws->spec.poller, ws->fd);
+  }
+}
+
+bool iwn_ws_client_send_close(struct iwn_ws_client *ws) {
+  bool ret = false;
+  if (ws) {
+    pthread_mutex_lock(&ws->mtx);
+    ret = wslay_event_queue_close(ws->wsl, 0, 0, 0) == 0;
+    pthread_mutex_unlock(&ws->mtx);
+  }
+  return ret;
 }
 
 int iwn_ws_client_fd_get(struct iwn_ws_client *ws) {

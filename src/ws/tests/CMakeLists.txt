@@ -1,7 +1,7 @@
 link_libraries(iwnet_s)
 
 set(TEST_DATA_DIR ${CMAKE_CURRENT_BINARY_DIR})
-set(TESTS ws_client_test1 ws_client_test2)
+set(TESTS ws_client_test1 ws_client_test2 ws_client_test4)
 
 file(
   COPY .
