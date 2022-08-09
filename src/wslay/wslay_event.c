@@ -893,19 +893,19 @@ void wslay_event_shutdown_write(wslay_event_context_ptr ctx) {
 }
 
 int wslay_event_get_read_enabled(wslay_event_context_ptr ctx) {
-  return ctx->read_enabled;
+  return ctx && ctx->read_enabled;
 }
 
 int wslay_event_get_write_enabled(wslay_event_context_ptr ctx) {
-  return ctx->write_enabled;
+  return ctx && ctx->write_enabled;
 }
 
 int wslay_event_get_close_received(wslay_event_context_ptr ctx) {
-  return (ctx->close_status & WSLAY_CLOSE_RECEIVED) > 0;
+  return ctx && (ctx->close_status & WSLAY_CLOSE_RECEIVED) > 0;
 }
 
 int wslay_event_get_close_sent(wslay_event_context_ptr ctx) {
-  return (ctx->close_status & WSLAY_CLOSE_SENT) > 0;
+  return ctx && (ctx->close_status & WSLAY_CLOSE_SENT) > 0;
 }
 
 void wslay_event_config_set_allowed_rsv_bits(wslay_event_context_ptr ctx,
