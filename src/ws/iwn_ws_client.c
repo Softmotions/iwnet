@@ -573,6 +573,7 @@ static void _ws_reconnect_cancel(void *d) {
 static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
   struct iwn_ws_client *ws = user_data;
   if (  ws->close_cas
+     || ws->wsl == 0
      || wslay_event_get_close_received(ws->wsl)
      || wslay_event_get_close_sent(ws->wsl)
      || ws->reconnect_attempt >= ws->spec.reconnect_attempts_num) {
