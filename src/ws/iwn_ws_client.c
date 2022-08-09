@@ -433,8 +433,10 @@ finish:
                       iwxstr_size(ws->input) ? iwxstr_ptr(ws->input) : "",
                       iwxstr_size(ws->output) ? iwxstr_ptr(ws->output) : "");
     ret = -1;
-  } else if ((ws->state & _STATE_HANDSHAKE_RECV) && ws->spec.on_connected) {
-    ws->spec.on_connected((void*) ws);
+  } else if (ws->state & _STATE_HANDSHAKE_RECV) {
+    if (ws->spec.on_connected) {
+      ws->spec.on_connected((void*) ws);
+    }
   }
   return ret;
 }
@@ -451,6 +453,7 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
 
   if (IW_UNLIKELY(!(ws->state & _STATE_HANDSHAKE_RECV))) {
     ret = _on_handshake_event(pa, user_data, events);
+    if (ret == -1 || !(ws->state & _STATE_HANDSHAKE_RECV))
     goto finish;
   }
   if (wslay_event_want_write(ws->wsl) && wslay_event_send(ws->wsl) < 0) {
