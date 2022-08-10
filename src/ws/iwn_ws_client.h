@@ -43,9 +43,13 @@ IW_EXPORT iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct 
 /// Force poller to close client websocket. `on_dispose` handler will be called afterward.
 IW_EXPORT void iwn_ws_client_close(struct iwn_ws_client *ws);
 
+IW_EXPORT void iwn_ws_client_close_by_fd(struct iwn_poller *p, int fd);
+
 /// Send close frame to the underlying websocket channel.
 /// @returns True if close frame was queued successfully.
 IW_EXPORT bool iwn_ws_client_send_close(struct iwn_ws_client *ws);
+
+IW_EXPORT void iwn_ws_client_send_close_by_fd(struct iwn_poller *p, int fd);
 
 /// Releases all memory resources held by ws.
 /// Actually should be called from `on_dispose()` callback.

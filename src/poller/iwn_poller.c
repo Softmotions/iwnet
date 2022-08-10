@@ -616,6 +616,36 @@ bool iwn_poller_fd_is_managed(struct iwn_poller *p, int fd) {
   return ret;
 }
 
+bool iwn_poller_fd_ref(struct iwn_poller *p, int fd, int refs) {
+  bool ret = false, destroy = false;
+  pthread_mutex_lock(&p->mtx);
+  struct poller_slot *s = iwhmap_get_u32(p->slots, fd);
+  if (s) {
+    ret = true;
+    s->refs += refs;
+    destroy = s->refs == 0;
+    if (destroy) {
+      s->flags |= SLOT_REMOVED;
+      _rw_fd_unsubscribe(s);
+      if (iwhmap_remove_u32(p->slots, s->fd)) {
+        --p->fds_count;
+#if defined(IWN_EPOLL)
+        if (p->fds_count < 3) {
+#elif defined(IWN_KQUEUE)
+        if (p->fds_count < 1) {
+#endif
+          iwn_poller_shutdown_request(p);
+        }
+      }
+    }
+  }
+  pthread_mutex_unlock(&p->mtx);
+  if (destroy) {
+    _slot_destroy(s);
+  }
+  return ret;
+}
+
 void iwn_poller_set_timeout(struct iwn_poller *p, int fd, long timeout_sec) {
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
   if (!s || s->timeout == timeout_sec || (s->events & IWN_POLLTIMEOUT)) {

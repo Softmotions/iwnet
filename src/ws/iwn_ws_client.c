@@ -445,16 +445,17 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
   struct iwn_ws_client *ws = user_data;
   int64_t ret = 0;
 
+  pthread_mutex_lock(&ws->mtx);
+
   if (ws->pa != pa) {
     ws->pa = pa;
   }
 
-  pthread_mutex_lock(&ws->mtx);
-
   if (IW_UNLIKELY(!(ws->state & _STATE_HANDSHAKE_RECV))) {
     ret = _on_handshake_event(pa, user_data, events);
-    if (ret == -1 || !(ws->state & _STATE_HANDSHAKE_RECV))
-    goto finish;
+    if (ret == -1 || !(ws->state & _STATE_HANDSHAKE_RECV)) {
+      goto finish;
+    }
   }
   if (wslay_event_want_write(ws->wsl) && wslay_event_send(ws->wsl) < 0) {
     goto finish;
@@ -575,6 +576,9 @@ static void _ws_reconnect_cancel(void *d) {
 
 static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
   struct iwn_ws_client *ws = user_data;
+  pthread_mutex_unlock(&ws->mtx);
+  ws->pa = 0;
+  pthread_mutex_unlock(&ws->mtx);
   if (  ws->close_cas
      || ws->wsl == 0
      || wslay_event_get_close_received(ws->wsl)
@@ -602,6 +606,7 @@ static bool _write(struct iwn_ws_client *ws, const void *buf, size_t buf_len, en
   if (buf_len == 0) {
     return true;
   }
+  bool ret = false;
   pthread_mutex_lock(&ws->mtx);
   if (wslay_event_queue_msg(ws->wsl, &(struct wslay_event_msg) {
     .opcode = opc,
@@ -611,8 +616,11 @@ static bool _write(struct iwn_ws_client *ws, const void *buf, size_t buf_len, en
     pthread_mutex_unlock(&ws->mtx);
     return false;
   }
+  if (ws->pa) {
+    ret = 0 == ws->pa->arm(ws->pa, IWN_POLLOUT);
+  }
   pthread_mutex_unlock(&ws->mtx);
-  return 0 == ws->pa->arm(ws->pa, IWN_POLLOUT);
+  return ret;
 }
 
 struct write_fd_ctx {
@@ -741,10 +749,30 @@ finish:
   return rc;
 }
 
+static void _close_fd_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
+  struct iwn_poller_adapter *pa = slot_user_data;
+  struct iwn_ws_client *ws = pa->user_data; // It is a struct iwn_poller_adapter->user_data actually
+  iwn_ws_client_close(ws);
+}
+
+void iwn_ws_client_close_by_fd(struct iwn_poller *p, int fd) {
+  iwn_poller_probe(p, fd, _close_fd_probe, 0);
+}
+
 void iwn_ws_client_close(struct iwn_ws_client *ws) {
   if (__sync_bool_compare_and_swap(&ws->close_cas, false, true)) {
     iwn_poller_remove(ws->spec.poller, ws->fd);
   }
+}
+
+static void _send_close_fd_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
+  struct iwn_poller_adapter *pa = slot_user_data;
+  struct iwn_ws_client *ws = pa->user_data; // It is a struct iwn_poller_adapter->user_data actually
+  iwn_ws_client_send_close(ws);
+}
+
+void iwn_ws_client_send_close_by_fd(struct iwn_poller *p, int fd) {
+  iwn_poller_probe(p, fd, _send_close_fd_probe, 0);
 }
 
 bool iwn_ws_client_send_close(struct iwn_ws_client *ws) {
