@@ -109,6 +109,7 @@ list(
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_url.h
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_curl.h
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_tests.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_net.h
   ${CMAKE_CURRENT_SOURCE_DIR}/ssl/iwn_brssl_poller_adapter.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_poller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_proc.h
