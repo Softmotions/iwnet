@@ -71,7 +71,7 @@ set(MODULES
     ws
     http)
 
-list(APPEND PROJECT_LIBRARIES ${IOWOW_LIBRARIES} Threads::Threads dl m)
+list(APPEND PROJECT_LIBRARIES ${IOWOW_LIBRARIES})
 
 list(
   APPEND
