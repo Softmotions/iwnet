@@ -83,3 +83,14 @@ add_dependencies(IOWOW::static extern_iowow)
 
 set(IOWOW_LIBRARIES IOWOW::static)
 set(IOWOW_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/include)
+
+if(DO_INSTALL_CORE)
+  install(FILES "${BYPRODUCT}" DESTINATION ${CMAKE_INSTALL_LIBDIR})
+  install(
+    DIRECTORY ${IOWOW_INCLUDE_DIRS}/iowow
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    COMPONENT headers
+    FILES_MATCHING
+    PATTERN "*.h")
+endif()
+
