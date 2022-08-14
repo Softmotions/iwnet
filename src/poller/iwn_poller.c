@@ -126,10 +126,10 @@ IW_INLINE void _rw_fd_unsubscribe(struct poller_slot *s) {
   if (!(s->flags & SLOT_UNSUBSCRIBED)) {
     s->flags |= SLOT_UNSUBSCRIBED;
     struct kevent ev[] = {
-      { fd, EVFILT_READ,  EV_DELETE },
-      { fd, EVFILT_WRITE, EV_DELETE },
+      { s->fd, EVFILT_READ,  EV_DELETE },
+      { s->fd, EVFILT_WRITE, EV_DELETE },
     };
-    kevent(pfd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0);
+    kevent(s->poller->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0);
   }
 }
 
