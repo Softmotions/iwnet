@@ -33,9 +33,14 @@ cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBUILD_EXAMPLES=ON
 make 
 ```
 
+## IWSTART
+
+IWSTART is an automatic CMake initial project generator for C projects based on iowow / [iwnet](https://github.com/Softmotions/iwnet) / [ejdb2](https://github.com/Softmotions/ejdb) libs.
+
+https://github.com/Softmotions/iwstart
+
 # Used by
 
 * [EJDB2 Embeddable JSON Database engine](https://github.com/Softmotions/ejdb)
 * [Wirow Video Conferencing Platform](https://github.com/wirow-io/wirow-server)
-
 
