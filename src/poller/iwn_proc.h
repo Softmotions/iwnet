@@ -50,6 +50,9 @@ struct iwn_proc_spec {
 
   /// It true set the ability to write into stdin of the child process
   bool write_stdin;
+
+  /// If true use the PATH environment variable to locate exact path to the executable.
+  bool find_executable_in_path;
 };
 
 /// Spawn (fork) new process according to the given specification.

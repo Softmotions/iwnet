@@ -650,7 +650,15 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
     if (spec->on_fork) {
       spec->on_fork((void*) proc, 0);
     }
-    RCN(child_exit, execve(proc->path, proc->argv, proc->envp));
+
+    extern char **environ;
+    environ = proc->envp;
+
+    if (spec->find_executable_in_path) {
+      RCN(finish, execvp(proc->path, proc->argv));
+    } else {
+      RCN(child_exit, execv(proc->path, proc->argv));
+    }
     goto child_exit;
   } else {
     rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
