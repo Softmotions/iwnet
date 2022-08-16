@@ -16,14 +16,27 @@ iwrc iwn_port_is_bound(const char *listen, int port_, uint32_t flags, bool *out)
   struct addrinfo hints = {
     .ai_flags = AI_PASSIVE
   };
+
+  if (!(flags & (IWN_IPV6 | IWN_IPV4))) {
+    flags |= IWN_IPV4;
+  }
+  if (!(flags & (IWN_UDP | IWN_TCP))) {
+    flags |= IWN_TCP;
+  }
+
+again:
   if (flags & IWN_UDP) {
+    flags &= ~IWN_UDP;
     hints.ai_socktype = SOCK_DGRAM;
-  } else {
+  } else if (flags & IWN_TCP) {
+    flags &= ~IWN_TCP;
     hints.ai_socktype = SOCK_STREAM;
   }
   if (flags & IWN_IPV6) {
+    flags &= ~IWN_IPV6;
     hints.ai_family = AF_INET6;
-  } else {
+  } else if (flags & IWN_IPV4) {
+    flags &= ~IWN_IPV4;
     hints.ai_family = AF_INET;
   }
 
@@ -49,6 +62,11 @@ iwrc iwn_port_is_bound(const char *listen, int port_, uint32_t flags, bool *out)
     }
   }
   freeaddrinfo(result);
+
+  if (success && (flags & (IWN_TCP | IWN_UDP | IWN_IPV4 | IWN_IPV6))) {
+    goto again;
+  }
+
   *out = !success;
   return 0;
 }
