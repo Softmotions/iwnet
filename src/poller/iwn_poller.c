@@ -250,6 +250,9 @@ static void _slot_remove_unref(struct iwn_poller *p, int fd) {
 }
 
 void iwn_poller_remove(struct iwn_poller *p, int fd) {
+  if (!p) {
+    return;
+  }
   struct poller_slot *s = _slot_peek_leave_locked(p, fd);
   if (!s) {
     pthread_mutex_unlock(&p->mtx);
@@ -694,9 +697,8 @@ void iwn_poller_shutdown_request(struct iwn_poller *p) {
 
 void iwn_poller_destroy(struct iwn_poller **pp) {
   if (pp && *pp) {
-    struct iwn_poller *p = *pp;
+    _destroy(*pp);
     *pp = 0;
-    _destroy(p);
   }
 }
 
