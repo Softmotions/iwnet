@@ -231,8 +231,7 @@ static iwrc _proc_init(struct proc *proc, int fds[6]) {
       RCB(finish, proc->envp[i] = iwpool_strdup2(pool, spec->env[i]));
     }
   } else {
-    RCB(finish, proc->envp = iwpool_alloc(sizeof(char*), pool));
-    proc->envp[0] = 0;
+    proc->envp = 0;
   }
 
   if (spec->on_stdout) {
@@ -552,7 +551,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
 
   *out_pid = -1;
 
-  bool bv;
+  bool bv, proc_added = false;
   struct proc *proc = 0;
   int fds[6] = { -1, -1, -1, -1, -1, -1 };
 
@@ -572,6 +571,9 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
       kill(pid, SIGKILL);
       goto finish;
     }
+
+    proc_added = true;
+
     if (fds[1] > -1) {
       close(fds[1]);
       rc = iwn_poller_add(&(struct iwn_poller_task) {
@@ -651,22 +653,28 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
       spec->on_fork((void*) proc, 0);
     }
 
-    extern char **environ;
-    environ = proc->envp;
+    if (spec->env) {
+      extern char **environ;
+      environ = proc->envp;
+    }
 
     if (spec->find_executable_in_path) {
       RCN(finish, execvp(proc->path, proc->argv));
     } else {
       RCN(child_exit, execv(proc->path, proc->argv));
     }
+
     goto child_exit;
+
   } else {
     rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
 
 finish:
   if (rc) {
-    _proc_destroy(proc);
+    if (!proc_added) {
+      _proc_destroy(proc);
+    }
   }
   return rc;
 
