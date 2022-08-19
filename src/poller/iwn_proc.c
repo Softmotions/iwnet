@@ -562,6 +562,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
   if (pid > 0) { // Parent
     *out_pid = pid;
     proc->pid = pid;
+
     rc = _proc_add(proc);
     if (!rc) {
       rc = iwstw_schedule_empty_only(cc.stw, _proc_wait_worker, 0, &bv);
@@ -665,7 +666,6 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
     }
 
     goto child_exit;
-
   } else {
     rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
@@ -680,7 +680,7 @@ finish:
 
 child_exit:
   if (rc) {
-    iwlog_ecode_error(rc, "execve: %s", proc->path);
+    iwlog_ecode_error(rc, "exec: %s", proc->path);
   }
   exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);
 }
