@@ -39,18 +39,13 @@ IWSTART is an automatic CMake initial project generator for C projects based on 
 
 https://github.com/Softmotions/iwstart
 
-# Used by
+## Used by
 
 * [EJDB2 Embeddable JSON Database engine](https://github.com/Softmotions/ejdb)
 * [Wirow Video Conferencing Platform](https://github.com/wirow-io/wirow-server)
 
-
-
-
-## Asynchronous HTTP Framework
-
-### Examples
-#### Simple echo server
+## Example
+### Simple echo server
 
 ```sh
   ./echo_http_server --ssl
