@@ -759,7 +759,31 @@ finish:
 
 #endif
 
-static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **out_poller) {
+static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out_poller) {
+  if (!out_poller || !spec_) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  struct iwn_poller_spec spec = *spec_;
+  *out_poller = 0;
+
+  if (spec.num_threads < 1) {
+    spec.num_threads = iwp_num_cpu_cores();
+  }
+  if (spec.num_threads < 1) {
+    spec.num_threads = 2;
+  }
+  if (spec.one_shot_events < 1) {
+    spec.one_shot_events = 1;
+  }
+  if (spec.one_shot_events > 128) {
+    spec.one_shot_events = 128;
+  }
+  if (spec.num_threads > 1024) {
+    spec.num_threads = 1024;
+  }
+  if (spec.overflow_threads_factor > 2) {
+    spec.overflow_threads_factor = 2;
+  }
   iwrc rc = 0;
   struct iwn_poller *p = calloc(1, sizeof(*p));
   if (!p) {
@@ -770,11 +794,17 @@ static iwrc _create(int num_threads, int max_poll_events, struct iwn_poller **ou
   p->timer_fd = -1;
   p->event_fd = -1;
 #endif
-  p->max_poll_events = max_poll_events;
+  p->max_poll_events = spec.one_shot_events;
 
   RCN(finish, pthread_mutex_init(&p->mtx, 0));
   RCB(finish, p->slots = iwhmap_create_u32(0));
-  RCC(rc, finish, iwtp_start("poller-tp-", num_threads, 0, &p->tp));
+  RCC(rc, finish, iwtp_start_spec(&(struct iwtp_spec) {
+    .num_threads = spec.num_threads,
+    .overflow_threads_factor = spec.overflow_threads_factor,
+    .queue_limit = spec.queue_limit,
+    .thread_name_prefix = "poller-tp-",
+    .warn_on_overflow_thread_spawn = spec.warn_on_overflow_thread_spawn,
+  }, &p->tp));
 
 #if defined(IWN_KQUEUE)
   RCN(finish, p->fd = kqueue());
@@ -793,22 +823,15 @@ finish:
   return rc;
 }
 
-iwrc iwn_poller_create(int num_threads, int max_poll_events, struct iwn_poller **out_poller) {
-  if (!out_poller || max_poll_events > 1024 || num_threads > 1024) {
-    return IW_ERROR_INVALID_ARGS;
-  }
-  *out_poller = 0;
-  if (num_threads < 1) {
-    num_threads = iwp_num_cpu_cores();
-  }
-  if (num_threads < 1) {
-    num_threads = 2;
-  }
-  if (max_poll_events < 1) {
-    max_poll_events = 1;
-  }
+iwrc iwn_poller_create_by_spec(const struct iwn_poller_spec *spec, struct iwn_poller **out_poller) {
+  return _create(spec, out_poller);
+}
 
-  return _create(num_threads, max_poll_events, out_poller);
+iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iwn_poller **out_poller) {
+  return _create(&(struct iwn_poller_spec) {
+    .num_threads = num_threads,
+    .one_shot_events = one_shot_events,
+  }, out_poller);
 }
 
 static void _worker_fn(void *arg) {

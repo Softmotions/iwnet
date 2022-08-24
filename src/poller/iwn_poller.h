@@ -60,8 +60,35 @@ struct iwn_poller_task {
   struct iwn_poller *poller;                                     ///< Poller
 };
 
+struct iwn_poller_spec {
+  /// Number of threads to process polled events.
+  /// If zero a number of cpu cores will be used.
+  /// Default: 2, Max: 1024
+  int num_threads;
+  
+  /// Max number of events to take for each poll iteration.
+  /// Default: 1, Max: 128
+  int one_shot_events;
+
+  /// Default: 0, Max: 2
+  /// @see iwtp_spec::overflow_threads_factor  
+  int overflow_threads_factor;
+
+  /// Default: 0 (unlimited)
+  /// @see iwtp_spec::queue_limit
+  int queue_limit;
+
+  /// @see iwtp_spec::warn_on_overflow_thread_spawn
+  bool warn_on_overflow_thread_spawn;
+};
+
 /// Function executed in context of polled file descriptor.
 typedef void (*iwn_poller_probe_fn)(struct iwn_poller*, void *slot_user_data, void *fn_user_data);
+
+/// Creates a poller instance.
+///
+/// Returned poller pointer should be disposed by `iwn_poller_destroy()`.
+IW_EXPORT iwrc iwn_poller_create_by_spec(const struct iwn_poller_spec *spec, struct iwn_poller **out_spec);
 
 /// Creates a poller instance.
 ///
@@ -69,7 +96,7 @@ typedef void (*iwn_poller_probe_fn)(struct iwn_poller*, void *slot_user_data, vo
 ///
 /// @param num_threads Number of threads to process polled events.
 ///                    If zero number of cpu cores will be used.
-/// @param one_shot_events Number of events to take for each poll iteration.
+/// @param one_shot_events Max number of events to take for each poll iteration.
 ///                        If zero fallback value will be used.
 /// @param[out] Output poller holder.
 ///
@@ -106,7 +133,7 @@ IW_EXPORT void iwn_poller_destroy(struct iwn_poller **pp);
 IW_EXPORT iwrc iwn_poller_task(struct iwn_poller*, void (*task)(void*), void *arg);
 
 /// Set one of the following poller flags:
-/// - IWN_POLLER_POLL_NO_FDS - Start poller loop even with no managed fds. 
+/// - IWN_POLLER_POLL_NO_FDS - Start poller loop even with no managed fds.
 //
 IW_EXPORT void iwn_poller_flags_set(struct iwn_poller*, uint32_t flags);
 
