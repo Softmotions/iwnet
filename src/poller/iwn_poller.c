@@ -767,9 +767,6 @@ static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out
   *out_poller = 0;
 
   if (spec.num_threads < 1) {
-    spec.num_threads = iwp_num_cpu_cores();
-  }
-  if (spec.num_threads < 1) {
     spec.num_threads = 2;
   }
   if (spec.one_shot_events < 1) {
@@ -778,12 +775,7 @@ static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out
   if (spec.one_shot_events > 128) {
     spec.one_shot_events = 128;
   }
-  if (spec.num_threads > 1024) {
-    spec.num_threads = 1024;
-  }
-  if (spec.overflow_threads_factor > 2) {
-    spec.overflow_threads_factor = 2;
-  }
+
   iwrc rc = 0;
   struct iwn_poller *p = calloc(1, sizeof(*p));
   if (!p) {
@@ -798,7 +790,7 @@ static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out
 
   RCN(finish, pthread_mutex_init(&p->mtx, 0));
   RCB(finish, p->slots = iwhmap_create_u32(0));
-  RCC(rc, finish, iwtp_start_spec(&(struct iwtp_spec) {
+  RCC(rc, finish, iwtp_start_by_spec(&(struct iwtp_spec) {
     .num_threads = spec.num_threads,
     .overflow_threads_factor = spec.overflow_threads_factor,
     .queue_limit = spec.queue_limit,
