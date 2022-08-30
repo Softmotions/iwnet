@@ -1241,7 +1241,7 @@ static bool _proxy_init(struct client *client) {
     return false;
   }
   if (!proxy->channel_buf_max_size) {
-    proxy->channel_buf_max_size = 1024; // 1 Kb
+    proxy->channel_buf_max_size = 1024 * 1024; // 1 Mb
   }
   pthread_mutex_init(&proxy->mtx, 0);
   RCB(finish, proxy->from_endpoint_buf = iwxstr_new());
