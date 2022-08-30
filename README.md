@@ -188,7 +188,7 @@ You may find many helpful code examples by looking into
 
 * [server2.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server2.c)
 * [server1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server1.c)
-* [HTTP Proxy proxy1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/proxy1.c)
+* [HTTP Proxy: proxy1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/proxy1.c)
 
 # License
 
