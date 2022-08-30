@@ -164,6 +164,7 @@ struct iwn_wf_server_spec {
   struct iwn_poller *poller;                     ///< A poller. Required.
   struct iwn_http_server_ssl_spec ssl;           ///< TLS server parameters.
   struct iwn_wf_session_store     session_store; ///< HTTP session store configuration.
+  iwn_http_server_proxy_handler   proxy_handler; ///< HTTP proxy session setup handler.
   const char *listen;                            ///< Server listen hostname. Default: localhost
   int port;                                      ///< Default: 8080 http, 8443 https
   int socket_queue_size;                         ///< Default: 64

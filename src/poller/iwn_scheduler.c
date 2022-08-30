@@ -31,7 +31,7 @@ static void _on_dispose(const struct iwn_poller_task *t) {
   free(s);
 }
 
-iwrc iwn_schedule(const struct iwn_scheduler_spec *spec) {
+iwrc iwn_schedule2(const struct iwn_scheduler_spec *spec, int *out_fd) {
   if (!spec || spec->timeout_ms < 1 || !spec->task_fn || !spec->poller) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -40,18 +40,22 @@ iwrc iwn_schedule(const struct iwn_scheduler_spec *spec) {
   RCB(finish, task);
   memcpy(task, spec, sizeof(*task));
 
-  RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
+  RCC(rc, finish, iwn_poller_add2(&(struct iwn_poller_task) {
     .poller = spec->poller,
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
     .user_data = task,
     .events = IWN_POLLTIMEOUT,
     .timeout = spec->timeout_ms
-  }));
+  }, out_fd));
 
 finish:
   if (rc) {
     free(task);
   }
   return rc;
+}
+
+iwrc iwn_schedule(const struct iwn_scheduler_spec *spec) {
+  return iwn_schedule2(spec, 0);
 }

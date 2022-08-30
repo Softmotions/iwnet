@@ -12,7 +12,7 @@
 static int _handle_get_empty_cnt;
 static int _handle_root_cnt;
 
-static uint32_t state;
+static volatile uint32_t state;
 static struct iwn_poller *poller;
 static struct iwn_wf_ctx *ctx;
 
@@ -31,11 +31,24 @@ static int _handle_root(struct iwn_wf_req *req, void *user_data) {
   if (!iwn_http_response_write(req->http, 404, "text/plain", "Not found from root", -1)) {
     return -1;
   } else {
-    return 1;
+    return IWN_WF_RES_PROCESSED;
   }
 }
 
-// Get handler in middle of the path
+static int _handle_echo(struct iwn_wf_req *req, void *user_data) {
+  struct iwn_val val = iwn_http_request_header_get(req->http, "Forwarded", IW_LLEN("Forwarded"));
+  if (val.len) {
+    iwn_http_response_header_add(req->http, "Forwarded", val.buf, val.len);
+  }
+  if (req->flags & IWN_WF_GET) {
+    iwn_http_response_write(req->http, 200, "text/plain", "/echo", IW_LLEN("/echo"));
+  } else {
+    iwn_http_response_printf(req->http, 200, "text/plain", "%.*s\n%s\n",
+                             (int) req->body_len, req->body, (char*) user_data);
+  }
+  return IWN_WF_RES_PROCESSED;
+}
+
 static int _handle_get(struct iwn_wf_req *req, void *user_data) {
   return 0;
 }
@@ -200,6 +213,12 @@ int main(int argc, char *argv[]) {
 
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
     .ctx = ctx,
+    .pattern = "/echo",
+    .handler = _handle_echo,
+  }, &r));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
     .pattern = "/get",
     .handler = _handle_get,
   }, &r));
@@ -312,13 +331,12 @@ int main(int argc, char *argv[]) {
 
   RCC(rc, finish, iwn_wf_server(&spec, ctx));
 
+  fprintf(stderr, "a4913a63-2330-47ae-9329-b59910f05052\n");
   iwn_poller_poll(poller);
 
 finish:
-  IWN_ASSERT(rc == 0);
-  //IWN_ASSERT(_handle_get_empty_cnt == 1);
-  //IWN_ASSERT(_handle_root_cnt == 1);
-  IWN_ASSERT(state & S_ROOT_DISPOSED);
   iwn_poller_destroy(&poller);
+  IWN_ASSERT(rc == 0);
+  IWN_ASSERT(state & S_ROOT_DISPOSED);
   return iwn_assertions_failed > 0 ? 1 : 0;
 }

@@ -1,5 +1,5 @@
-cd ./build/src/ws/tests
-file ./ws_client_test4
+cd ./build/src/http/tests
+file ./proxy1
 #set args --ssl
 
 set confirm off

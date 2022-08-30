@@ -142,9 +142,9 @@ echo "HTTP Server pid: $!"
 
 run 2>&1 | tee server2.log
 kill -2 ${SPID}
+wait ${SPID}
 
 diff --strip-trailing-cr server2.log server2-success.log
-wait ${SPID}
 
 if [ -n "${VALGRIND}" ]; then
   cat ./valgrind2.log | cut -d = -f 5 | grep ERROR > valgrind2-results.log 

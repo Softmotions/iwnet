@@ -17,10 +17,10 @@ struct iwn_url {
   char *username; /* username, default: NULL */
   char *password; /* password, default: NULL */
   char *host;     /* hostname or IP address */
-  int   port;     /* port, default: 0 */
   char *path;     /* path, without leading "/", default: NULL */
   char *query;    /* query, default: NULL */
   char *fragment; /* fragment, default: NULL */
+  int   port;     /* port, default: 0 */
 };
 
 /**

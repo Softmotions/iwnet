@@ -1,5 +1,6 @@
-iwnet (1.0.1) UNRELEASED; urgency=medium
+iwnet (1.1.0) UNRELEASED; urgency=medium
 
+  * impl: Implemened http proxy forwarding (iwn_http_server.h)
   * impl: Added find_executable_in_path option in iwn_proc_spawn() (iwn_proc.c)
   * impl: Added iwn_port_is_bound() (utils/iwn_net.h)
   * impl: Added iwn_http_response_write_jbn() and iwn_http_response_write_jbl() (iwn_http_server.h)

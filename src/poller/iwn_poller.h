@@ -62,7 +62,7 @@ struct iwn_poller_task {
 
 struct iwn_poller_spec {
   /// Number of threads to process polled events.
-  /// If zero a number of cpu cores will be used.
+  /// Number of cpu cores if zero.
   /// Default: 2, Max: 1024
   int num_threads;
   
@@ -104,6 +104,8 @@ IW_EXPORT iwrc iwn_poller_create(int num_threads, int one_shot_events, struct iw
 
 /// Registers polling fd task.
 IW_EXPORT iwrc iwn_poller_add(const struct iwn_poller_task *task);
+
+IW_EXPORT iwrc iwn_poller_add2(const struct iwn_poller_task *task, int *out_fd);
 
 /// Returns true if the given `fd` managed by poller.
 IW_EXPORT bool iwn_poller_fd_is_managed(struct iwn_poller*, int fd);

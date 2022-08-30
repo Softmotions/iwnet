@@ -37,11 +37,20 @@ struct iwn_http_req {
 typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
 
 /// Request handler.
-/// Returns `false` if client connection shold be removed from poller (terminated).
+/// Returns `false` if client connection should be removed from poller (terminated).
 ///
 typedef bool (*iwn_http_server_request_handler)(struct iwn_http_req*);
 typedef bool (*iwn_http_server_chunk_handler)(struct iwn_http_req*, bool *again);
 
+/// Handler responsible for establishing a new HTTP proxy session.
+///
+/// Returns true if a new proxy session should be started.
+/// Use `iwn_http_proxy_xxx_set` methods to set specific procy configuration
+/// @note At least iwn_http_proxy_url_set() must be called.
+///
+typedef bool (*iwn_http_server_proxy_handler)(struct iwn_http_req*);
+
+/// Server TLS config.
 struct iwn_http_server_ssl_spec {
   const char *certs;           ///< PEM certificates text data or path to PEM file.
   const char *private_key;     ///< PEM private key text data or path to PEM file.
@@ -52,8 +61,9 @@ struct iwn_http_server_ssl_spec {
 };
 
 struct iwn_http_server_spec {
-  iwn_http_server_request_handler request_handler; ///< Required request handler.
-  struct iwn_poller *poller;                       ///< Required poller reference.
+  iwn_http_server_request_handler request_handler; ///< Request handler (Required).
+  iwn_http_server_proxy_handler   proxy_handler;   ///< HTTP proxy session setup handler.
+  struct iwn_poller *poller;                       ///< Poller reference (Required).
   const char *listen;
   void       *user_data;
   iwn_http_server_on_dispose      on_server_dispose;
@@ -131,7 +141,7 @@ IW_EXPORT struct iwn_val iwn_http_request_body(struct iwn_http_req*);
 /// Take a lock on generic user mutex associated with givene request.
 IW_EXPORT void iwn_http_request_user_lock(struct iwn_http_req*);
 
-/// Unlock generic user 
+/// Unlock generic user
 IW_EXPORT void iwn_http_request_user_unlock(struct iwn_http_req*);
 
 /// Get the first occurrence of request heade`r value with given `header_name`.
@@ -166,6 +176,35 @@ IW_EXPORT void iwn_http_connection_set_upgrade(struct iwn_http_req*);
 
 /// Returns true if connection is in upgrade mode.
 IW_EXPORT bool iwn_http_connection_is_upgrade(struct iwn_http_req*);
+
+/// Returns an error code associated with http proxy.
+IW_EXPORT iwrc iwn_http_proxy_is_error(struct iwn_http_req*);
+
+/// Is http proxy enabled for given request.
+IW_EXPORT bool iwn_http_proxy_is_enabled(struct iwn_http_req*);
+
+/// Sets HTTP URL for proxied endpoint.
+/// @note This method must be called by `iwn_http_server_proxy_handler` in order
+/// to establish a proxy session.
+IW_EXPORT bool iwn_http_proxy_url_set(struct iwn_http_req*, const char *url, ssize_t url_len);
+
+/// Set a request header to the proxied endpoint.
+IW_EXPORT bool iwn_http_proxy_header_set(
+  struct iwn_http_req*,
+  const char *header_name,
+  const char *header_value,
+  ssize_t     header_value_len);
+
+/// Sets a maximum size of IO buffer between client and proxy endpoint in bytes.
+/// Zero value means unlimited buffer.
+IW_EXPORT bool iwn_http_proxy_channel_buf_max_size_set(struct iwn_http_req*, size_t max_size);
+
+/// Sets timeout in seconds for connection to proxied endpoint.
+/// ~7 seconds on Linux by default.
+IW_EXPORT bool iwn_http_proxy_timeout_connect_set(struct iwn_http_req*, uint32_t timeout_sec);
+
+/// Sets timeout for socket data inactivity. Default: 0 (unlimited)
+IW_EXPORT bool iwn_http_proxy_timeout_data_set(struct iwn_http_req*, uint32_t timeout_sec);
 
 /// Sets HTTP response status code for given request object.
 IW_EXPORT iwrc iwn_http_response_code_set(struct iwn_http_req*, int code);
@@ -257,9 +296,9 @@ IW_EXPORT bool iwn_http_response_write_jbl(
 
 /// Writes a given JSON object and completes response for specified request.
 IW_EXPORT bool iwn_http_response_write_jbn(
-    struct iwn_http_req*,
-    int status_code,
-    JBL_NODE n);
+  struct iwn_http_req*,
+  int      status_code,
+  JBL_NODE n);
 
 /// Writes a given response as prinf formatted value and completes response for specified request.
 IW_EXPORT bool iwn_http_response_printf(

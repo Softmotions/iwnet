@@ -4,6 +4,8 @@
 
 #include "iwn_http_server_internal.h"
 #include "iwn_poller_adapter.h"
+#include "iwn_url.h"
+#include "iwn_scheduler.h"
 #include "poller/iwn_direct_poller_adapter.h"
 #include "ssl/iwn_brssl_poller_adapter.h"
 
@@ -14,10 +16,14 @@
 
 #include <arpa/inet.h>
 #include <assert.h>
+#include <stdatomic.h>
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdlib.h>
@@ -26,8 +32,6 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
-#include <inttypes.h>
-#include <netinet/in.h>
 
 struct server {
   struct iwn_http_server      server;
@@ -89,8 +93,27 @@ struct response {
   int    code;
 };
 
+struct proxy {
+  iwrc    rc;                ///< Not zero if proxy connection failed
+  IWXSTR *from_endpoint_buf; ///< proxy <- proxied endpoint buffer
+  IWXSTR *to_endpoint_buf;   ///< proxy -> proxied endpoint buffer
+  const char      *url_raw;
+  struct iwn_pairs headers;  ///< Extra headers to add to the proxied request
+  struct iwn_url   url;
+  pthread_mutex_t  mtx;
+  size_t channel_buf_max_size;       ///< Max size of intemediate data buffer for read/write proxy channels.
+                                     /// Default: 1048576(1MB)
+  uint32_t      timeout_connect_sec; ///< Socket connect timeout in seconds.
+  uint32_t      timeout_data_sec;    ///< Socket data events timeout in seconds.
+  volatile int  fd;
+  volatile int  fd_timeout;
+  volatile bool connected;
+  volatile bool disconnected;
+};
+
 struct client {
   struct iwn_http_req request;
+  struct iwn_poller  *poller;
   iwn_http_server_chunk_handler chunk_cb;
   IWPOOL *pool;
   iwn_on_poller_adapter_event injected_poller_evh;
@@ -99,6 +122,7 @@ struct client {
   struct stream     stream;
   struct parser     parser;
   struct response   response;
+  struct proxy      proxy;
   struct sockaddr_storage sockaddr;
 
   // Web-framework implementation hooks (do not use these in app)
@@ -108,6 +132,7 @@ struct client {
   void  (*_wf_on_request_dispose)(struct iwn_http_req*);
   void  (*_wf_on_response_headers_write)(struct iwn_http_req*);
 
+  atomic_int refs;
   int     fd;
   uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
   uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
@@ -359,6 +384,7 @@ static char const *_status_text[] = {
 
 static iwrc _server_ref(struct server *server, struct server **out);
 static void _server_unref(struct server *server);
+static int64_t _proxy_client_on_ready(struct iwn_poller_adapter *pa, void *user_data, uint32_t events);
 
 static void _noop_free(void *ptr) {
   ;
@@ -392,9 +418,7 @@ IW_INLINE void _stream_free_buffer(struct client *client) {
 }
 
 IW_INLINE void _tokens_free_buffer(struct client *client) {
-  if (client->tokens.buf) {
-    free(client->tokens.buf);
-  }
+  free(client->tokens.buf);
   memset(&client->tokens, 0, sizeof(client->tokens));
 }
 
@@ -522,16 +546,32 @@ static void _client_reset(struct client *client) {
   _response_free(client);
 }
 
+static void _proxy_destroy(struct client *client) {
+  struct proxy *proxy = &client->proxy;
+  pthread_mutex_destroy(&proxy->mtx);
+  iwxstr_destroy(proxy->from_endpoint_buf);
+  iwxstr_destroy(proxy->to_endpoint_buf);
+  memset(&client->proxy, 0, sizeof(client->proxy));
+}
+
 static void _client_destroy(struct client *client) {
-  if (!client) {
-    return;
+  if (client) {
+    if (client->injected_poller_evh == _proxy_client_on_ready) {
+      _proxy_destroy(client);
+    }
+    _client_reset(client);
+    if (client->server) {
+      _server_unref(client->server);
+    }
+    pthread_mutex_destroy(&client->request.user_mtx);
+    iwpool_destroy(client->pool);
   }
-  _client_reset(client);
-  if (client->server) {
-    _server_unref(client->server);
+}
+
+static void _client_unref(struct client *client) {
+  if (--client->refs == 0) {
+    _client_destroy(client);
   }
-  pthread_mutex_destroy(&client->request.user_mtx);
-  iwpool_destroy(client->pool);
 }
 
 static iwrc _client_init(struct client *client) {
@@ -811,6 +851,546 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
   return emitted;
 }
 
+static iwrc _fd_make_non_blocking(int fd) {
+  int rci, flags;
+  while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR);
+  if (flags == -1) {
+    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+  }
+  while ((rci = fcntl(fd, F_SETFL, flags | O_NONBLOCK | O_CLOEXEC)) == -1 && errno == EINTR);
+  if (rci == -1) {
+    return iwrc_set_errno(IW_ERROR_ERRNO, errno);
+  }
+  return 0;
+}
+
+static void _proxy_connect_check_timeout(void *d) {
+  struct client *client = d;
+  if (client) {
+    struct proxy *proxy = &client->proxy;
+    proxy->fd_timeout = -1;
+    if (!proxy->connected) {
+      iwlog_warn("Proxy | Connection timeout %s on timeout %u sec", proxy->url_raw, proxy->timeout_connect_sec);
+      int fd = proxy->fd;
+      if (fd > -1) {
+        iwn_poller_remove(client->poller, fd);
+      }
+    }
+    _client_unref(client);
+  }
+}
+
+static void _proxy_connect_check_cancel(void *d) {
+  struct client *client = d;
+  if (client) {
+    client->proxy.fd_timeout = -1;
+  }
+}
+
+static void _proxy_endpoint_on_dispose(const struct iwn_poller_task *t) {
+  struct client *client = t->user_data;
+  if (client) {
+    client->proxy.connected = false;
+    client->proxy.disconnected = true;
+    client->proxy.fd = -1;
+    int fd = client->fd;
+    if (fd > -1) { // Flush rest of buffers if any
+      iwn_poller_arm_events(t->poller, fd, IWN_POLLOUT);
+    }
+    fd = client->proxy.fd_timeout;
+    if (fd > -1) { // Close timeout checker
+      iwn_poller_remove(t->poller, fd);
+    }
+    _client_unref(client);
+  }
+}
+
+static iwrc _proxy_to_endpoint_write_lk(struct client *client) {
+  iwrc rc = 0;
+  struct proxy *proxy = &client->proxy;
+  while (iwxstr_size(proxy->to_endpoint_buf)) {
+    ssize_t rci = write(proxy->fd, iwxstr_ptr(proxy->to_endpoint_buf), iwxstr_size(proxy->to_endpoint_buf));
+    if (rci == -1) {
+      if (errno == EINTR) {
+        continue;
+      } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      break;
+    } else if (rci == 0) {
+      rc = IW_ERROR_EOF;
+      break;
+    }
+    iwxstr_shift(proxy->to_endpoint_buf, rci);
+  }
+  return rc;
+}
+
+static iwrc _proxy_from_endpoint_read_lk(struct client *client) {
+  iwrc rc = 0;
+  while (!rc) {
+    char buf[1024];
+    ssize_t rci = read(client->proxy.fd, buf, sizeof(buf));
+    if (rci == -1) {
+      if (errno == EINTR) {
+        continue;
+      } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      break;
+    } else if (rci == 0) {
+      rc = IW_ERROR_EOF;
+      break;
+    }
+    rc = iwxstr_cat(client->proxy.from_endpoint_buf, buf, rci);
+  }
+  return rc;
+}
+
+static int64_t _proxy_endpoint_on_ready(const struct iwn_poller_task *t, uint32_t events) {
+  iwrc rc = 0;
+  uint32_t arm_client = 0;
+  uint32_t ret = IWN_POLLET;
+
+  struct client *client = t->user_data;
+  struct proxy *proxy = &client->proxy;
+
+  if (!proxy->connected) {
+    struct sockaddr_storage sa = { 0 };
+    socklen_t sa_len = sizeof(sa);
+    if (getpeername(t->fd, (void*) &sa, &sa_len) == 0) {
+      proxy->connected = true;
+      arm_client |= IWN_POLLIN;
+      ret |= IWN_POLLOUT;
+    } else {
+      char ch;
+      proxy->fd = -1;
+      if (read(proxy->fd, &ch, 1) == -1) {
+        proxy->rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+        iwlog_ecode_error(proxy->rc, "Proxy | Connection to the proxy endpoint: %s failed", proxy->url_raw);
+      }
+      int fd = proxy->fd_timeout;
+      if (fd > -1) { // Cancel connection timeout watcher
+        iwn_poller_remove(t->poller, fd);
+      }
+      return -1;
+    }
+  }
+
+  if (events & IWN_POLLIN) {
+    pthread_mutex_lock(&proxy->mtx);
+    rc = _proxy_from_endpoint_read_lk(client);
+    pthread_mutex_unlock(&proxy->mtx);
+    RCGO(rc, finish);
+  }
+
+  if (events & IWN_POLLOUT) {
+    pthread_mutex_lock(&proxy->mtx);
+    rc = _proxy_to_endpoint_write_lk(client);
+    pthread_mutex_unlock(&proxy->mtx);
+    RCGO(rc, finish);
+  }
+
+  pthread_mutex_lock(&proxy->mtx);
+  if (iwxstr_size(proxy->from_endpoint_buf)) {
+    arm_client |= IWN_POLLOUT;
+  }
+  if (!proxy->channel_buf_max_size || iwxstr_size(proxy->from_endpoint_buf) < proxy->channel_buf_max_size) {
+    ret |= IWN_POLLIN;
+  }
+  if (iwxstr_size(proxy->to_endpoint_buf)) {
+    ret |= IWN_POLLOUT;
+  } else {
+    arm_client |= IWN_POLLIN;
+  }
+  pthread_mutex_unlock(&proxy->mtx);
+
+  if (arm_client) {
+    iwn_poller_arm_events(t->poller, client->fd, arm_client);
+  }
+
+finish:
+  return rc ? -1 : ret;
+}
+
+static iwrc _proxy_endpoint_connect(struct client *client) {
+  iwrc rc = 0;
+  int rci = 0, fd = -1;
+
+  struct proxy *proxy = &client->proxy;
+  if (proxy->fd > -1) {
+    return IW_ERROR_INVALID_STATE;
+  }
+
+  char nbuf[IWNUMBUF_SIZE];
+  snprintf(nbuf, sizeof(nbuf), "%d", proxy->url.port);
+  char *port = nbuf;
+
+  struct addrinfo *si, *p, hints = {
+    .ai_family   = PF_UNSPEC,
+    .ai_socktype = SOCK_STREAM
+  };
+
+  rci = getaddrinfo(proxy->url.host, port, &hints, &si);
+  if (rci) {
+    rc = IW_ERROR_FAIL;
+    iwlog_ecode_error(rc, "Proxy | getaddrinfo() fail %s:%d %s", proxy->url.host, proxy->url.port, gai_strerror(rci));
+    return rc;
+  }
+
+  for (p = si; p; p = p->ai_next) {
+    char saddr[INET6_ADDRSTRLEN + 50];
+    struct sockaddr *sa = p->ai_addr;
+    void *addr = 0;
+
+    if (sa->sa_family == AF_INET) {
+      addr = &((struct sockaddr_in*) sa)->sin_addr;
+    } else if (sa->sa_family == AF_INET6) {
+      addr = &((struct sockaddr_in6*) sa)->sin6_addr;
+    } else {
+      rc = IW_ERROR_FAIL;
+      iwlog_ecode_error(rc, "Proxy | Unsupported address family: 0x%x", (int) sa->sa_family);
+      goto finish;
+    }
+
+    if (!inet_ntop(p->ai_family, addr, saddr, sizeof(saddr))) {
+      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+      goto finish;
+    }
+
+    fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    if (fd == -1) {
+      iwlog_warn("Proxy | Error opening socket %s:%d %s %s", proxy->url.host, proxy->url.port, saddr, strerror(errno));
+      continue;
+    }
+
+    RCC(rc, finish, _fd_make_non_blocking(fd));
+
+#ifdef TCP_SYNCNT
+    if (proxy->timeout_connect_sec == 0) { // Apply 7s default timeout on Linux
+      int syn_ret = 2;                     // Send a total of 3 SYN packets
+      setsockopt(fd, IPPROTO_TCP, TCP_SYNCNT, &syn_ret, sizeof(syn_ret));
+    }
+#endif
+
+    do {
+      rci = connect(fd, p->ai_addr, p->ai_addrlen);
+    } while (errno == EINTR);
+
+    if (rci == -1 && errno != EAGAIN && errno != EINPROGRESS) {
+      iwlog_warn("Proxy | Error connecting %s %s %s", proxy->url_raw, saddr, strerror(errno));
+      close(fd), fd = -1;
+      continue;
+    }
+    break;
+  }
+
+  if (!p) {
+    rc = IW_ERROR_FAIL;
+    iwlog_ecode_error(rc, "Proxy | Invalid endpoint address provided: %s", proxy->url_raw);
+    goto finish;
+  }
+
+  ++client->refs;
+
+  rc = iwn_poller_add(&(struct iwn_poller_task) {
+    .fd = fd,
+    .user_data = client,
+    .poller = client->poller,
+    .on_ready = _proxy_endpoint_on_ready,
+    .on_dispose = _proxy_endpoint_on_dispose,
+    .timeout = proxy->timeout_data_sec,
+    .events = IWN_POLLOUT,
+    .events_mod = IWN_POLLET,
+  });
+  if (rc) {
+    _client_unref(client);
+    goto finish;
+  }
+
+  proxy->fd = fd;
+
+  if (proxy->timeout_connect_sec) {
+    ++client->refs;
+    rc = iwn_schedule2(&(struct iwn_scheduler_spec) {
+      .poller = client->poller,
+      .user_data = client,
+      .task_fn = _proxy_connect_check_timeout,
+      .on_cancel = _proxy_connect_check_cancel,
+      .timeout_ms = 1000U * proxy->timeout_connect_sec,
+    }, &fd);
+    if (rc) {
+      _client_unref(client);
+      rc = 0; // Do not allow this error to be propagated
+    } else {
+      proxy->fd_timeout = fd;
+    }
+  }
+
+finish:
+  freeaddrinfo(si);
+  if (rc) {
+    if (fd > -1) {
+      close(fd);
+    }
+  }
+
+  return rc;
+}
+
+static iwrc _proxy_to_client_write_lk(struct client *client) {
+  iwrc rc = 0;
+  struct proxy *proxy = &client->proxy;
+  while (iwxstr_size(proxy->from_endpoint_buf)) {
+    ssize_t rci = write(client->fd, iwxstr_ptr(proxy->from_endpoint_buf), iwxstr_size(proxy->from_endpoint_buf));
+    if (rci == -1) {
+      if (errno == EINTR) {
+        continue;
+      } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      break;
+    } else if (rci == 0) {
+      rc = IW_ERROR_EOF;
+      break;
+    }
+    iwxstr_shift(proxy->from_endpoint_buf, rci);
+  }
+  return rc;
+}
+
+static iwrc _proxy_from_client_read_lk(struct client *client) {
+  iwrc rc = 0;
+  while (!rc) {
+    char buf[1024];
+    ssize_t rci = read(client->fd, buf, sizeof(buf));
+    if (rci == -1) {
+      if (errno == EINTR) {
+        continue;
+      } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        break;
+      }
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      break;
+    } else if (rci == 0) {
+      rc = IW_ERROR_EOF;
+      break;
+    }
+    rc = iwxstr_cat(client->proxy.to_endpoint_buf, buf, rci);
+  }
+  return rc;
+}
+
+static int64_t _proxy_client_on_ready(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
+  iwrc rc = 0;
+  // force ret to be > 0 in order to not apply default slot events mask (IWN_POLLIN)
+  // do read client channel only if proxy endpoint in connected state.
+  uint32_t ret = IWN_POLLET;
+  uint32_t arm_endpoint = 0;
+  struct client *client = user_data;
+  struct proxy *proxy = &client->proxy;
+
+  if (events & IWN_POLLIN) {
+    pthread_mutex_lock(&proxy->mtx);
+    rc = _proxy_from_client_read_lk(client);
+    pthread_mutex_unlock(&proxy->mtx);
+    RCGO(rc, finish);
+  }
+
+  if (events & IWN_POLLOUT) {
+    pthread_mutex_lock(&proxy->mtx);
+    rc = _proxy_to_client_write_lk(client);
+    pthread_mutex_unlock(&proxy->mtx);
+    RCGO(rc, finish);
+  }
+
+  pthread_mutex_lock(&proxy->mtx);
+  if (proxy->connected && iwxstr_size(proxy->to_endpoint_buf)) {
+    arm_endpoint |= IWN_POLLOUT;
+  }
+  if (!proxy->channel_buf_max_size || iwxstr_size(proxy->to_endpoint_buf) < proxy->channel_buf_max_size) {
+    ret |= IWN_POLLIN;
+  }
+  if (iwxstr_size(proxy->from_endpoint_buf)) {
+    ret |= IWN_POLLOUT;
+  } else if (proxy->disconnected) {
+    ret = -1;
+  } else {
+    arm_endpoint |= IWN_POLLIN;
+  }
+  pthread_mutex_unlock(&proxy->mtx);
+
+  if (arm_endpoint) {
+    iwn_poller_arm_events(client->poller, proxy->fd, arm_endpoint);
+  }
+
+finish:
+  return rc ? -1 : ret;
+}
+
+static bool _proxy_init(struct client *client) {
+  iwrc rc = 0;
+  char *urlbuf;
+  struct proxy *proxy = &client->proxy;
+
+  if (!proxy->url_raw || proxy->rc) {
+    proxy->rc = IW_ERROR_INVALID_STATE;
+    return false;
+  }
+  if (!proxy->channel_buf_max_size) {
+    proxy->channel_buf_max_size = 1024; // 1 Kb
+  }
+  pthread_mutex_init(&proxy->mtx, 0);
+  RCB(finish, proxy->from_endpoint_buf = iwxstr_new());
+
+  char *sbuf = client->stream.buf;
+  RCB(finish, proxy->to_endpoint_buf = iwxstr_wrap(client->stream.buf, client->stream.length, client->stream.capacity));
+  if (proxy->headers.first) {              // We have an extra headers for proxy endpoint
+    for (struct iwn_pair *p = proxy->headers.first; p; p = p->next) {
+      iwxstr_insert_printf(proxy->to_endpoint_buf, client->stream.index - 1,
+                           "%.*s: %.*s\r\n", (int) p->key_len, p->key, (int) p->val_len, p->val);
+    }
+  }
+
+  rc = _proxy_endpoint_connect(client);
+  if (rc) {
+    // Restore the original stream buffer
+    client->stream.buf = iwxstr_ptr(proxy->to_endpoint_buf);
+    client->stream.capacity = iwxstr_asize(proxy->to_endpoint_buf);
+    client->stream.length = iwxstr_size(proxy->to_endpoint_buf);
+    (void) iwxstr_destroy_keep_ptr(proxy->to_endpoint_buf);
+    proxy->to_endpoint_buf = 0;
+    goto finish;
+  }
+
+  client->stream.buf = 0, client->stream.length = 0;
+  client->injected_poller_evh = _proxy_client_on_ready;
+
+finish:
+  if (rc) {
+    proxy->rc = rc;
+    _proxy_destroy(client);
+    iwlog_ecode_error3(rc);
+    return false;
+  }
+  return true;
+}
+
+iwrc iwn_http_proxy_is_error(struct iwn_http_req *req) {
+  struct client *client = (void*) req;
+  return client->proxy.rc;
+}
+
+bool iwn_http_proxy_is_enabled(struct iwn_http_req *req) {
+  struct client *client = (void*) req;
+  return client->proxy.url_raw != 0;
+}
+
+bool iwn_http_proxy_timeout_connect_set(struct iwn_http_req *req, uint32_t timeout_sec) {
+  struct client *client = (void*) req;
+  client->proxy.timeout_connect_sec = timeout_sec;
+  return true;
+}
+
+bool iwn_http_proxy_timeout_data_set(struct iwn_http_req *req, uint32_t timeout_sec) {
+  struct client *client = (void*) req;
+  client->proxy.timeout_data_sec = timeout_sec;
+  return true;
+}
+
+bool iwn_http_proxy_channel_buf_max_size_set(struct iwn_http_req *req, size_t max_size) {
+  struct client *client = (void*) req;
+  client->proxy.channel_buf_max_size = max_size;
+  return true;
+}
+
+bool iwn_http_proxy_header_set(
+  struct iwn_http_req *req,
+  const char          *header_name,
+  const char          *header_value,
+  ssize_t              header_value_len
+  ) {
+  struct client *client = (void*) req;
+  size_t header_name_len = strlen(header_name);
+  char *hname = iwpool_strndup2(client->pool, header_name, header_name_len);
+  if (!hname) {
+    return false;
+  }
+  char *hvalue = iwpool_strndup2(client->pool, header_value, header_value_len);
+  if (!hvalue) {
+    return false;
+  }
+  return iwn_pair_add_pool(client->pool,
+                           &client->proxy.headers,
+                           hname, header_name_len,
+                           hvalue, header_value_len) == 0;
+}
+
+bool iwn_http_proxy_url_set(struct iwn_http_req *req, const char *url, ssize_t url_len) {
+  iwrc rc = 0;
+  if (!url || !req) {
+    return false;
+  }
+  if (url_len < 0) {
+    url_len = strlen(url);
+  }
+  struct client *client = (void*) req;
+  struct proxy *proxy = &client->proxy;
+
+  if (client->proxy.url_raw) { // url is set already
+    return false;
+  }
+
+  char *urlbuf;
+  RCB(finish, urlbuf = iwpool_strndup2(client->pool, url, url_len));
+  RCB(finish, client->proxy.url_raw = iwpool_strndup2(client->pool, url, url_len));
+
+  if (iwn_url_parse(&proxy->url, urlbuf) == -1) {
+    rc = IW_ERROR_INVALID_VALUE;
+    iwlog_ecode_error(rc, "Proxy | Malformed endpoint url: %s", url);
+    goto finish;
+  }
+  if (!proxy->url.scheme) {
+    proxy->url.scheme = "http";
+  }
+  if (strcmp(proxy->url.scheme, "http")) {
+    rc = IW_ERROR_UNSUPPORTED;
+    iwlog_ecode_error(rc, "Proxy | %s protocol is not supported, url: %s", proxy->url.scheme, url);
+    goto finish;
+  }
+  if (!proxy->url.path || !strcmp(proxy->url.path, "/")) {
+    proxy->url.path = "";
+  }
+  if (strlen(proxy->url.path)) {
+    rc = IW_ERROR_UNSUPPORTED;
+    iwlog_ecode_error(rc, "Proxy | Non root url paths are not supported, url: %s", url);
+    goto finish;
+  }
+  if (!proxy->url.port) {
+    proxy->url.port = 80;
+  }
+
+finish:
+  if (rc) {
+    client->proxy.rc = rc;
+    return false;
+  }
+  return true;
+}
+
+static bool _proxy_check(struct client *client) {
+  if (client->server->spec.proxy_handler) {
+    if (  client->server->spec.proxy_handler(&client->request)
+       && client->proxy.url_raw) {
+      return _proxy_init(client);
+    }
+  }
+  return false;
+}
+
 struct token _token_parse(struct client *client) {
   struct server *server = client->server;
   struct parser *parser = &client->parser;
@@ -825,7 +1405,12 @@ struct token _token_parse(struct client *client) {
   while (_stream_next(stream, &c)) {
     int8_t type = c < 0 ? HS_ETC : _ctype[(size_t) c];
     int8_t to = _transitions[parser->state * HS_CHAR_TYPE_LEN + type];
-    if (parser->meta == M_ZER && parser->state == HN && to == BD) {
+    if (to == HN) { // Headers end
+      if (_proxy_check(client)) {
+        token.type = HS_TOK_NONE;
+        return token;
+      }
+    } else if (to == BD && parser->state == HN && parser->meta == M_ZER) {
       to = CS;
     }
     int8_t from = parser->state;
@@ -973,7 +1558,11 @@ void iwn_http_inject_poller_events_handler(struct iwn_http_req *request, iwn_on_
 
 static void _client_on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
   struct client *client = user_data;
-  _client_destroy(client);
+  client->fd = -1;
+  if (client->proxy.fd > -1) { // Shutdown associated proxy channel
+    iwn_poller_remove(pa->poller, client->proxy.fd);
+  }
+  _client_unref(client);
 }
 
 static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storage *sockaddr) {
@@ -990,7 +1579,11 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
     goto finish;
   }
   client->pool = pool;
+  client->poller = server->spec.poller;
   client->fd = fd;
+  client->proxy.fd = -1;
+  client->proxy.fd_timeout = -1;
+  client->refs = 1;
   memcpy(&client->sockaddr, sockaddr, sizeof(client->sockaddr));
 
   struct sockaddr *sa = (void*) sockaddr;
@@ -1052,7 +1645,7 @@ finish:
   if (rc) {
     close(fd);
     if (client) {
-      _client_destroy(client);
+      _client_unref(client);
     } else {
       iwpool_destroy(pool);
     }

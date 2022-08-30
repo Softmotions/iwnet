@@ -1415,6 +1415,7 @@ iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ct
   http.request_timeout_sec = spec.request_timeout_sec;
   http.request_token_max_len = spec.request_token_max_len;
   http.request_max_headers_count = spec.request_max_headers_count;
+  http.proxy_handler = spec.proxy_handler;
 
   struct iwn_wf_session_store *sst = &spec.session_store;
   if (memcmp(sst, &(struct iwn_wf_session_store) {}, sizeof(*sst)) == 0) {

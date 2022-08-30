@@ -24,4 +24,6 @@ struct iwn_scheduler_spec {
 /// Submits delayed task for execution.
 IW_EXPORT iwrc iwn_schedule(const struct iwn_scheduler_spec *spec);
 
+IW_EXPORT iwrc iwn_schedule2(const struct iwn_scheduler_spec *spec, int *out_fd);
+
 IW_EXTERN_C_END

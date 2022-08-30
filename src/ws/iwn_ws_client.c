@@ -88,7 +88,7 @@ static void _ws_destroy(struct iwn_ws_client *ws) {
   }
 }
 
-static iwrc _make_non_blocking(int fd) {
+static iwrc _fd_make_non_blocking(int fd) {
   int rci, flags;
   while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR);
   if (flags == -1) {
@@ -106,7 +106,7 @@ static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
 
   *out_fd = 0;
 
-  char nbuf[64];
+  char nbuf[IWNUMBUF_SIZE];
   snprintf(nbuf, sizeof(nbuf), "%d", port_);
   char *port = nbuf;
 
@@ -125,7 +125,7 @@ static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
   }
 
   for (p = si; p; p = p->ai_next) {
-    char tmp[INET6_ADDRSTRLEN + 50];
+    char saddr[INET6_ADDRSTRLEN + 50];
     struct sockaddr *sa = p->ai_addr;
     void *addr = 0;
 
@@ -133,21 +133,25 @@ static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
       addr = &((struct sockaddr_in*) sa)->sin_addr;
     } else if (sa->sa_family == AF_INET6) {
       addr = &((struct sockaddr_in6*) sa)->sin6_addr;
-    }
-    if (!addr) {
-      iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | Unknown address family: %d", (int) sa->sa_family);
+    } else {
+      iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | Unsupported address family: 0x%x", (int) sa->sa_family);
       rc = WS_ERROR_PEER_CONNECT;
       goto finish;
     }
-    inet_ntop(p->ai_family, addr, tmp, sizeof(tmp));
+
+    if (!inet_ntop(p->ai_family, addr, saddr, sizeof(saddr))) {
+      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+      goto finish;
+    }
+
     fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
     if (fd < 0) {
-      iwlog_warn("ws | Error opening socket %s:%s %s %s", host, port, tmp, strerror(errno));
+      iwlog_warn("ws | Error opening socket %s:%s %s %s", host, port, saddr, strerror(errno));
       continue;
     }
 
     if (async) {
-      RCC(rc, finish, _make_non_blocking(fd));
+      RCC(rc, finish, _fd_make_non_blocking(fd));
     }
 
     do {
@@ -156,8 +160,8 @@ static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
 
     if (rci == -1) {
       if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
-        iwlog_warn("ws | Error connecting %s:%s %s %s", host, port, tmp, strerror(errno));
-        close(fd);
+        iwlog_warn("ws | Error connecting %s:%s %s %s", host, port, saddr, strerror(errno));
+        close(fd), fd = -1;
         continue;
       }
     }
@@ -172,8 +176,12 @@ static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
 
 finish:
   freeaddrinfo(si);
-  if (!rc && !async) { // Non-blocking after connection established
-    rc = _make_non_blocking(fd);
+  if (rc) {
+    if (fd > -1) {
+      close(fd);
+    }
+  } else if (!async) { // Non-blocking after connection established
+    rc = _fd_make_non_blocking(fd);
   }
   return rc;
 }
@@ -711,8 +719,8 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
 
   struct iwn_url u;
   if (iwn_url_parse(&u, ws->urlbuf) == -1) {
-    iwlog_error("Failed to parse url: %s", ws->urlbuf);
-    rc = IW_ERROR_FAIL;
+    iwlog_error("Failed to parse url: %s", spec->url);
+    rc = IW_ERROR_INVALID_VALUE;
     goto finish;
   }
   ws->host = u.host;

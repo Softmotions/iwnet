@@ -527,7 +527,7 @@ static iwrc _poller_timeout_add(struct poller_slot *s) {
   return 0;
 }
 
-iwrc iwn_poller_add(const struct iwn_poller_task *task) {
+iwrc iwn_poller_add2(const struct iwn_poller_task *task, int *out_fd) {
   if (!task || !task->poller || (!(task->events & IWN_POLLTIMEOUT) && task->fd < 0)) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -607,8 +607,14 @@ finish:
   if (rc) {
     s->on_dispose = 0;
     iwn_poller_remove(p, s->fd);
+  } else if (out_fd) {
+    *out_fd = s->fd;
   }
   return rc;
+}
+
+iwrc iwn_poller_add(const struct iwn_poller_task *task) {
+  return iwn_poller_add2(task, 0);
 }
 
 bool iwn_poller_fd_is_managed(struct iwn_poller *p, int fd) {
