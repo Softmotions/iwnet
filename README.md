@@ -1,11 +1,12 @@
 # IWNET
 
-Pure `C` asynchronous HTTP framework with support of websockets client/server, TLS 1.2 (SSL), routing.
+Pure `C` asynchronous HTTP framework with support of websockets client/server, SSL and routing.
 
 Works on Linux, macOS, FreeBSD
 
 * [Fast asynchronous HTTP server](./src/http) ([iwn_http_server.h](./src/http/iwn_http_server.h))
 * [Web framework based on HTTP server](./src/http) ([iwn_wf.h](./src/http/iwn_wf.h))   
+* Ultra fast HTTP Reverse Proxy ([iwn_http_server.h](./src/http/iwn_http_server.h))
 * Websocket client and server ([iwn_ws_server.h](./src/ws/iwn_ws_server.h), [iwn_ws_client.h](./src/ws/iwn_ws_client.h))
 * Poller reactor ([iwn_poller.h](./src/poller/iwn_poller.h))
 * SSL Layer is based on BearSSL ([iwn_brssl_poller_adapter.h](./src/ssl/iwn_brssl_poller_adapter.h))
@@ -187,6 +188,7 @@ You may find many helpful code examples by looking into
 
 * [server2.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server2.c)
 * [server1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server1.c)
+* [HTTP Proxy proxy1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/proxy1.c)
 
 # License
 
