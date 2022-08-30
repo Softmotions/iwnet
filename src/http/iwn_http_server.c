@@ -1258,10 +1258,9 @@ static bool _proxy_init(struct client *client) {
   rc = _proxy_endpoint_connect(client);
   if (rc) {
     // Restore the original stream buffer
-    client->stream.buf = iwxstr_ptr(proxy->to_endpoint_buf);
     client->stream.capacity = iwxstr_asize(proxy->to_endpoint_buf);
     client->stream.length = iwxstr_size(proxy->to_endpoint_buf);
-    (void) iwxstr_destroy_keep_ptr(proxy->to_endpoint_buf);
+    client->stream.buf = iwxstr_destroy_keep_ptr(proxy->to_endpoint_buf);
     proxy->to_endpoint_buf = 0;
     goto finish;
   }
