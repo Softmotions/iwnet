@@ -40,6 +40,7 @@ struct server {
   int  fd;
   int  refs;
   pthread_mutex_t mtx;
+  pthread_mutex_t mtx_ssl;
   IWPOOL *pool;
   char    stime_text[32]; ///< Formatted as: `%a, %d %b %Y %T GMT`
   volatile bool https;
@@ -1613,7 +1614,7 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
   RCN(finish, fcntl(fd, F_SETFL, flags | O_NONBLOCK));
 
   if (server->https) {
-    pthread_mutex_lock(&server->mtx);
+    pthread_mutex_lock(&server->mtx_ssl);
     rc = iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
       .certs = server->spec.ssl.certs,
       .certs_in_buffer = server->spec.ssl.certs_in_buffer,
@@ -1630,7 +1631,7 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
       .timeout_sec = server->spec.request_timeout_sec,
       .user_data = client,
     });
-    pthread_mutex_unlock(&server->mtx);
+    pthread_mutex_unlock(&server->mtx_ssl);
   } else {
     rc = iwn_direct_poller_adapter(
       server->spec.poller, fd,
@@ -2380,6 +2381,7 @@ static void _server_destroy(struct server *server) {
   free((void*) server->spec.ssl.certs);
   free((void*) server->spec.ssl.private_key);
   pthread_mutex_destroy(&server->mtx);
+  pthread_mutex_destroy(&server->mtx_ssl);
   iwpool_destroy(server->pool);
 }
 
@@ -2463,7 +2465,7 @@ void* iwn_http_request_ws_data(struct iwn_http_req *request) {
 static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data) {
   struct server *server = slot_data;
   const struct iwn_http_server_ssl_spec *ssl = fn_data;
-  pthread_mutex_lock(&server->mtx);
+  pthread_mutex_lock(&server->mtx_ssl);
   free((void*) server->spec.ssl.certs);
   free((void*) server->spec.ssl.private_key);
   server->spec.ssl.certs_len = ssl->certs_len;
@@ -2487,7 +2489,7 @@ static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data)
   server->spec.ssl.certs_in_buffer = ssl->certs_in_buffer;
   server->spec.ssl.private_key_in_buffer = ssl->private_key_in_buffer;
   server->https = ssl->certs && ssl->certs_len && ssl->private_key && ssl->private_key_len;
-  pthread_mutex_unlock(&server->mtx);
+  pthread_mutex_unlock(&server->mtx_ssl);
 }
 
 bool iwn_http_server_ssl_set(
@@ -2513,6 +2515,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   }
   RCA(server = iwpool_calloc(sizeof(*server), pool), finish);
   pthread_mutex_init(&server->mtx, 0);
+  pthread_mutex_init(&server->mtx_ssl, 0);
 
   server->pool = pool;
   server->refs = 1;
