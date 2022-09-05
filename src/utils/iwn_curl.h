@@ -40,6 +40,8 @@ struct xcurl_cursor {
 #define XCURLREQ_PUT  0x02U
 #define XCURLREQ_DEL  0x04U
 #define XCURLREQ_JSON 0x08U
+#define XCURLREQ_HEAD 0x10U
+#define XCURLREQ_OPTS 0x20U
 
 struct xcurlreq {
   const char *path;
