@@ -6,8 +6,9 @@
 #include <stdlib.h>
 #include <limits.h>
 
-IW_INLINE bool is_anum(char c) {
-  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+IW_INLINE bool is_unreserved(char c) { // See rfc3986
+  return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+         || c == '-' || c == '.' || c == '_' || c == '~';
 }
 
 size_t iwn_url_encoded_len(const char *src, ssize_t src_len) {
@@ -16,7 +17,7 @@ size_t iwn_url_encoded_len(const char *src, ssize_t src_len) {
     src_len = strlen(src);
   }
   for (int i = 0; i < src_len; ++i) {
-    if (is_anum(src[i])) {
+    if (is_unreserved(src[i])) {
       res++;
     } else {
       res += 3;
@@ -36,7 +37,7 @@ size_t iwn_url_encode(const char *src, ssize_t src_len, char *out, size_t out_si
       break;
     }
     char c = src[i];
-    if (is_anum(c)) {
+    if (is_unreserved(c)) {
       out[n++] = c;
     } else {
       if (n + 2 >= out_size) {
