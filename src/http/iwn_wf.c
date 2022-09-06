@@ -222,6 +222,10 @@ finish:
   return rc;
 }
 
+iwrc iwn_wf_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, char *query, size_t query_len) {
+  return _request_parse_query_inplace(pool, pairs, query, query_len);
+}
+
 static void _request_stream_destroy(struct request *req) {
   if (req->stream_file) {
     if (req->flags & REQUEST_STREAM_FILE_MMAPED) {
