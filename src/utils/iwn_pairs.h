@@ -51,6 +51,9 @@ IW_EXPORT iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len);
 /// Adds given `p` pair to the `pairs` list.
 IW_EXPORT void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p);
 
+/// Converts a provided `pairs` to array form where a `pool` used for allocations.
+IW_EXPORT struct iwn_pair** iwn_pairs_to_array(IWPOOL *pool, const struct iwn_pairs *pairs, size_t *out_size);
+
 /// Finds a first pair matched the given `key`. Returns zero pointer if no matched pair found.
 IW_EXPORT struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
 

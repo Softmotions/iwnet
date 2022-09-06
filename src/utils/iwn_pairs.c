@@ -23,16 +23,16 @@ void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v) {
   }
 }
 
- iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len) {
-   struct iwn_val *v = malloc(sizeof(*v));
-   if (!v) {
-     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
-   }
-   v->buf = buf;
-   v->len = len;
-   iwn_val_add(vals, v);
-   return 0;
- }
+iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len) {
+  struct iwn_val *v = malloc(sizeof(*v));
+  if (!v) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  v->buf = buf;
+  v->len = len;
+  iwn_val_add(vals, v);
+  return 0;
+}
 
 void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p) {
   p->next = 0;
@@ -95,4 +95,20 @@ iwrc iwn_pair_add_pool(
   p->val_len = val_len;
   iwn_pair_add(pairs, p);
   return 0;
+}
+
+struct iwn_pair** iwn_pairs_to_array(IWPOOL *pool, const struct iwn_pairs *pairs, size_t *out_size) {
+  size_t cnt = 0;
+  for (struct iwn_pair *p = pairs->first; p; p = p->next) {
+    ++cnt;
+  }
+  struct iwn_pair **ret = iwpool_alloc(sizeof(struct iwn_pair*) * cnt, pool);
+  if (ret) {
+    *out_size = cnt;
+    cnt = 0;
+    for (struct iwn_pair *p = pairs->first; p; p = p->next) {
+      ret[cnt++] = p;
+    }
+  }
+  return ret;
 }
