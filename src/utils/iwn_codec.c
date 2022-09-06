@@ -26,6 +26,23 @@ size_t iwn_url_encoded_len(const char *src, ssize_t src_len) {
   return res;
 }
 
+size_t iwn_url_encoded_aws_len(const char *src, ssize_t src_len) {
+  size_t res = 0;
+  if (src_len < 0) {
+    src_len = strlen(src);
+  }
+  for (int i = 0; i < src_len; ++i) {
+    if (is_unreserved(src[i])) {
+      res++;
+    } else if (src[i] == '=') {
+      res += 5;
+    } else {
+      res += 3;
+    }
+  }
+  return res;
+}
+
 size_t iwn_url_encode(const char *src, ssize_t src_len, char *out, size_t out_size) {
   if (src_len < 0) {
     src_len = strlen(src);
@@ -39,6 +56,45 @@ size_t iwn_url_encode(const char *src, ssize_t src_len, char *out, size_t out_si
     char c = src[i];
     if (is_unreserved(c)) {
       out[n++] = c;
+    } else {
+      if (n + 2 >= out_size) {
+        break;
+      }
+      out[n++] = '%';
+      out[n++] = hex[(c >> 4) & 0x0F];
+      out[n++] = hex[c & 0x0F];
+    }
+  }
+  if (n < out_size) {
+    out[n] = '\0';
+  } else if (out_size > 0) {
+    out[out_size - 1] = '\0';
+  }
+  return n;
+}
+
+size_t iwn_url_encode_aws(const char *src, ssize_t src_len, char *out, size_t out_size) {
+  if (src_len < 0) {
+    src_len = strlen(src);
+  }
+  static char hex[] = "0123456789ABCDEF";
+  size_t n = 0;
+  for (int i = 0; i < src_len; ++i) {
+    if (n >= out_size) {
+      break;
+    }
+    char c = src[i];
+    if (is_unreserved(c)) {
+      out[n++] = c;
+    } else if (c == '=')  {
+      if (n + 4 >= out_size) {
+        break;
+      }
+      out[n++] = '%';
+      out[n++] = '2';
+      out[n++] = '5';
+      out[n++] = '3';
+      out[n++] = 'D';
     } else {
       if (n + 2 >= out_size) {
         break;

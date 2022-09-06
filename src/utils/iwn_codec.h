@@ -13,6 +13,10 @@ IW_EXPORT size_t iwn_url_encode(const char *src, ssize_t src_len, char *out, siz
 
 IW_EXPORT size_t iwn_url_encoded_len(const char *src, ssize_t src_len);
 
+IW_EXPORT size_t iwn_url_encoded_aws_len(const char *src, ssize_t src_len);
+
+IW_EXPORT size_t iwn_url_encode_aws(const char *src, ssize_t src_len, char *out, size_t out_size);
+
 IW_EXPORT void iwn_url_decode_inplace(char *str);
 
 IW_EXPORT size_t iwn_url_decode_inplace2(char *sp, char *ep);
