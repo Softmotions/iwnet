@@ -48,10 +48,13 @@ IW_EXPORT void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v);
 /// @param len Length of `buf` data
 IW_EXPORT iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len);
 
+/// Converts a provided `vals` to array form, where a `pool` used for array allocation.
+IW_EXPORT struct iwn_val** iwn_vals_to_array(IWPOOL *pool, const struct iwn_vals *vals, size_t *out_size);
+
 /// Adds given `p` pair to the `pairs` list.
 IW_EXPORT void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p);
 
-/// Converts a provided `pairs` to array form where a `pool` used for allocations.
+/// Converts a provided `pairs` to array form, where a `pool` used for array allocation.
 IW_EXPORT struct iwn_pair** iwn_pairs_to_array(IWPOOL *pool, const struct iwn_pairs *pairs, size_t *out_size);
 
 /// Finds a first pair matched the given `key`. Returns zero pointer if no matched pair found.

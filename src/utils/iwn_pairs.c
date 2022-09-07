@@ -102,12 +102,30 @@ struct iwn_pair** iwn_pairs_to_array(IWPOOL *pool, const struct iwn_pairs *pairs
   for (struct iwn_pair *p = pairs->first; p; p = p->next) {
     ++cnt;
   }
-  struct iwn_pair **ret = iwpool_alloc(sizeof(struct iwn_pair*) * cnt, pool);
+  // NOLINTNEXTLINE
+  struct iwn_pair **ret = iwpool_alloc(sizeof(*ret) * cnt, pool);
   if (ret) {
     *out_size = cnt;
     cnt = 0;
     for (struct iwn_pair *p = pairs->first; p; p = p->next) {
       ret[cnt++] = p;
+    }
+  }
+  return ret;
+}
+
+struct iwn_val** iwn_vals_to_array(IWPOOL *pool, const struct iwn_vals *vals, size_t *out_size) {
+  size_t cnt = 0;
+  for (struct iwn_val *v = vals->first; v; v = v->next) {
+    ++cnt;
+  }
+  // NOLINTNEXTLINE
+  struct iwn_val **ret = iwpool_alloc(sizeof(*ret) * cnt, pool);
+  if (ret) {
+    *out_size = cnt;
+    cnt = 0;
+    for (struct iwn_val *v = vals->first; v; v = v->next) {
+      ret[cnt++] = v;
     }
   }
   return ret;
