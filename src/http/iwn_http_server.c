@@ -1247,7 +1247,6 @@ static bool _proxy_init(struct client *client) {
   pthread_mutex_init(&proxy->mtx, 0);
   RCB(finish, proxy->from_endpoint_buf = iwxstr_new());
 
-  char *sbuf = client->stream.buf;
   RCB(finish, proxy->to_endpoint_buf = iwxstr_wrap(client->stream.buf, client->stream.length, client->stream.capacity));
   if (proxy->headers.first) {              // We have an extra headers for proxy endpoint
     for (struct iwn_pair *p = proxy->headers.first; p; p = p->next) {
