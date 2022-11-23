@@ -218,8 +218,9 @@ static iwrc _proc_init(struct proc *proc, int fds[6]) {
       RCB(finish, proc->argv[i + 1] = iwpool_strdup2(pool, spec->args[i]));
     }
   } else {
-    RCB(finish, proc->argv = iwpool_alloc(sizeof(char*), pool));
-    proc->argv[0] = 0;
+    RCB(finish, proc->argv = iwpool_alloc(2 * sizeof(char*), pool));
+    proc->argv[0] = proc->path;
+    proc->argv[1] = 0;
   }
 
   if (spec->env) {
