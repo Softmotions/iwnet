@@ -1234,7 +1234,6 @@ finish:
 
 static bool _proxy_init(struct client *client) {
   iwrc rc = 0;
-  char *urlbuf;
   struct proxy *proxy = &client->proxy;
 
   if (!proxy->url_raw || proxy->rc) {
