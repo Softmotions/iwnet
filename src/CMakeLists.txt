@@ -37,6 +37,12 @@ set(CMAKE_C_FLAGS
                   -std=gnu11 \
                   -fPIC")
 
+if(APPLE)
+  set(STRIP_CMD strip -x)
+else()
+  set(STRIP_CMD ${CMAKE_STRIP} -s)
+endif()
+
 if(NOT WIN32) # todo review
   # set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
 else()
