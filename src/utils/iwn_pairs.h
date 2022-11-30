@@ -74,4 +74,14 @@ IW_EXPORT iwrc iwn_pair_add_pool(
   ssize_t           val_len);
 
 
+/// Add a new `iwn_pair` with all of data including key and value allocated in given `pool`.
+IW_EXPORT iwrc iwn_pair_add_pool_all(
+  IWPOOL           *pool,
+  struct iwn_pairs *pairs,
+  const char       *key,
+  ssize_t           key_len,
+  const char       *val,
+  ssize_t           val_len);
+
+
 IW_EXTERN_C_END

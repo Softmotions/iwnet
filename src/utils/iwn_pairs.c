@@ -97,6 +97,34 @@ iwrc iwn_pair_add_pool(
   return 0;
 }
 
+iwrc iwn_pair_add_pool_all(
+  IWPOOL           *pool,
+  struct iwn_pairs *pairs,
+  const char       *key,
+  ssize_t           key_len,
+  const char       *val,
+  ssize_t           val_len
+  ) {
+  char *pval = 0;
+  if (val_len) {
+    if (val_len < 0) {
+      val_len = strlen(val);
+    }
+    pval = iwpool_strndup2(pool, val, val_len);
+    if (!pval) {
+      return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+    }
+  }
+  if (key_len < 0) {
+    key_len = strlen(key);
+  }
+  key = iwpool_strndup2(pool, key, key_len);
+  if (!key) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  return iwn_pair_add_pool(pool, pairs, key, key_len, pval, val_len);
+}
+
 struct iwn_pair** iwn_pairs_to_array(IWPOOL *pool, const struct iwn_pairs *pairs, size_t *out_size) {
   size_t cnt = 0;
   for (struct iwn_pair *p = pairs->first; p; p = p->next) {
