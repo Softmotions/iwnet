@@ -1,5 +1,6 @@
 iwnet (1.1.0) UNRELEASED; urgency=medium
 
+  * fix: Fixed wrong handling of fd error events (iwn_poller)
   * impl: Implemened http proxy forwarding (iwn_http_server.h)
   * impl: Added find_executable_in_path option in iwn_proc_spawn() (iwn_proc.c)
   * impl: Added iwn_port_is_bound() (utils/iwn_net.h)
