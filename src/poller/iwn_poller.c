@@ -334,7 +334,7 @@ static void _destroy(struct iwn_poller *p) {
 
 static void _timer_ready_impl(struct iwn_poller *p) {
   time_t ctime = _time_sec();
-  time_t timeout_next = ctime + 24 * 60 * 60;
+  time_t timeout_next = ctime + 24L * 60 * 60;
 
   if (ctime != p->timeout_checktime) {
     IWHMAP_ITER iter;

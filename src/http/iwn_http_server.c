@@ -1241,7 +1241,7 @@ static bool _proxy_init(struct client *client) {
     return false;
   }
   if (!proxy->channel_buf_max_size) {
-    proxy->channel_buf_max_size = 1024 * 1024; // 1 Mb
+    proxy->channel_buf_max_size = (size_t) 1024 * 1024; // 1 Mb
   }
   pthread_mutex_init(&proxy->mtx, 0);
   RCB(finish, proxy->from_endpoint_buf = iwxstr_new());
@@ -1354,7 +1354,7 @@ bool iwn_http_proxy_url_set(struct iwn_http_req *req, const char *url, ssize_t u
   if (!proxy->url.scheme) {
     proxy->url.scheme = "http";
   }
-  if (strcmp(proxy->url.scheme, "http")) {
+  if (strcmp(proxy->url.scheme, "http") != 0) {
     rc = IW_ERROR_UNSUPPORTED;
     iwlog_ecode_error(rc, "Proxy | %s protocol is not supported, url: %s", proxy->url.scheme, url);
     goto finish;

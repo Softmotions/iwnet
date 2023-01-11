@@ -411,7 +411,7 @@ static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_dat
       }
       if (!(ws->state & _STATE_HANDSHAKE_RECV)) {
         RCC(rc, finish, iwxstr_cat(ws->input, buf, len));
-        if (iwxstr_size(ws->input) > 1024 * 1024) {
+        if (iwxstr_size(ws->input) > (size_t) 1024 * 1024) {
           rc = WS_ERROR_HANDSHAKE;
           goto finish;
         }
