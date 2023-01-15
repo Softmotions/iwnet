@@ -48,6 +48,10 @@ struct iwn_proc_spec {
   /// On fork handler. We are on the child side if pid is zero.
   void (*on_fork)(const struct iwn_proc_ctx *ctx, pid_t pid);
 
+  /// Sends a given signal to the child process if parent process exits.
+  /// NOTE: Works only on Linux.
+  int parent_death_signal;
+
   /// It true set the ability to write into stdin of the child process
   bool write_stdin;
 

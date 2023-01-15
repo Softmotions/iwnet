@@ -18,6 +18,10 @@
 #include <fcntl.h>
 #include <string.h>
 
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
+
 #define FDS_STDOUT 0
 #define FDS_STDERR 1
 #define FDS_STDIN  2
@@ -559,7 +563,11 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
   RCB(finish, proc = _proc_create(spec));
   RCC(rc, finish, _proc_init(proc, fds));
 
+#ifdef __linux__
+  pid_t ppid = getpid();
+#endif
   pid_t pid = fork();
+
   if (pid > 0) { // Parent
     *out_pid = pid;
     proc->pid = pid;
@@ -636,6 +644,19 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
       spec->on_fork((void*) proc, pid);
     }
   } else if (pid == 0) { // Child
+#ifdef __linux__
+    if (spec->parent_death_signal) {
+      int rci = prctl(PR_SET_PDEATHSIG, spec->parent_death_signal);
+      if (rci == -1) {
+        iwlog_ecode_error3(IW_ERROR_ERRNO);
+        exit(1);
+      }
+      if (getppid() != ppid) {
+        exit(1);
+      }
+    }
+#endif
+
     if (fds[1] > -1) {
       while ((dup2(fds[1], STDOUT_FILENO) == -1) && (errno == EINTR));
       close(fds[0]);
