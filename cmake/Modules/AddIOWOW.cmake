@@ -1,30 +1,27 @@
-find_package(Iowow)
+find_package(IOWOW)
 
-if(Iowow_FOUND)
+if(TARGET IOWOW::static) 
   return()
 endif()
 
-if("${IOWOW_URL}" STREQUAL "")
-  if(EXISTS ${CMAKE_SOURCE_DIR}/iowow.zip)
-    set(IOWOW_URL ${CMAKE_SOURCE_DIR}/iowow.zip)
-  else()
-    set(IOWOW_URL
-        https://github.com/Softmotions/iowow/archive/refs/heads/master.zip)
-  endif()
+set(IOWOW_INCLUDE_DIRS "")
+
+include(ExternalProject)
+
+if(NOT DEFINED IOWOW_URL)
+  set(IOWOW_URL
+      https://github.com/Softmotions/iowow/archive/refs/heads/master.zip)
 endif()
 
-message("IOWOW_URL: ${IOWOW_URL}")
-
-if(APPLE)
-  set(BYPRODUCT "${CMAKE_BINARY_DIR}/lib/libiowow-1.a")
-else()
-  set(BYPRODUCT "${CMAKE_BINARY_DIR}/src/extern_iowow-build/src/libiowow-1.a")
-endif()
+set(BYPRODUCT "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/libiowow-1.a")
 
 set(CMAKE_ARGS
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR} -DASAN=${ASAN}
-    -DBUILD_SHARED_LIBS=OFF -DBUILD_EXAMPLES=OFF)
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR} 
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_EXAMPLES=OFF)
+
+set(CMAKE_FIND_ROOT_PATH ${CMAKE_FIND_ROOT_PATH} ${CMAKE_INSTALL_PREFIX})
 
 # In order to properly pass owner project CMAKE variables than contains
 # semicolons, we used a specific separator for 'ExternalProject_Add', using the
@@ -35,18 +32,19 @@ set(SSUB "^^")
 
 foreach(
   extra
-  CMAKE_OSX_ARCHITECTURES
-  CMAKE_C_COMPILER
-  CMAKE_TOOLCHAIN_FILE
-  ANDROID_PLATFORM
   ANDROID_ABI
-  TEST_TOOL_CMD
-  PLATFORM
-  ENABLE_BITCODE
+  ANDROID_PLATFORM
+  ARCHS
+  CMAKE_C_COMPILER
+  CMAKE_FIND_ROOT_PATH
+  CMAKE_OSX_ARCHITECTURES
+  CMAKE_TOOLCHAIN_FILE
   ENABLE_ARC
-  ENABLE_VISIBILITY
+  ENABLE_BITCODE
   ENABLE_STRICT_TRY_COMPILE
-  ARCHS)
+  ENABLE_VISIBILITY
+  PLATFORM
+  TEST_TOOL_CMD)
   if(DEFINED ${extra})
     # Replace occurences of ";" with our custom separator and append to
     # CMAKE_ARGS
@@ -57,8 +55,6 @@ endforeach()
 
 message("IOWOW CMAKE_ARGS: ${CMAKE_ARGS}")
 
-include(ExternalProject)
-
 ExternalProject_Add(
   extern_iowow
   URL ${IOWOW_URL}
@@ -66,8 +62,8 @@ ExternalProject_Add(
   TIMEOUT 360
   PREFIX ${CMAKE_BINARY_DIR}
   BUILD_IN_SOURCE OFF
+  #DOWNLOAD_EXTRACT_TIMESTAMP ON
   UPDATE_COMMAND ""
-  UPDATE_DISCONNECTED ${_UPDATE_DISCONNECTED}
   LIST_SEPARATOR "${SSUB}"
   CMAKE_ARGS ${CMAKE_ARGS}
   BUILD_BYPRODUCTS ${BYPRODUCT})
@@ -75,21 +71,9 @@ ExternalProject_Add(
 add_library(IOWOW::static STATIC IMPORTED GLOBAL)
 set_target_properties(
   IOWOW::static
-  PROPERTIES IMPORTED_LOCATION ${BYPRODUCT}
-             IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+  PROPERTIES IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+             IMPORTED_LOCATION
+             "${CMAKE_BINARY_DIR}/${CMAKE_INSTALL_LIBDIR}/libiowow-1.a"
              IMPORTED_LINK_INTERFACE_LIBRARIES "Threads::Threads;m")
 
 add_dependencies(IOWOW::static extern_iowow)
-
-set(IOWOW_LIBRARIES IOWOW::static)
-set(IOWOW_INCLUDE_DIRS ${CMAKE_BINARY_DIR}/include)
-
-if(DO_INSTALL_CORE)
-  install(FILES "${BYPRODUCT}" DESTINATION ${CMAKE_INSTALL_LIBDIR})
-  install(
-    DIRECTORY ${IOWOW_INCLUDE_DIRS}/iowow
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    COMPONENT headers
-    FILES_MATCHING
-    PATTERN "*.h")
-endif()

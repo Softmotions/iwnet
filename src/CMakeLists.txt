@@ -19,7 +19,8 @@ test_big_endian(WORDS_BIGENDIAN)
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
-include(AddIowow)
+include(AddIOWOW)
+
 find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)
 
 set(CMAKE_C_FLAGS
@@ -77,7 +78,7 @@ set(MODULES
     ws
     http)
 
-list(APPEND PROJECT_LIBRARIES ${IOWOW_LIBRARIES})
+  list(APPEND PROJECT_LIBRARIES "IOWOW::static")
 
 list(
   APPEND
