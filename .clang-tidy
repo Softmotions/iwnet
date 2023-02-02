@@ -13,12 +13,14 @@ Checks:    >
   -bugprone-narrowing-conversions,
   -bugprone-not-null-terminated-result,
   -bugprone-reserved-identifier,
-  -bugprone-signal-handler,
   -bugprone-sizeof-expression,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   -clang-analyzer-security.insecureAPI.strcpy,
   -google-readability-todo,
   -misc-unused-parameters,
+  -misc-no-recursion,
   -performance-no-int-to-ptr,
+  -bugprone-assignment-in-if-condition,
+  -bugprone-signal-handler,
 
 ...
