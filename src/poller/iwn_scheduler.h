@@ -16,6 +16,8 @@ struct iwn_scheduler_spec {
   void (*on_cancel)(void*);     ///< Optional on_cancel handler.
                                 ///  Called when pending task execution will be cancelled for
                                 ///  some reason. Eg: poller shutdown.
+
+  void  (*on_dispose)(void*);   ///< Optional dispose handler. Called when task is removed from event poller.
   void *user_data;              ///< User data passed to `task_fn()` function.
   struct iwn_poller *poller;    ///< Poller.
   uint32_t timeout_ms;          ///< Task timeout in milliseconds.

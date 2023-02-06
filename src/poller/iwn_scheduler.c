@@ -28,6 +28,9 @@ static void _on_dispose(const struct iwn_poller_task *t) {
   if (s->on_cancel) {
     s->on_cancel(s->user_data);
   }
+  if (s->on_dispose) {
+    s->on_dispose(s->user_data);
+  }
   free(s);
 }
 
