@@ -171,9 +171,9 @@ static bool _slot_unref(struct poller_slot *s, uint8_t flags) {
     if (iwhmap_remove_u32(p->slots, s->fd)) {
       --p->fds_count;
 #if defined(IWN_EPOLL)
-      if (p->fds_count < 3) {
+      if (p->fds_count < 3 && !(p->flags & IWN_POLLER_POLL_NO_FDS)) {
 #elif defined(IWN_KQUEUE)
-      if (p->fds_count < 1) {
+      if (p->fds_count < 1 && !(p->flags & IWN_POLLER_POLL_NO_FDS)) {
 #endif
         iwn_poller_shutdown_request(p);
       }
