@@ -789,6 +789,7 @@ static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   p->fd = -1;
+  p->flags = spec.flags & (IWN_POLLER_POLL_NO_FDS);
 #ifdef IWN_EPOLL
   p->timer_fd = -1;
   p->event_fd = -1;

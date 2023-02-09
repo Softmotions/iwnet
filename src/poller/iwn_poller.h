@@ -78,6 +78,11 @@ struct iwn_poller_spec {
   /// @see iwtp_spec::queue_limit
   int queue_limit;
 
+  /// Poller operational flags.
+  /// Bitmask of following:
+  ///   - IWN_POLLER_POLL_NO_FDS 
+  unsigned flags;
+
   /// @see iwtp_spec::warn_on_overflow_thread_spawn
   bool warn_on_overflow_thread_spawn;
 };
