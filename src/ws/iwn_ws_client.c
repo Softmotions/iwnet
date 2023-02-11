@@ -15,6 +15,7 @@
 #include <iowow/iwlog.h>
 #include <iowow/iwxstr.h>
 #include <iowow/iwutils.h>
+#include <iowow/iwchars.h>
 
 #include <pthread.h>
 #include <stdatomic.h>
@@ -73,10 +74,6 @@ IW_INLINE iwrc _wslayrc(enum wslay_error err) {
     default:
       return WS_ERROR;
   }
-}
-
-IW_INLINE bool _isblank(char c) {
-  return c == 32 || (c >=9 && c <= 13);
 }
 
 static void _ws_destroy(struct iwn_ws_client *ws) {
@@ -426,7 +423,7 @@ static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_dat
             goto finish;
           }
           p += sizeof("sec-websocket-accept:") - 1;
-          while (*p && _isblank(*p)) p++;
+          while (*p && iwchars_is_blank(*p)) p++;
           char *q = strstr(p, "\r\n");
           if (!q || !_handshake_validate_accept_key(ws, p, q - p)) {
             rc = WS_ERROR_HANDSHAKE_CLIENT_KEY;
