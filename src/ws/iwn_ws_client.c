@@ -76,17 +76,7 @@ IW_INLINE iwrc _wslayrc(enum wslay_error err) {
 }
 
 IW_INLINE bool _isblank(char c) {
-  switch (c) {
-    case 9:
-    case 10:
-    case 11:
-    case 12:
-    case 13:
-    case 32:
-      return true;
-    default:
-      return false;
-  }
+  return c == 32 || (c >=9 && c <= 13);
 }
 
 static void _ws_destroy(struct iwn_ws_client *ws) {
