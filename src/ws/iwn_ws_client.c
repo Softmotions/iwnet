@@ -21,7 +21,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <unistd.h>
-#include <ctype.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <assert.h>
@@ -73,6 +72,20 @@ IW_INLINE iwrc _wslayrc(enum wslay_error err) {
       return iwrc_set_errno(IW_ERROR_ALLOC, errno);
     default:
       return WS_ERROR;
+  }
+}
+
+IW_INLINE bool _isblank(char c) {
+  switch (c) {
+    case 9:
+    case 10:
+    case 11:
+    case 12:
+    case 13:
+    case 32:
+      return true;
+    default:
+      return false;
   }
 }
 
@@ -423,7 +436,7 @@ static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_dat
             goto finish;
           }
           p += sizeof("sec-websocket-accept:") - 1;
-          while (*p && isblank(*p)) p++;
+          while (*p && _isblank(*p)) p++;
           char *q = strstr(p, "\r\n");
           if (!q || !_handshake_validate_accept_key(ws, p, q - p)) {
             rc = WS_ERROR_HANDSHAKE_CLIENT_KEY;
