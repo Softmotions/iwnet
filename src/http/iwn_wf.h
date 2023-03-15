@@ -285,4 +285,7 @@ IW_EXPORT iwrc iwn_wf_cookie_add(
 /// Destroy web-framework configuration and stops an HTTP server.
 IW_EXPORT void iwn_wf_destroy(struct iwn_wf_ctx *ctx);
 
+/// Initialize global web-framework state and register WF error codes.
+IW_EXPORT iwrc iwn_wf_init(void);
+
 IW_EXTERN_C_END

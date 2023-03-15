@@ -1449,6 +1449,10 @@ void iwn_wf_destroy(struct iwn_wf_ctx *ctx_) {
   }
 }
 
+iwrc iwn_wf_init(void) {
+  return _init();
+}
+
 static const char* _ecodefn(locale_t locale, uint32_t ecode) {
   if (ecode <= _WF_ERROR_START || ecode >= _WF_ERROR_END) {
     return 0;
