@@ -1,5 +1,5 @@
-cd ./build/src/http/tests
-file ./proxy1
+cd ./build/src/http/examples
+file ./echo_http_server
 #set args --ssl
 
 set confirm off

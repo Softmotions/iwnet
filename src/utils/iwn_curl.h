@@ -92,6 +92,14 @@ static size_t xcurl_body_write_xstr(void *contents, size_t size, size_t nmemb, v
   return size * nmemb;
 }
 
+static size_t xcurl_body_write_file(void *contents, size_t size, size_t nmemb, void *op) {
+  FILE *fp = op;
+  if (!fp) {
+    return 0;
+  }
+  return fwrite(contents, size, nmemb, fp) * size;
+}
+
 static size_t xcurl_hdr_write_iwlist(char *buffer, size_t size, size_t nmemb, void *op) {
   if (strchr(buffer, ':') == 0) {
     return size * nmemb;

@@ -86,7 +86,7 @@ size_t iwn_url_encode_aws(const char *src, ssize_t src_len, char *out, size_t ou
     char c = src[i];
     if (is_unreserved(c)) {
       out[n++] = c;
-    } else if (c == '=')  {
+    } else if (c == '=') {
       if (n + 4 >= out_size) {
         break;
       }
