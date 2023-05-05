@@ -43,3 +43,11 @@ struct iwn_url {
  * Returns 0 on success, otherwise -1.
  */
 IW_EXPORT int iwn_url_parse(struct iwn_url *url, char *url_str);
+
+/**
+ * Converts a given url to c-string representation.
+ * Returned values should be freed by `free()`.
+ *
+ * Returns 0 on error or pointer to allocated string buffer.
+ */
+IW_EXPORT IW_ALLOC char* iwn_url_to_string_alloc(const struct iwn_url *url);

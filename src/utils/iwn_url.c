@@ -1,4 +1,5 @@
 #include "iwn_url.h"
+#include <iowow/iwxstr.h>
 #include <string.h>
 
 /**
@@ -181,5 +182,43 @@ int iwn_url_parse(struct iwn_url *url, char *u) {
   return 0;
 }
 
+char* iwn_url_to_string_alloc(const struct iwn_url *url) {
+  iwrc rc = 0;
+  IWXSTR *xstr = iwxstr_new();
+  if (!xstr) {
+    return 0;
+  }
+  RCC(rc, finish, iwxstr_printf(xstr, "%s://", url->scheme ? url->scheme : "http"));
+  if (url->username) {
+    RCC(rc, finish, iwxstr_cat2(xstr, url->username));
+    if (url->password) {
+      RCC(rc, finish, iwxstr_printf(xstr, ":%s", url->password));
+    }
+    RCC(rc, finish, iwxstr_cat(xstr, "@", 1));
+  }
+  if (url->host) {
+    RCC(rc, finish, iwxstr_cat2(xstr, url->host));
+  }
+  if (url->port) {
+    RCC(rc, finish, iwxstr_printf(xstr, ":%d", url->port));
+  }
+  if (url->path) {
+    if (*url->path != '/') {
+      RCC(rc, finish, iwxstr_cat(xstr, "/", 1));
+    }
+    RCC(rc, finish, iwxstr_cat2(xstr, url->path));
+  }
+  if (url->query) {
+    RCC(rc, finish, iwxstr_printf(xstr, "?%s", url->query));
+  }
+  if (url->fragment) {
+    RCC(rc, finish, iwxstr_printf(xstr, "#%s", url->fragment));
+  }
 
-
+finish:
+  if (rc) {
+    iwxstr_destroy(xstr);
+    return 0;
+  }
+  return iwxstr_destroy_keep_ptr(xstr);
+}
