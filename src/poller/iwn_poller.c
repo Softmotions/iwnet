@@ -680,7 +680,13 @@ void iwn_poller_poke(struct iwn_poller *p) {
   {
     struct kevent ev[] = {
       { p->fd, EVFILT_USER, EV_ADD | EV_ONESHOT },
+#if defined(NOTE_TRIGGER)
       { p->fd, EVFILT_USER, 0, NOTE_TRIGGER     }
+#elif defined(EV_TRIGGER)
+      { p->fd, EVFILT_USER, EV_TRIGGER, 0       }
+#else
+#error "Either NOTE_TRIGGER or EV_TRIGGER is required."
+#endif
     };
     if (kevent(p->fd, ev, sizeof(ev) / sizeof(ev[0]), 0, 0, 0) == -1) {
       iwlog_ecode_error3(iwrc_set_errno(IW_ERROR_ERRNO, errno));
