@@ -22,6 +22,13 @@
 #include <sys/prctl.h>
 #endif
 
+#ifdef __APPLE__
+#include <crt_externs.h>
+#define environ (*_NSGetEnviron())
+#else
+  extern char **environ;
+#endif
+
 #define FDS_STDOUT 0
 #define FDS_STDERR 1
 #define FDS_STDIN  2
@@ -677,7 +684,6 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
     }
 
     if (spec->env) {
-      extern char **environ;
       environ = proc->envp;
     }
 
