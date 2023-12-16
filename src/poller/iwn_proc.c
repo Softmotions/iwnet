@@ -418,7 +418,7 @@ static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) 
 }
 
 static int64_t _on_datain_write(const struct iwn_poller_task *t, uint32_t flags) {
-  return _on_in_write(t, flags, 0);
+  return _on_in_write(t, flags, 1);
 }
 
 iwrc iwn_proc_stdin_write(pid_t pid, const void *buf, size_t len, bool close) {
