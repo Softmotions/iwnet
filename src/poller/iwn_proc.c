@@ -449,6 +449,34 @@ iwrc iwn_proc_stdin_close(pid_t pid) {
   return iwn_proc_stdin_write(pid, "", 0, true);
 }
 
+iwrc iwn_proc_datain_write(pid_t pid, const char *buf, size_t len, bool close) {
+  iwrc rc = 0;
+  struct proc *proc = _proc_ref(pid);
+  if (!proc) {
+    return IW_ERROR_NOT_EXISTS;
+  }
+  pthread_mutex_lock(&proc->mtx);
+  if (!proc->buf_datain) {
+    RCB(finish, proc->buf_datain = iwxstr_new2(len));
+  }
+  if (len > 0) {
+    RCC(rc, finish, iwxstr_cat(proc->buf_datain, buf, len));
+  }
+  if (close) {
+    iwxstr_user_data_set(proc->buf_datain, (void*) (intptr_t) 1, 0);
+  }
+  rc = iwn_poller_arm_events(proc->spec.poller, proc->fds[FDS_DATAIN], IWN_POLLOUT);
+
+finish:
+  pthread_mutex_unlock(&proc->mtx);
+  _proc_unref(pid, -1);
+  return rc;
+}
+
+iwrc iwn_proc_datain_close(pid_t pid) {
+  return iwn_proc_datain_write(pid, "", 0, true);
+}
+
 iwrc iwn_proc_wait(pid_t pid) {
   pthread_mutex_lock(&cc.mtx);
   struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
