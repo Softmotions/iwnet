@@ -18,6 +18,12 @@ struct iwn_proc_ctx {
   void *user_data;
 };
 
+struct iwn_proc_fork_child_ctx {
+  const struct iwn_proc_ctx *ctx;
+  int  comm_fds[4]; 
+  void (*cmd_arg_append)(struct iwn_proc_fork_child_ctx *ctx, const char *v);
+};
+
 /// Process launch specification.
 struct iwn_proc_spec {
   /// Poller associated with spec
@@ -41,12 +47,18 @@ struct iwn_proc_spec {
 
   /// Strderr callback.
   void (*on_stderr)(const struct iwn_proc_ctx *ctx, const char *buf, size_t len);
+    
+  /// Data channel callback
+  void (*on_dataout)(const struct iwn_proc_ctx *ctx, const char *buf, size_t len);
 
   /// On child process exit.
   void (*on_exit)(const struct iwn_proc_ctx *ctx_exit);
 
-  /// On fork handler. We are on the child side if pid is zero.
-  void (*on_fork)(const struct iwn_proc_ctx *ctx, pid_t pid);
+  /// On fork parent handler.
+  iwrc (*on_fork_parent)(const struct iwn_proc_ctx *ctx, pid_t child_pid);
+
+  /// On fork child handler.
+  iwrc (*on_fork_child)(struct iwn_proc_fork_child_ctx *ctx);
 
   /// Sends a given signal to the child process if parent process exits.
   /// NOTE: Works only on Linux.
@@ -54,6 +66,9 @@ struct iwn_proc_spec {
 
   /// It true set the ability to write into stdin of the child process
   bool write_stdin;
+
+  /// It true set the ability to write into data channel of the child process
+  bool write_datain;
 
   /// If true use the PATH environment variable to locate exact path to the executable.
   bool find_executable_in_path;
@@ -81,6 +96,17 @@ IW_EXPORT iwrc iwn_proc_stdin_write(pid_t pid, const void *buf, size_t len, bool
 
 /// Closes stdin write file descriptor on parent side.
 IW_EXPORT iwrc iwn_proc_stdin_close(pid_t pid);
+
+/// Writes `buf` of size `len` into process data input.
+/// @param pid Process pid
+/// @param buf Data buffer
+/// @param len Data buffer length
+/// @param close If `true` file descriptor of parent side will be closed after write.
+///
+IW_EXPORT iwrc iwn_proc_datain_write(pid_t pid, const char *buf, size_t len, bool close);
+
+/// Closes datain write file descriptor on parent side.
+IW_EXPORT iwrc iwn_proc_datain_close(pid_t pid);
 
 /// Sends `signum` signal to the child process identified by `pid`.
 IW_EXPORT void iwn_proc_kill(pid_t pid, int signum);

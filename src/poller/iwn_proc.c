@@ -7,6 +7,7 @@
 #include <iowow/iwstw.h>
 #include <iowow/iwpool.h>
 #include <iowow/iwxstr.h>
+#include <iowow/iwarr.h>
 
 #include <stdlib.h>
 #include <sys/types.h>
@@ -29,9 +30,11 @@
 extern char **environ;
 #endif
 
-#define FDS_STDOUT 0
-#define FDS_STDERR 1
-#define FDS_STDIN  2
+#define FDS_STDOUT  0
+#define FDS_STDERR  1
+#define FDS_STDIN   2
+#define FDS_DATAOUT 3
+#define FDS_DATAIN  4
 
 struct proc {
   pid_t pid;
@@ -40,12 +43,16 @@ struct proc {
 
   volatile int refs;
   char   *path;
-  char  **argv;
+  IWULIST argl;
+
   char  **envp;
   IWPOOL *pool;
+
   IWXSTR *buf_stdin;
+  IWXSTR *buf_datain;
+
   struct iwn_proc_spec spec;
-  int fds[3]; // {stdout, stderr, stdin}
+  int fds[5]; // {stdout, stderr, stdin, datain, dataout}
   pthread_mutex_t mtx;
   bool exited;
 };
@@ -56,7 +63,7 @@ static struct  {
   pthread_mutex_t mtx;
   pthread_cond_t  cond;
 } cc = {
-  .mtx  = PTHREAD_MUTEX_INITIALIZER,
+  .mtx = PTHREAD_MUTEX_INITIALIZER,
   .cond = PTHREAD_COND_INITIALIZER
 };
 
@@ -71,6 +78,8 @@ static void _proc_destroy(struct proc *proc) {
     }
   }
   iwxstr_destroy(proc->buf_stdin);
+  iwxstr_destroy(proc->buf_datain);
+  iwulist_destroy_keep(&proc->argl);
   pthread_mutex_destroy(&proc->mtx);
   iwpool_destroy(proc->pool);
 }
@@ -186,6 +195,7 @@ static struct proc* _proc_create(const struct iwn_proc_spec *spec) {
     iwpool_destroy(pool);
     return 0;
   }
+  iwulist_init(&proc->argl, 8, sizeof(char*));
   pthread_mutex_init(&proc->mtx, 0);
   proc->pool = pool;
   proc->pid = -1;
@@ -211,7 +221,7 @@ static iwrc _make_non_blocking(int fd) {
   return 0;
 }
 
-static iwrc _proc_init(struct proc *proc, int fds[6]) {
+static iwrc _proc_init(struct proc *proc, int fds[10]) {
   iwrc rc = 0;
   struct iwn_proc_spec *spec = &proc->spec;
   IWPOOL *pool = proc->pool;
@@ -219,19 +229,11 @@ static iwrc _proc_init(struct proc *proc, int fds[6]) {
   proc->path = iwpool_strdup(pool, spec->path, &rc);
   RCGO(rc, finish);
 
+  iwulist_push(&proc->argl, &proc->path);
   if (spec->args) {
-    int i = 0;
-    while (spec->args[i]) ++i;
-    RCB(finish, proc->argv = iwpool_alloc((i + 2) * sizeof(spec->args[0]), pool));
-    proc->argv[0] = proc->path;
-    proc->argv[i + 1] = 0;
-    while (--i >= 0) {
-      RCB(finish, proc->argv[i + 1] = iwpool_strdup2(pool, spec->args[i]));
+    for (const char **v = spec->args; *v; ++v) {
+      iwulist_push(&proc->argl, v);
     }
-  } else {
-    RCB(finish, proc->argv = iwpool_alloc(2 * sizeof(char*), pool));
-    proc->argv[0] = proc->path;
-    proc->argv[1] = 0;
   }
 
   if (spec->env) {
@@ -260,6 +262,16 @@ static iwrc _proc_init(struct proc *proc, int fds[6]) {
     RCN(finish, pipe(&fds[4]));
     proc->fds[FDS_STDIN] = fds[5];
     RCC(rc, finish, _make_non_blocking(fds[5]));
+  }
+  if (spec->on_dataout) {
+    RCN(finish, pipe(&fds[6]));
+    proc->fds[FDS_DATAOUT] = fds[7];
+    RCC(rc, finish, _make_non_blocking(fds[7]));
+  }
+  if (spec->write_datain) {
+    RCN(finish, pipe(&fds[8]));
+    proc->fds[FDS_DATAIN] = fds[9];
+    RCC(rc, finish, _make_non_blocking(fds[9]));
   }
 
 finish:
@@ -303,10 +315,16 @@ static int64_t _on_ready(
   }
 
   if (iwxstr_size(xstr) > 0) {
-    if (fdi == FDS_STDERR) {
-      proc->spec.on_stderr((void*) proc, iwxstr_ptr(xstr), iwxstr_size(xstr));
-    } else if (fdi == FDS_STDOUT) {
-      proc->spec.on_stdout((void*) proc, iwxstr_ptr(xstr), iwxstr_size(xstr));
+    switch (fdi) {
+      case FDS_STDERR:
+        proc->spec.on_stderr((void*) proc, iwxstr_ptr(xstr), iwxstr_size(xstr));
+        break;
+      case FDS_STDOUT:
+        proc->spec.on_stdout((void*) proc, iwxstr_ptr(xstr), iwxstr_size(xstr));
+        break;
+      case FDS_DATAOUT:
+        proc->spec.on_dataout((void*) proc, iwxstr_ptr(xstr), iwxstr_size(xstr));
+        break;
     }
   }
 
@@ -342,7 +360,11 @@ static int64_t _on_stderr_ready(const struct iwn_poller_task *t, uint32_t flags)
   return _on_ready(t, flags, FDS_STDERR);
 }
 
-static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) {
+static int64_t _on_dataout_ready(const struct iwn_poller_task *t, uint32_t flags) {
+  return _on_ready(t, flags, FDS_DATAOUT);
+}
+
+static int64_t _on_in_write(const struct iwn_poller_task *t, uint32_t flags, int mode) {
   iwrc rc = 0;
   int64_t ret = 0;
   int fd = t->fd;
@@ -351,20 +373,21 @@ static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) 
   if (!proc) {
     return -1;
   }
+  IWXSTR *buf = mode == 0 ? proc->buf_stdin : proc->buf_datain;
   while (1) {
     pthread_mutex_lock(&proc->mtx);
-    if (!proc->buf_stdin) {
+    if (!buf) {
       pthread_mutex_unlock(&proc->mtx);
       break;
     }
-    if (iwxstr_size(proc->buf_stdin) == 0) {
-      if ((intptr_t) iwxstr_user_data_get(proc->buf_stdin) == 1) { // Close th channel
+    if (iwxstr_size(buf) == 0) {
+      if ((intptr_t) iwxstr_user_data_get(buf) == 1) { // Close th channel
         ret = -1;
       }
       pthread_mutex_unlock(&proc->mtx);
       break;
     }
-    int rci = write(fd, iwxstr_ptr(proc->buf_stdin), iwxstr_size(proc->buf_stdin));
+    int rci = write(fd, iwxstr_ptr(buf), iwxstr_size(buf));
     if (rci == -1) {
       if (errno == EINTR) {
         pthread_mutex_unlock(&proc->mtx);
@@ -382,12 +405,20 @@ static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) 
       ret = -1;
       break;
     }
-    iwxstr_shift(proc->buf_stdin, rci);
+    iwxstr_shift(buf, rci);
     pthread_mutex_unlock(&proc->mtx);
   }
   _proc_unref(pid, -1);
   ret = rc ? -1 : ret;
   return ret;
+}
+
+static int64_t _on_stdin_write(const struct iwn_poller_task *t, uint32_t flags) {
+  return _on_in_write(t, flags, 0);
+}
+
+static int64_t _on_datain_write(const struct iwn_poller_task *t, uint32_t flags) {
+  return _on_in_write(t, flags, 0);
 }
 
 iwrc iwn_proc_stdin_write(pid_t pid, const void *buf, size_t len, bool close) {
@@ -555,6 +586,16 @@ iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, pid_t pid, int signum, int 
   return rc;
 }
 
+void _fork_child_cmd_arg_append(struct iwn_proc_fork_child_ctx *fcc, const char *arg) {
+  struct proc *proc = (void*) fcc->ctx;
+  if (arg) {
+    char *v = iwpool_strdup2(proc->pool, arg);
+    if (v) {
+      iwulist_push(&proc->argl, &v);
+    }
+  }
+}
+
 iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
   iwrc rc = 0;
   if (!spec || !spec->path || !spec->poller || !out_pid) {
@@ -565,7 +606,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
 
   bool bv, proc_added = false;
   struct proc *proc = 0;
-  int fds[6] = { -1, -1, -1, -1, -1, -1 };
+  int fds[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
   RCB(finish, proc = _proc_create(spec));
   RCC(rc, finish, _proc_init(proc, fds));
@@ -647,8 +688,45 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
         rc = 0;
       }
     }
-    if (spec->on_fork) {
-      spec->on_fork((void*) proc, pid);
+    if (fds[7] > -1) {
+      close(7);
+      rc = iwn_poller_add(&(struct iwn_poller_task) {
+        .fd = fds[6],
+        .user_data = (void*) (intptr_t) pid,
+        .on_ready = _on_dataout_ready,
+        .on_dispose = _on_fd_dispose,
+        .events = IWN_POLLIN,
+        .events_mod = IWN_POLLET,
+        .poller = spec->poller
+      });
+      if (rc) {
+        close(proc->fds[FDS_DATAOUT]);
+        proc->fds[FDS_DATAOUT] = -1;
+        iwlog_ecode_error3(rc);
+        rc = 0;
+      } else {
+        _proc_ref(pid);
+      }
+    }
+    if (fds[8] > -1) {
+      close(fds[8]);
+      rc = iwn_poller_add(&(struct iwn_poller_task) {
+        .fd = fds[9],
+        .user_data = (void*) (intptr_t) pid,
+        .on_ready = _on_datain_write,
+        .events_mod = IWN_POLLET,
+        .poller = spec->poller,
+      });
+      if (rc) {
+        close(proc->fds[FDS_DATAIN]);
+        proc->fds[FDS_DATAIN] = -1;
+        iwlog_ecode_error3(rc);
+        rc = 0;
+      }
+    }
+
+    if (spec->on_fork_parent) {
+      RCC(rc, finish, spec->on_fork_parent((void*) proc, pid));
     }
   } else if (pid == 0) { // Child
 #ifdef __linux__
@@ -663,6 +741,15 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
       }
     }
 #endif
+
+    if (spec->on_fork_child) {
+      struct iwn_proc_fork_child_ctx fcc = {
+        .ctx = (void*) proc,
+        .comm_fds = { fds[6], fds[7], fds[8], fds[9] },
+        .cmd_arg_append = _fork_child_cmd_arg_append,
+      };
+      RCC(rc, finish, spec->on_fork_child(&fcc));
+    }
 
     if (fds[1] > -1) {
       while ((dup2(fds[1], STDOUT_FILENO) == -1) && (errno == EINTR));
@@ -679,18 +766,30 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
       close(fds[4]);
       close(fds[5]);
     }
-    if (spec->on_fork) {
-      spec->on_fork((void*) proc, 0);
+    if (fds[6] > -1) { // DATAOUT
+      close(fds[6]);
+    }
+    if (fds[9] > -1) { // DATAIN
+      close(fds[9]);
     }
 
     if (spec->env) {
       environ = proc->envp;
     }
 
-    if (spec->find_executable_in_path) {
-      RCN(finish, execvp(proc->path, proc->argv));
-    } else {
-      RCN(child_exit, execv(proc->path, proc->argv));
+    {
+      int l = iwulist_length(&proc->argl);
+      char *argv[l + 1];
+      argv[l] = 0;
+      for (int i = 0; i < l; ++i) {
+        argv[i] = *(char**) iwulist_get(&proc->argl, i);
+      }
+
+      if (spec->find_executable_in_path) {
+        RCN(child_exit, execvp(proc->path, argv));
+      } else {
+        RCN(child_exit, execv(proc->path, argv));
+      }
     }
 
     goto child_exit;
