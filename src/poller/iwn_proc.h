@@ -21,7 +21,8 @@ struct iwn_proc_ctx {
 struct iwn_proc_fork_child_ctx {
   const struct iwn_proc_ctx *ctx;
   int  comm_fds[4]; 
-  void (*cmd_arg_append)(struct iwn_proc_fork_child_ctx *ctx, const char *v);
+  void (*cmd_arg_append)(struct iwn_proc_fork_child_ctx *ctx, const char *arg);
+  void (*cmd_arg_replace)(struct iwn_proc_fork_child_ctx *ctx, const char *arg, const char *replace);
 };
 
 /// Process launch specification.

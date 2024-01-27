@@ -614,12 +614,30 @@ iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, pid_t pid, int signum, int 
   return rc;
 }
 
-void _fork_child_cmd_arg_append(struct iwn_proc_fork_child_ctx *fcc, const char *arg) {
+static void _fork_child_cmd_arg_append(struct iwn_proc_fork_child_ctx *fcc, const char *arg) {
   struct proc *proc = (void*) fcc->ctx;
   if (arg) {
     char *v = iwpool_strdup2(proc->pool, arg);
     if (v) {
       iwulist_push(&proc->argl, &v);
+    }
+  }
+}
+
+static void _fork_child_cmd_arg_replace(struct iwn_proc_fork_child_ctx *fcc, const char *arg, const char *replace) {
+  if (!arg || !replace) {
+    return;
+  }
+  struct proc *proc = (void*) fcc->ctx;
+  IWULIST *list = &proc->argl;
+  for (int i = 0, l = iwulist_length(list); i < l; ++i) {
+    const char *item = *(char**) iwulist_at2(list, i);
+    if (strcmp(item, arg) == 0) {
+      char *v = iwpool_strdup2(proc->pool, replace);
+      if (v) {
+        iwulist_set(list, i, v);
+      }
+      break;
     }
   }
 }
@@ -775,6 +793,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
         .ctx = (void*) proc,
         .comm_fds = { fds[6], fds[7], fds[8], fds[9] },
         .cmd_arg_append = _fork_child_cmd_arg_append,
+        .cmd_arg_replace = _fork_child_cmd_arg_replace,
       };
       RCC(rc, finish, spec->on_fork_child(&fcc));
     }
