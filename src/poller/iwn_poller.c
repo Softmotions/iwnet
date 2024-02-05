@@ -26,6 +26,10 @@
 #include <sys/eventfd.h>
 #endif
 
+#if defined(__APPLE__)
+#include <iowow/pthread_barrier_shim.h>
+#endif
+
 #define SLOT_REMOVE_PENDING 0x01U
 #define SLOT_REMOVED        0x02U
 #define SLOT_PROCESSING     0x04U
