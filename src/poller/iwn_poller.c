@@ -5,6 +5,7 @@
 #include <iowow/iwp.h>
 #include <iowow/iwtp.h>
 #include <iowow/iwhmap.h>
+#include <iowow/iwth.h>
 
 #include <pthread.h>
 #include <stdbool.h>
@@ -24,10 +25,6 @@
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <sys/eventfd.h>
-#endif
-
-#if defined(__APPLE__)
-#include <iowow/pthread_barrier_shim.h>
 #endif
 
 #define SLOT_REMOVE_PENDING 0x01U
