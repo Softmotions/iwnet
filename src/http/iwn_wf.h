@@ -222,7 +222,7 @@ IW_EXPORT struct iwn_wf_route_submatch* iwn_wf_request_submatch_last(const struc
 /// Parses a query string (the part after `?`) and fill the provided `pairs` chain
 /// where `pool` is used to store new pairs records. Values for pairs points to parts of query buffer which is modified
 // in place.
-IW_EXPORT iwrc iwn_wf_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, char *query, size_t query_len);
+IW_EXPORT iwrc iwn_wf_parse_query_inplace(struct iwpool *pool, struct iwn_pairs *pairs, char *query, size_t query_len);
 
 IW_EXPORT const char* iwn_wf_header_val_part_next(
   const char      *header_val,

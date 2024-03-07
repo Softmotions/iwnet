@@ -17,10 +17,9 @@ struct ctx {
   struct iwn_wf_session_store sst;
   struct route      *root;
   struct iwn_poller *poller;
-
-  IWPOOL *pool;
-  int     server_fd;
-  int     request_file_max_size;
+  struct iwpool     *pool;
+  int server_fd;
+  int request_file_max_size;
 };
 
 struct route {
@@ -49,9 +48,9 @@ struct route_iter {
 struct request {
   struct iwn_wf_req base;
   struct route_iter it; ///< Routes matching iterator
-  IWPOOL *pool;
-  IWHMAP *sess_map;     ///< Cached session key-value map
-  pthread_mutex_t sess_map_mtx;
+  struct iwpool    *pool;
+  struct iwhmap    *sess_map;  ///< Cached session key-value map
+  pthread_mutex_t   sess_map_mtx;
   FILE       *stream_file;
   const char *boundary; ///< Current multipart form boundary
   const char *stream_file_path;
@@ -68,7 +67,7 @@ void dbg_request_destroy(struct request *req);
 void dbg_route_iter_init(struct request *req, struct route_iter *it);
 struct route* dbg_route_iter_next(struct route_iter *it);
 const char* dbg_multipart_parse_next(
-  IWPOOL           *pool,
+  struct iwpool    *pool,
   const char       *boundary,
   size_t            boundary_len,
   const char       *rp,

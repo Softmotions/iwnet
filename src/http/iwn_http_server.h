@@ -291,8 +291,8 @@ IW_EXPORT bool iwn_http_response_write(
 /// Writes a given JSON object and completes response for specified request.
 IW_EXPORT bool iwn_http_response_write_jbl(
   struct iwn_http_req*,
-  int status_code,
-  JBL jbl);
+  int         status_code,
+  struct jbl *jbl);
 
 /// Writes a given JSON object and completes response for specified request.
 IW_EXPORT bool iwn_http_response_write_jbn(

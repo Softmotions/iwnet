@@ -53,9 +53,9 @@ struct iwn_poller {
   atomic_long timeout_next;      ///< Next timeout check
   atomic_long timeout_checktime; ///< Last time of timeout check
 
-  IWTP    tp;
-  IWHMAP *slots;
-  char   *thread_name;
+  IWTP tp;
+  struct iwhmap *slots;
+  char *thread_name;
 
   pthread_mutex_t    mtx;
   pthread_barrier_t  _barrier_poll; ///< Poll-in-thread barrier
@@ -281,7 +281,7 @@ void iwn_poller_remove(struct iwn_poller *p, int fd) {
 static void _poller_cleanup(struct iwn_poller *p) {
   int *fds, i;
   int buf[1024];
-  IWHMAP_ITER iter;
+  struct iwhmap_iter iter;
 
   pthread_mutex_lock(&p->mtx);
   uint32_t sz = iwhmap_count(p->slots);
@@ -340,7 +340,7 @@ static void _timer_ready_impl(struct iwn_poller *p) {
   time_t timeout_next = ctime + 24L * 60 * 60;
 
   if (ctime != p->timeout_checktime) {
-    IWHMAP_ITER iter;
+    struct iwhmap_iter iter;
     struct poller_slot *h = 0;
     p->timeout_checktime = ctime;
 

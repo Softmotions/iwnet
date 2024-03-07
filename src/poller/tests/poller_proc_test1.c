@@ -12,7 +12,7 @@
 struct iwn_poller *poller;
 pthread_t poller_thr;
 
-IWXSTR *xstdout, *xstderr;
+struct iwxstr *xstdout, *xstderr;
 int code;
 
 static void* _poller_worker(void *arg) {

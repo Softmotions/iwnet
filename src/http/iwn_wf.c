@@ -118,7 +118,7 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   int n = 0;
   struct route *route;
   struct iwn_wf_route *base;
-  IWPOOL *pool = ctx->pool;
+  struct iwpool *pool = ctx->pool;
 
   if (spec->parent) {
     for (struct route *r = (void*) spec->parent; r; r = r->parent) {
@@ -172,7 +172,7 @@ finish:
   return rc;
 }
 
-static iwrc _request_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, char *p, size_t len) {
+static iwrc _request_parse_query_inplace(struct iwpool *pool, struct iwn_pairs *pairs, char *p, size_t len) {
   if (!p || !len) {
     return 0;
   }
@@ -222,7 +222,7 @@ finish:
   return rc;
 }
 
-iwrc iwn_wf_parse_query_inplace(IWPOOL *pool, struct iwn_pairs *pairs, char *query, size_t query_len) {
+iwrc iwn_wf_parse_query_inplace(struct iwpool *pool, struct iwn_pairs *pairs, char *query, size_t query_len) {
   return _request_parse_query_inplace(pool, pairs, query, query_len);
 }
 
@@ -264,7 +264,7 @@ static iwrc _request_target_parse(struct request *req) {
   iwrc rc = 0;
   char *p;
   size_t i;
-  IWPOOL *pool = req->pool;
+  struct iwpool *pool = req->pool;
 
   struct iwn_val val = iwn_http_request_target(req->base.http);
   if (!val.len) {
@@ -700,7 +700,7 @@ static iwrc _request_create(struct iwn_http_req *hreq) {
   struct request *req = 0;
   struct ctx *ctx = hreq->server_user_data;
   assert(ctx);
-  IWPOOL *pool = iwpool_create_empty();
+  struct iwpool *pool = iwpool_create_empty();
   if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -732,7 +732,7 @@ finish:
 }
 
 static const char* _multipart_parse_next(
-  IWPOOL           *pool,
+  struct iwpool    *pool,
   const char       *boundary,
   size_t            boundary_len,
   const char       *rp,
@@ -872,7 +872,7 @@ finish:
 #ifdef IW_TESTS
 
 const char* dbg_multipart_parse_next(
-  IWPOOL           *pool,
+  struct iwpool    *pool,
   const char       *boundary,
   size_t            boundary_len,
   const char       *rp,
@@ -1163,7 +1163,7 @@ iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx
   if (!root_route_spec) {
     root_route_spec = &default_root_route;
   }
-  IWPOOL *pool = iwpool_create_empty();
+  struct iwpool *pool = iwpool_create_empty();
   if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -1335,7 +1335,7 @@ iwrc iwn_wf_cookie_add(
   const struct iwn_wf_cookie_opts opts
   ) {
   iwrc rc = 0;
-  IWXSTR *xstr;
+  struct iwxstr *xstr;
 
   RCA(xstr = iwxstr_new(), finish);
   RCC(rc, finish, iwxstr_printf(xstr, "%s=\"%s\"", name, value));
@@ -1480,7 +1480,7 @@ struct _pctx {
   FILE *out;
 };
 
-static void _route_print_flags(IWXSTR *xstr, uint32_t f) {
+static void _route_print_flags(struct iwxstr *xstr, uint32_t f) {
   int c = 0;
   if ((f & IWN_WF_METHODS_ALL) == IWN_WF_METHODS_ALL) {
     iwxstr_cat2(xstr, "ALL");
@@ -1536,7 +1536,7 @@ static void _route_print(struct _pctx ctx, struct route *r) {
   for (int i = 0; i < ctx.indent; ++i) {
     fprintf(ctx.out, "  ");
   }
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return;
   }

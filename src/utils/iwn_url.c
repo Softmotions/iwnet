@@ -184,7 +184,7 @@ int iwn_url_parse(struct iwn_url *url, char *u) {
 
 char* iwn_url_to_string_alloc(const struct iwn_url *url) {
   iwrc rc = 0;
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return 0;
   }

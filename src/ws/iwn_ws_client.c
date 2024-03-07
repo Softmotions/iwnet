@@ -44,8 +44,8 @@ struct iwn_ws_client {
   char *query;
   char *urlbuf;
   wslay_event_context_ptr wsl;
-  IWXSTR *output;
-  IWXSTR *input;
+  struct iwxstr  *output;
+  struct iwxstr  *input;
   pthread_mutex_t mtx;
   int     port;
   int     fd;
@@ -114,7 +114,7 @@ static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
   int fd = -1, rci;
 
   struct addrinfo *si, *p, hints = {
-    .ai_family   = PF_UNSPEC,
+    .ai_family = PF_UNSPEC,
     .ai_socktype = SOCK_STREAM
   };
 
@@ -647,9 +647,9 @@ static void _write_fd_probe(struct iwn_poller *p, void *slot_user_data, void *fn
 
 static bool _write_fd(struct iwn_poller *p, int fd, const void *buf, size_t buf_len, enum wslay_opcode opc) {
   struct write_fd_ctx ctx = {
-    .buf     = buf,
+    .buf = buf,
     .buf_len = buf_len,
-    .opc     = opc
+    .opc = opc
   };
   iwn_poller_probe(p, fd, _write_fd_probe, &ctx);
   return ctx.ret;

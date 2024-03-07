@@ -14,7 +14,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
   return 0;
 }
 
-static struct request* _request_create(const char *path, int method, IWPOOL *pool) {
+static struct request* _request_create(const char *path, int method, struct iwpool *pool) {
   struct request *req = iwpool_calloc(sizeof(*req), pool);
   IWN_ASSERT_FATAL(req);
   req->base.path = path;
@@ -27,7 +27,7 @@ static struct request* _request_create(const char *path, int method, IWPOOL *poo
 }
 
 static struct route* _request_first_matched(const char *path, int methods, struct route_iter *oit) {
-  IWPOOL *pool = iwpool_create_empty();
+  struct iwpool *pool = iwpool_create_empty();
   IWN_ASSERT_FATAL(pool);
   struct request *req = _request_create(path, methods, pool);
   struct route_iter it = { 0 };
@@ -81,7 +81,7 @@ static iwrc test_header_parsing(void) {
   const char *ep = strchr(rp, '\r');
   IWN_ASSERT_FATAL(ep);
   struct iwn_pair pv = iwn_wf_header_val_part_find(rp, ep, "sessionid");
-  
+
   return rc;
 }
 
@@ -205,7 +205,7 @@ static bool _ensure_multipart(
   return true;
 }
 
-static void _multipart_parsing3(IWPOOL *pool) {
+static void _multipart_parsing3(struct iwpool *pool) {
   char *rp
     = strdup("--x\r\n"
              "Content-Disposition: inline; name=\"zz\"\r\n"
@@ -332,7 +332,7 @@ static void _multipart_parsing3(IWPOOL *pool) {
   free(rp);
 }
 
-static void _multipart_parsing2(IWPOOL *pool) {
+static void _multipart_parsing2(struct iwpool *pool) {
   char *rp
     = strdup("--\r\n"
              "Content-Disposition: form-data; name=\"\"\r\n"
@@ -353,7 +353,7 @@ static void _multipart_parsing2(IWPOOL *pool) {
   free(rp);
 }
 
-static void _multipart_parsing1(IWPOOL *pool) {
+static void _multipart_parsing1(struct iwpool *pool) {
   char *rp
     = strdup("--xyz\r\n"
              "Content-Disposition: form-data; name=\"name\"\r\n"
@@ -394,7 +394,7 @@ static void _multipart_parsing1(IWPOOL *pool) {
 
 static iwrc test_multipart_parsing(void) {
   iwrc rc = 0;
-  IWPOOL *pool = iwpool_create_empty();
+  struct iwpool *pool = iwpool_create_empty();
   IWN_ASSERT_FATAL(pool);
   _multipart_parsing1(pool);
   _multipart_parsing2(pool);

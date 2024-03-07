@@ -245,7 +245,7 @@ static bool _file_serve_ranges_multiple_part(struct iwn_http_req *req, bool *aga
   size_t buf_len = 0;
   iwn_http_server_chunk_handler ch = 0;
 
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return false;
   }

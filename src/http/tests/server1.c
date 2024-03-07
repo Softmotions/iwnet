@@ -30,7 +30,7 @@ static void _server_on_dispose(const struct iwn_http_server *srv) {
 }
 
 static bool _chunk_req_cb(struct iwn_http_req *req, bool *again) {
-  IWXSTR *xstr = req->user_data;
+  struct iwxstr *xstr = req->user_data;
   IWN_ASSERT_FATAL(xstr);
   struct iwn_val val = iwn_http_request_chunk_get(req);
   if (val.len > 0) {
@@ -72,7 +72,7 @@ static bool _chunk_resp_cb(struct iwn_http_req *req, bool *again) {
 }
 
 static void _on_chunk_req_destroy(struct iwn_http_req *req) {
-  IWXSTR *xstr = req->user_data;
+  struct iwxstr *xstr = req->user_data;
   if (xstr) {
     iwxstr_destroy(xstr);
   }
@@ -92,7 +92,7 @@ static bool _request_handler(struct iwn_http_req *req) {
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/large", -1)) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
-    IWXSTR *xstr;
+    struct iwxstr *xstr;
     RCA(xstr = iwxstr_new(), finish);
     req->user_data = xstr;
     req->on_request_dispose = _on_chunk_req_destroy;
@@ -153,13 +153,13 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));
 
   struct iwn_http_server_spec spec = {
-    .listen                        = "localhost",
-    .port                          = port,
-    .poller                        = poller,
-    .user_data                     = poller,
-    .request_handler               = _request_handler,
-    .on_server_dispose             = _server_on_dispose,
-    .request_timeout_sec           = -1,
+    .listen = "localhost",
+    .port = port,
+    .poller = poller,
+    .user_data = poller,
+    .request_handler = _request_handler,
+    .on_server_dispose = _server_on_dispose,
+    .request_timeout_sec = -1,
     .request_timeout_keepalive_sec = -1
   };
 

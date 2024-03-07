@@ -42,24 +42,23 @@ struct proc {
   void *user_data;
 
   volatile int refs;
-  char   *path;
-  IWULIST argl;
+  char *path;
+  struct iwulist argl;
 
-  char  **envp;
-  IWPOOL *pool;
-
-  IWXSTR *buf_stdin;
-  IWXSTR *buf_datain;
-
+  char **envp;
+  struct iwpool       *pool;
+  struct iwxstr       *buf_stdin;
+  struct iwxstr       *buf_datain;
   struct iwn_proc_spec spec;
+
   int fds[5]; // {stdout, stderr, stdin, datain, dataout}
   pthread_mutex_t mtx;
   bool exited;
 };
 
 static struct  {
-  IWHMAP *map;  ///< Proc: pid -> struct *_proc
-  IWSTW   stw;  ///< Child process wait worker
+  struct iwhmap  *map; ///< Proc: pid -> struct *_proc
+  struct iwstw   *stw; ///< Child process wait worker
   pthread_mutex_t mtx;
   pthread_cond_t  cond;
 } cc = {
@@ -186,7 +185,7 @@ static void _proc_wait_worker(void *arg) {
 }
 
 static struct proc* _proc_create(const struct iwn_proc_spec *spec) {
-  IWPOOL *pool = iwpool_create(sizeof(struct proc));
+  struct iwpool *pool = iwpool_create(sizeof(struct proc));
   if (!pool) {
     return 0;
   }
@@ -224,7 +223,7 @@ static iwrc _make_non_blocking(int fd) {
 static iwrc _proc_init(struct proc *proc, int fds[10]) {
   iwrc rc = 0;
   struct iwn_proc_spec *spec = &proc->spec;
-  IWPOOL *pool = proc->pool;
+  struct iwpool *pool = proc->pool;
 
   proc->path = iwpool_strdup(pool, spec->path, &rc);
   RCGO(rc, finish);
@@ -293,7 +292,7 @@ static int64_t _on_ready(
     return -1;
   }
 
-  IWXSTR *xstr;
+  struct iwxstr *xstr;
   RCB(finish, xstr = iwxstr_new());
 
   while (!rc) {
@@ -373,7 +372,7 @@ static int64_t _on_in_write(const struct iwn_poller_task *t, uint32_t flags, int
   if (!proc) {
     return -1;
   }
-  IWXSTR *buf = mode == 0 ? proc->buf_stdin : proc->buf_datain;
+  struct iwxstr *buf = mode == 0 ? proc->buf_stdin : proc->buf_datain;
   while (1) {
     pthread_mutex_lock(&proc->mtx);
     if (!buf) {
@@ -526,7 +525,7 @@ void iwn_proc_kill_all(int signum) {
     pthread_mutex_unlock(&cc.mtx);
     return;
   }
-  IWHMAP_ITER it;
+  struct iwhmap_iter it;
   iwhmap_iter_init(cc.map, &it);
   pids[len] = -1;
   while (iwhmap_iter_next(&it) && len > 0) {
@@ -629,7 +628,7 @@ static void _fork_child_cmd_arg_replace(struct iwn_proc_fork_child_ctx *fcc, con
     return;
   }
   struct proc *proc = (void*) fcc->ctx;
-  IWULIST *list = &proc->argl;
+  struct iwulist *list = &proc->argl;
   for (int i = 0, l = iwulist_length(list); i < l; ++i) {
     const char *item = *(char**) iwulist_at2(list, i);
     if (strcmp(item, arg) == 0) {
@@ -860,7 +859,7 @@ child_exit:
 }
 
 char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return 0;
   }
@@ -876,7 +875,7 @@ char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
 }
 
 void iwn_proc_dispose(void) {
-  IWHMAP *map = 0;
+  struct iwhmap *map = 0;
   iwn_proc_kill_all(SIGTERM);
   pthread_mutex_lock(&cc.mtx);
   map = cc.map;

@@ -41,8 +41,8 @@ struct server {
   int  refs;
   pthread_mutex_t mtx;
   pthread_mutex_t mtx_ssl;
-  IWPOOL *pool;
-  char    stime_text[32]; ///< Formatted as: `%a, %d %b %Y %T GMT`
+  struct iwpool  *pool;
+  char stime_text[32];    ///< Formatted as: `%a, %d %b %Y %T GMT`
   volatile bool https;
 };
 
@@ -87,17 +87,17 @@ struct header {
 
 struct response {
   struct header *headers;
-  IWPOOL     *pool;
-  const char *body;
+  struct iwpool *pool;
+  const char    *body;
   void   (*body_free)(void*);
   size_t body_len;
   int    code;
 };
 
 struct proxy {
-  iwrc    rc;                ///< Not zero if proxy connection failed
-  IWXSTR *from_endpoint_buf; ///< proxy <- proxied endpoint buffer
-  IWXSTR *to_endpoint_buf;   ///< proxy -> proxied endpoint buffer
+  iwrc rc;                            ///< Not zero if proxy connection failed
+  struct iwxstr   *from_endpoint_buf; ///< proxy <- proxied endpoint buffer
+  struct iwxstr   *to_endpoint_buf;   ///< proxy -> proxied endpoint buffer
   const char      *url_raw;
   struct iwn_pairs headers;  ///< Extra headers to add to the proxied request
   struct iwn_url   url;
@@ -116,7 +116,7 @@ struct client {
   struct iwn_http_req request;
   struct iwn_poller  *poller;
   iwn_http_server_chunk_handler chunk_cb;
-  IWPOOL *pool;
+  struct iwpool *pool;
   iwn_on_poller_adapter_event injected_poller_evh;
   struct server    *server;
   struct tokens_buf tokens;
@@ -758,11 +758,11 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
   int in_bounds = 0;
   ssize_t body_left = 0;
 
-#define MATCH(str__, meta__) \
-  in_bounds = parser->match_index < (int) sizeof(str__) - 1; \
-  m = in_bounds ? str__[parser->match_index] : m; \
-  low = c >= 'A' && c <= 'Z' ? c + 32 : c; \
-  if (low != m) _meta_trigger(parser, meta__)
+#define MATCH(str__, meta__)                                       \
+        in_bounds = parser->match_index < (int) sizeof(str__) - 1; \
+        m = in_bounds ? str__[parser->match_index] : m;            \
+        low = c >= 'A' && c <= 'Z' ? c + 32 : c;                   \
+        if (low != m) _meta_trigger(parser, meta__)
 
   switch (to) {
     case MS:
@@ -1030,7 +1030,7 @@ static iwrc _proxy_endpoint_connect(struct client *client) {
   char *port = nbuf;
 
   struct addrinfo *si, *p, hints = {
-    .ai_family   = PF_UNSPEC,
+    .ai_family = PF_UNSPEC,
     .ai_socktype = SOCK_STREAM
   };
 
@@ -1565,7 +1565,7 @@ static void _client_on_poller_adapter_dispose(struct iwn_poller_adapter *pa, voi
 
 static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storage *sockaddr) {
   iwrc rc = 0;
-  IWPOOL *pool = iwpool_create_empty();
+  struct iwpool *pool = iwpool_create_empty();
   if (!pool) {
     rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
     close(fd);
@@ -2016,7 +2016,7 @@ static void _client_autodetect_keep_alive(struct client *client) {
   }
 }
 
-static iwrc _client_response_headers_write(struct client *client, IWXSTR *xstr) {
+static iwrc _client_response_headers_write(struct client *client, struct iwxstr *xstr) {
   iwrc rc = 0;
   for (struct header *h = client->response.headers; h; h = h->next) {
     RCC(rc, finish, iwxstr_printf(xstr, "%s: %s\r\n", h->name, h->value));
@@ -2030,7 +2030,7 @@ finish:
   return rc;
 }
 
-static iwrc _client_response_headers_write_http(struct client *client, IWXSTR *xstr) {
+static iwrc _client_response_headers_write_http(struct client *client, struct iwxstr *xstr) {
   iwrc rc = 0;
   struct iwn_val val = iwn_http_response_header_get(&client->request, "content-length");
   if (val.len) {
@@ -2071,7 +2071,7 @@ finish:
   return rc;
 }
 
-IW_INLINE void _client_response_setbuf(struct client *client, IWXSTR *xstr) {
+IW_INLINE void _client_response_setbuf(struct client *client, struct iwxstr *xstr) {
   _stream_free_buffer(client);
   struct stream *s = &client->stream;
   s->length = iwxstr_size(xstr);
@@ -2096,7 +2096,7 @@ iwrc iwn_http_response_end(struct iwn_http_req *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2121,7 +2121,7 @@ iwrc iwn_http_response_stream_start(
   ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2186,7 +2186,7 @@ iwrc iwn_http_response_chunk_write(
   if (body_len < 0) {
     body_len = strlen(body);
   }
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2219,7 +2219,7 @@ finish:
 iwrc iwn_http_response_chunk_end(struct iwn_http_req *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  IWXSTR *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_new();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2268,10 +2268,10 @@ finish:
 bool iwn_http_response_write_jbl(
   struct iwn_http_req *request,
   int                  status_code,
-  JBL                  jbl
+  struct jbl          *jbl
   ) {
   iwrc rc = 0;
-  IWXSTR *xstr = 0;
+  struct iwxstr *xstr = 0;
   RCB(finish, xstr = iwxstr_new());
   RCC(rc, finish, jbl_as_json(jbl, jbl_xstr_json_printer, xstr, 0));
   RCC(rc, finish,
@@ -2294,7 +2294,7 @@ bool iwn_http_response_write_jbn(
   JBL_NODE             n
   ) {
   iwrc rc = 0;
-  IWXSTR *xstr = 0;
+  struct iwxstr *xstr = 0;
   RCB(finish, xstr = iwxstr_new());
   RCC(rc, finish, jbn_as_json(n, jbl_xstr_json_printer, xstr, 0));
   RCC(rc, finish,
@@ -2506,8 +2506,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   int optval;
   struct server *server;
   struct iwn_http_server_spec *spec;
-
-  IWPOOL *pool = iwpool_create_empty();
+  struct iwpool *pool = iwpool_create_empty();
   if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2573,18 +2572,18 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   RCA(spec->listen = iwpool_strdup2(pool, spec->listen), finish);
 
   struct iwn_poller_task task = {
-    .user_data  = server,
-    .on_ready   = _server_on_ready,
+    .user_data = server,
+    .on_ready = _server_on_ready,
     .on_dispose = _server_on_dispose,
-    .events     = IWN_POLLIN,
+    .events = IWN_POLLIN,
     .events_mod = IWN_POLLET,
-    .poller     = spec->poller
+    .poller = spec->poller
   };
 
   struct addrinfo hints = {
     .ai_socktype = SOCK_STREAM,
-    .ai_family   = AF_UNSPEC,
-    .ai_flags    = AI_PASSIVE
+    .ai_family = AF_UNSPEC,
+    .ai_flags = AI_PASSIVE
   };
 
   struct addrinfo *result, *rp;

@@ -72,7 +72,7 @@ struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize
 }
 
 iwrc iwn_pair_add_pool(
-  IWPOOL           *pool,
+  struct iwpool    *pool,
   struct iwn_pairs *pairs,
   const char       *key,
   ssize_t           key_len,
@@ -98,7 +98,7 @@ iwrc iwn_pair_add_pool(
 }
 
 iwrc iwn_pair_add_pool_all(
-  IWPOOL           *pool,
+  struct iwpool    *pool,
   struct iwn_pairs *pairs,
   const char       *key,
   ssize_t           key_len,
@@ -125,7 +125,7 @@ iwrc iwn_pair_add_pool_all(
   return iwn_pair_add_pool(pool, pairs, key, key_len, pval, val_len);
 }
 
-struct iwn_pair** iwn_pairs_to_array(IWPOOL *pool, const struct iwn_pairs *pairs, size_t *out_size) {
+struct iwn_pair** iwn_pairs_to_array(struct iwpool *pool, const struct iwn_pairs *pairs, size_t *out_size) {
   size_t cnt = 0;
   for (struct iwn_pair *p = pairs->first; p; p = p->next) {
     ++cnt;
@@ -142,7 +142,7 @@ struct iwn_pair** iwn_pairs_to_array(IWPOOL *pool, const struct iwn_pairs *pairs
   return ret;
 }
 
-struct iwn_val** iwn_vals_to_array(IWPOOL *pool, const struct iwn_vals *vals, size_t *out_size) {
+struct iwn_val** iwn_vals_to_array(struct iwpool *pool, const struct iwn_vals *vals, size_t *out_size) {
   size_t cnt = 0;
   for (struct iwn_val *v = vals->first; v; v = v->next) {
     ++cnt;

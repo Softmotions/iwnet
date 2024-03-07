@@ -127,7 +127,7 @@ finish:
 static int _todo_list(struct iwn_wf_req *req, void *user_data) {
   iwrc rc = 0;
   int ret = IWN_WF_RES_INTERNAL_ERROR;
-  IWXSTR *xstr;
+  struct iwxstr *xstr;
 
   // For the sake of simplicity response is not streamed and assembled as buffer.
   RCB(finish, xstr = iwxstr_new());
@@ -155,7 +155,7 @@ finish:
 ///
 static int _todo_get(struct iwn_wf_req *req, void *user_data) {
   iwrc rc = 0;
-  IWXSTR *xstr;
+  struct iwxstr *xstr;
   int ret = IWN_WF_RES_INTERNAL_ERROR;
 
   struct iwn_wf_route_submatch *m = iwn_wf_request_submatch_first(req);
@@ -211,7 +211,7 @@ static int _todo_done(struct iwn_wf_req *req, void *user_data) {
   id = iwatoi2(val.buf, val.len);
   struct item *n = _item_get(id);
   if (!n) {
-    return 404;    
+    return 404;
   }
   val = iwn_pair_find_val(&req->form_params, "done", IW_LLEN("done"));
   if (val.len) {
@@ -300,7 +300,7 @@ int main(int argc, char *argv[]) {
 
   struct iwn_wf_server_spec spec = {
     .listen = "localhost",
-    .port   = port,
+    .port = port,
     .poller = poller,
   };
   if (ssl) {

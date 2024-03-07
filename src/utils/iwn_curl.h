@@ -49,8 +49,8 @@ struct xcurlreq {
   const char *payload;
   size_t      payload_len;
   struct curl_slist *headers;
-  IWXSTR  *_xstr;
-  IWXSTR  *_qxstr;
+  struct iwxstr  *_xstr;
+  struct iwxstr  *_qxstr;
   uint64_t flags;
 };
 
@@ -82,7 +82,7 @@ static size_t xcurl_read_cursor(char *buffer, size_t size, size_t nitems, void *
 }
 
 static size_t xcurl_body_write_xstr(void *contents, size_t size, size_t nmemb, void *op) {
-  IWXSTR *xstr = op;
+  struct iwxstr *xstr = op;
   if (!xstr) {
     return 0;
   }

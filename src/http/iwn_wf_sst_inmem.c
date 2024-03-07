@@ -9,7 +9,7 @@
 #include <errno.h>
 
 struct impl {
-  IWHMAP *sidmap;
+  struct iwhmap  *sidmap;
   pthread_mutex_t mtx;
 };
 
@@ -20,7 +20,7 @@ static void _map_kv_free(void *key, void *val) {
 
 static void _sidmap_kv_free(void *key, void *val) {
   free(key);
-  IWHMAP *map = val;
+  struct iwhmap *map = val;
   iwhmap_destroy(map);
 }
 
@@ -41,7 +41,7 @@ static iwrc _put(struct iwn_wf_session_store *sst, const char *sid_, const char 
 
   pthread_mutex_lock(&impl->mtx);
 
-  IWHMAP *map = iwhmap_get(impl->sidmap, sid_);
+  struct iwhmap *map = iwhmap_get(impl->sidmap, sid_);
   if (!map) {
     RCA(map = iwhmap_create_str(_map_kv_free), finish);
     RCA(sid = strdup(sid_), finish);
@@ -66,7 +66,7 @@ finish:
 static void _del(struct iwn_wf_session_store *sst, const char *sid, const char *key) {
   struct impl *impl = sst->user_data;
   pthread_mutex_lock(&impl->mtx);
-  IWHMAP *map = iwhmap_get(impl->sidmap, sid);
+  struct iwhmap *map = iwhmap_get(impl->sidmap, sid);
   if (map) {
     iwhmap_remove(map, key);
     if (iwhmap_count(map) == 0) {
@@ -80,7 +80,7 @@ IW_ALLOC static char* _get(struct iwn_wf_session_store *sst, const char *sid, co
   char *ret = 0;
   struct impl *impl = sst->user_data;
   pthread_mutex_lock(&impl->mtx);
-  IWHMAP *map = iwhmap_get(impl->sidmap, sid);
+  struct iwhmap *map = iwhmap_get(impl->sidmap, sid);
   if (map) {
     ret = iwhmap_get(map, key);
     if (ret) {
@@ -94,7 +94,7 @@ IW_ALLOC static char* _get(struct iwn_wf_session_store *sst, const char *sid, co
 static void _clear(struct iwn_wf_session_store *sst, const char *sid) {
   struct impl *impl = sst->user_data;
   pthread_mutex_lock(&impl->mtx);
-  IWHMAP *map = iwhmap_get(impl->sidmap, sid);
+  struct iwhmap *map = iwhmap_get(impl->sidmap, sid);
   if (map) {
     iwhmap_remove(map, sid);
   }
