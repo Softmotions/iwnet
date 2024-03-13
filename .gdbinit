@@ -1,5 +1,6 @@
-cd ./build/src/http/examples
-file ./echo_http_server
+cd ./build/src/ws/tests
+file ./ws_client_test1
+set args --listen socket:///tmp/ws_server1.socket
 #set args --ssl
 
 set confirm off

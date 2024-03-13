@@ -12,6 +12,7 @@ static struct iwn_poller *poller;
 static struct iwn_ws_client *ws;
 static int cnt;
 static int ws_server_pid;
+static char *listen = "localhost";
 
 static void on_connected(const struct iwn_ws_client_ctx *ctx) {
   IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
@@ -41,16 +42,25 @@ static void on_dispose(const struct iwn_ws_client_ctx *ctx) {
 
 static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf, size_t len) {
   fprintf(stderr, "ws server: %s\n", buf);
+
   if (!strstr(buf, "0542a108-ff0f-47ef-86e3-495fd898a8ee")) {
     return;
   }
+
+  const char *url = "ws://localhost:9292/ws";
+  if (strstr(listen, "socket://") == listen) {
+    url = listen;
+  }
+
   iwrc rc = iwn_ws_client_open(&(struct iwn_ws_client_spec) {
-    .url = "ws://localhost:9292/ws",
+    .url = url,
+    .path_ext = "/ws",
     .poller = poller,
     .on_connected = on_connected,
     .on_message = on_message,
     .on_dispose = on_dispose,
   }, &ws);
+
   IWN_ASSERT(rc == 0);
   IWN_ASSERT(ws);
   if (rc) {
@@ -62,14 +72,23 @@ int main(int argc, char *argv[]) {
   iwrc rc = 0;
   iwlog_init();
 
+  for (int i = 0; i < argc; ++i) {
+    if (strcmp(argv[i], "--listen") == 0 && i + 1 < argc) {
+      listen = argv[i + 1];
+    }
+  }
+
   RCC(rc, finish, iwn_poller_create(1, 1, &poller));
   RCC(rc, finish, iwn_proc_spawn(&(struct iwn_proc_spec) {
     .poller = poller,
     .path = "./ws_server1",
-    .args = (const char*[]) { 0 },
+    .args = (const char*[]) { "--listen", listen, 0 },
     .on_stdout = _on_ws_server_output,
     .on_stderr = _on_ws_server_output,
-    .on_exit = _on_ws_server_exit
+    .on_exit = _on_ws_server_exit,
+#ifdef __linux__
+    .parent_death_signal = SIGTERM,
+#endif
   }, &ws_server_pid));
 
   iwn_poller_poll(poller);

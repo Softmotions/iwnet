@@ -19,3 +19,9 @@ foreach(TN IN ITEMS ${TESTS})
     WORKING_DIRECTORY ${TEST_DATA_DIR}
     COMMAND ${TEST_TOOL_CMD} $<TARGET_FILE:${TN}>)
 endforeach()
+
+add_test(
+  NAME ws_client_test1_unix_domain_socket
+  WORKING_DIRECTORY ${TEST_DATA_DIR}
+  COMMAND ${TEST_TOOL_CMD} ./ws_client_test1 --listen
+          socket:///tmp/ws_server1.socket)

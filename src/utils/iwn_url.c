@@ -150,11 +150,6 @@ int iwn_url_parse(struct iwn_url *url, char *u) {
       *u = '\0';
     }
 
-    /* Missing hostname? */
-    if ('\0' == *url->host) {
-      return -1;
-    }
-
     /* (Port) */
     u = strchr(url->host, ':');
     if (NULL != u && (NULL == url->path || u < url->path)) {
@@ -168,11 +163,11 @@ int iwn_url_parse(struct iwn_url *url, char *u) {
       } else {
         url->port = atoi(u);
       }
-    }
 
-    /* Missing hostname? */
-    if ('\0' == *url->host) {
-      return -1;
+      /* Missing hostname? */
+      if ('\0' == *url->host) {
+        return -1;
+      }
     }
   } else {
     /* (Path) */

@@ -50,7 +50,7 @@ typedef bool (*iwn_http_server_chunk_handler)(struct iwn_http_req*, bool *again)
 ///
 typedef bool (*iwn_http_server_proxy_handler)(struct iwn_http_req*);
 
-/// Server TLS config.
+/// Server TLS 1.2 config.
 struct iwn_http_server_ssl_spec {
   const char *certs;           ///< PEM certificates text data or path to PEM file.
   const char *private_key;     ///< PEM private key text data or path to PEM file.
@@ -64,18 +64,24 @@ struct iwn_http_server_spec {
   iwn_http_server_request_handler request_handler; ///< Request handler (Required).
   iwn_http_server_proxy_handler   proxy_handler;   ///< HTTP proxy session setup handler.
   struct iwn_poller *poller;                       ///< Poller reference (Required).
+
+  /// IP/Host/Socket file HTTP server will listen on.
+  /// If listen starts with: `socket://` it will be treated as Unix domain socket file.
   const char *listen;
-  void       *user_data;
-  iwn_http_server_on_dispose      on_server_dispose;
-  struct iwn_http_server_ssl_spec ssl;
-  int port;                           ///< Default: 8080 http, 8443 https
-  int socket_queue_size;              ///< Default: 64
-  int request_buf_max_size;           ///< Default: 8Mb
-  int request_buf_size;               ///< Default: 1023, Min: 1023
-  int request_timeout_keepalive_sec;  ///< -1 Disable timeout, 0 Use default timeout: 120sec
-  int request_timeout_sec;            ///< -1 Disable timeout, 0 Use default timeout: 20sec
-  int request_token_max_len;          ///< Default: 8191, Min: 8191
-  int request_max_headers_count;      ///< Default:  127
+
+  void *user_data;                                   ///< Arbitrary user data propagated into struct
+                                                     ///  iwn_http_req::user_data
+  iwn_http_server_on_dispose      on_server_dispose; ///< Server dispose callback handler.
+  struct iwn_http_server_ssl_spec ssl;               ///< TLS 1.2 parameters.
+  int port;                                          ///< If -1 listen attribute treated as a Unix socket file.
+                                                     ///  Default: 8080 http, 8443 https
+  int socket_queue_size;                             ///< Default: 64
+  int request_buf_max_size;                          ///< Default: 8Mb
+  int request_buf_size;                              ///< Default: 1023, Min: 1023
+  int request_timeout_keepalive_sec;                 ///< -1 Disable timeout, 0 Use default timeout: 120sec
+  int request_timeout_sec;                           ///< -1 Disable timeout, 0 Use default timeout: 20sec
+  int request_token_max_len;                         ///< Default: 8191, Min: 8191
+  int request_max_headers_count;                     ///< Default:  127
 };
 
 /// Creates an instance of http server.

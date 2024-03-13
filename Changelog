@@ -1,5 +1,6 @@
 iwnet (1.1.0) UNRELEASED; urgency=medium
 
+  * impl: Supported Unix domain sockets by WS/HTTP client/server
   * fix: Used portable version of pthreads barrier (iowow/iwth.h)
   * fix: Fixed wrong handling of fd error events (iwn_poller)
   * impl: Implemened http proxy forwarding (iwn_http_server.h)

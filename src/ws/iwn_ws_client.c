@@ -28,12 +28,16 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
 
 #define _STATE_HANDSHAKE_SEND 0x01U
 #define _STATE_HANDSHAKE_RECV 0x02U
+
+#define _FLAG_SECURE     0x01U
+#define _FLAG_NO_NETWORK 0x02U
 
 struct iwn_ws_client {
   struct iwn_ws_client_ctx   ctx;
@@ -43,14 +47,15 @@ struct iwn_ws_client {
   char *path;
   char *query;
   char *urlbuf;
+  char *scheme;
   wslay_event_context_ptr wsl;
   struct iwxstr  *output;
   struct iwxstr  *input;
   pthread_mutex_t mtx;
   int     port;
   int     fd;
-  bool    secure;
   uint8_t state;
+  uint8_t flags;
   atomic_uchar  reconnect_attempt;
   volatile bool close_cas;
   volatile bool dispose_cas;
@@ -101,86 +106,115 @@ static iwrc _fd_make_non_blocking(int fd) {
   return 0;
 }
 
-static iwrc _connect(const char *host, int port_, bool async, int *out_fd) {
-  assert(host && out_fd);
+static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
+  assert(out_fd);
 
   *out_fd = 0;
 
   char nbuf[IWNUMBUF_SIZE];
-  snprintf(nbuf, sizeof(nbuf), "%d", port_);
+  snprintf(nbuf, sizeof(nbuf), "%d", ws->port);
   char *port = nbuf;
 
   iwrc rc = 0;
   int fd = -1, rci;
 
-  struct addrinfo *si, *p, hints = {
+  struct addrinfo *si = 0, *p = 0, hints = {
     .ai_family = PF_UNSPEC,
     .ai_socktype = SOCK_STREAM
   };
 
-  rci = getaddrinfo(host, port, &hints, &si);
-  if (rci) {
-    iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | %s", gai_strerror(rci));
-    return WS_ERROR_PEER_CONNECT;
-  }
+  if (ws->scheme == 0 || strcmp(ws->scheme, "socket") != 0) {
+    rci = getaddrinfo(ws->host, port, &hints, &si);
+    if (rci) {
+      iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | %s", gai_strerror(rci));
+      return WS_ERROR_PEER_CONNECT;
+    }
 
-  for (p = si; p; p = p->ai_next) {
-    char saddr[INET6_ADDRSTRLEN + 50];
-    struct sockaddr *sa = p->ai_addr;
-    void *addr = 0;
+    for (p = si; p; p = p->ai_next) {
+      char saddr[INET6_ADDRSTRLEN + 50];
+      struct sockaddr *sa = p->ai_addr;
+      void *addr = 0;
 
-    if (sa->sa_family == AF_INET) {
-      addr = &((struct sockaddr_in*) sa)->sin_addr;
-    } else if (sa->sa_family == AF_INET6) {
-      addr = &((struct sockaddr_in6*) sa)->sin6_addr;
-    } else {
-      iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | Unsupported address family: 0x%x", (int) sa->sa_family);
-      rc = WS_ERROR_PEER_CONNECT;
+      if (sa->sa_family == AF_INET) {
+        addr = &((struct sockaddr_in*) sa)->sin_addr;
+      } else if (sa->sa_family == AF_INET6) {
+        addr = &((struct sockaddr_in6*) sa)->sin6_addr;
+      } else {
+        iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | Unsupported address family: 0x%x", (int) sa->sa_family);
+        rc = WS_ERROR_PEER_CONNECT;
+        goto finish;
+      }
+
+      if (!inet_ntop(p->ai_family, addr, saddr, sizeof(saddr))) {
+        rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+        goto finish;
+      }
+
+      fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+      if (fd < 0) {
+        iwlog_warn("ws | Error opening socket %s:%s %s %s", ws->host, port, saddr, strerror(errno));
+        continue;
+      }
+
+      if (async) {
+        RCC(rc, finish, _fd_make_non_blocking(fd));
+      }
+
+      do {
+        rci = connect(fd, p->ai_addr, p->ai_addrlen);
+      } while (errno == EINTR);
+
+      if (rci == -1) {
+        if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
+          iwlog_warn("ws | Error connecting %s:%s %s %s", ws->host, port, saddr, strerror(errno));
+          close(fd), fd = -1;
+          continue;
+        }
+      }
+      break;
+    }
+  } else {
+    RCN(finish, fd = socket(AF_UNIX, SOCK_STREAM, 0));
+
+    struct sockaddr_un saddr = {
+      .sun_family = AF_UNIX
+    };
+
+    if (strlen(ws->host) >= sizeof(saddr.sun_path)) {
+      rc = IW_ERROR_INVALID_ARGS;
+      iwlog_ecode_error(rc, "Unix socket path exceeds its maximum length: %zd", sizeof(saddr.sun_path) - 1);
       goto finish;
     }
-
-    if (!inet_ntop(p->ai_family, addr, saddr, sizeof(saddr))) {
-      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
-      goto finish;
-    }
-
-    fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-    if (fd < 0) {
-      iwlog_warn("ws | Error opening socket %s:%s %s %s", host, port, saddr, strerror(errno));
-      continue;
-    }
-
-    if (async) {
-      RCC(rc, finish, _fd_make_non_blocking(fd));
-    }
+    strncpy(saddr.sun_path, ws->host, sizeof(saddr.sun_path) - 1);
 
     do {
-      rci = connect(fd, p->ai_addr, p->ai_addrlen);
+      rci = connect(fd, (void*) &saddr, sizeof(saddr));
     } while (errno == EINTR);
 
     if (rci == -1) {
       if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
-        iwlog_warn("ws | Error connecting %s:%s %s %s", host, port, saddr, strerror(errno));
+        iwlog_warn("ws | Error Unix socket connecting  %s %s", ws->host, strerror(errno));
         close(fd), fd = -1;
-        continue;
+        goto finish;
       }
     }
-    break;
   }
 
-  if (p) {
+  if (!INVALIDHANDLE(fd)) {
     *out_fd = fd;
   } else {
     rc = WS_ERROR_PEER_CONNECT;
   }
 
 finish:
-  freeaddrinfo(si);
+  if (si) {
+    freeaddrinfo(si);
+  }
   if (rc) {
     if (fd > -1) {
       close(fd);
     }
-  } else if (!async) { // Non-blocking after connection established
+  } else if (!async) { // Make socket non-blocking after connection established
     rc = _fd_make_non_blocking(fd);
   }
   return rc;
@@ -323,6 +357,13 @@ static iwrc _handshake_output_fill(struct iwn_ws_client *ws) {
     }
   }
 
+  const char *host = ws->host;
+  if (strchr(host, '/')) {
+    // Host is a path-like structure (Eg. Unix socket file)
+    // Replace it by fake localhost
+    host = "localhost";
+  }
+
   RCR(iwxstr_printf(
         ws->output,
         "GET %s%s%s HTTP/1.1\r\n"
@@ -334,7 +375,7 @@ static iwrc _handshake_output_fill(struct iwn_ws_client *ws) {
         "Sec-Websocket-Version: 13\r\n"
         "\r\n",
         ws->path, (ws->query ? "?" : ""), (ws->query ? ws->query : ""),
-        ws->host, ws->port,
+        host, ws->port,
         er,
         ws->client_key));
 
@@ -429,7 +470,9 @@ static int64_t _on_handshake_event(struct iwn_poller_adapter *pa, void *user_dat
             rc = WS_ERROR_HANDSHAKE_CLIENT_KEY;
             goto finish;
           }
-          RCC(rc, finish, _make_tcp_nodelay(ws->fd));
+          if (!(ws->flags & _FLAG_NO_NETWORK)) {
+            RCC(rc, finish, _make_tcp_nodelay(ws->fd));
+          }
         }
       }
     }
@@ -499,7 +542,7 @@ static iwrc _ws_connect(struct iwn_ws_client *ws) {
   }
 
   // Now do the initial handshake
-  RCC(rc, finish, _connect(ws->host, ws->port, (spec->flags & WS_CONNECT_ASYNC), &ws->fd));
+  RCC(rc, finish, _connect(ws, (spec->flags & WS_CONNECT_ASYNC), &ws->fd));
 
 
   RCC(rc, finish, _wslayrc(wslay_event_context_client_init(&ws->wsl, &(struct wslay_event_callbacks) {
@@ -509,7 +552,7 @@ static iwrc _ws_connect(struct iwn_ws_client *ws) {
     .genmask_callback = _wslay_genmask_callback
   }, ws)));
 
-  if (ws->secure) {
+  if (ws->flags & _FLAG_SECURE) {
     RCC(rc, finish, iwn_brssl_client_poller_adapter(&(struct iwn_brssl_client_poller_adapter_spec) {
       .poller = spec->poller,
       .host = ws->host,
@@ -691,7 +734,6 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   }
 
   iwrc rc = 0;
-  char *ptr;
 
   struct iwn_ws_client *ws = calloc(1, sizeof(*ws));
   if (!ws) {
@@ -723,27 +765,32 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
     rc = IW_ERROR_INVALID_VALUE;
     goto finish;
   }
+
   ws->host = u.host;
-  ws->path = u.path;
   ws->port = u.port;
   ws->query = u.query;
+  ws->scheme = u.scheme;
 
-  if (!ws->path) {
-    RCB(finish, ws->path = strdup("/"));
-  } else {
-    RCB(finish, ws->path = malloc(strlen(u.path) + 2));
-    ws->path[0] = '/';
-    memcpy(ws->path + 1, u.path, strlen(u.path) + 1);
-  }
-
-  ptr = u.scheme;
-  if (ptr) {
-    if (strcmp("wss", ptr) == 0) {
-      ws->secure = true;
-    }
+  if (u.scheme && strcmp("wss", u.scheme) == 0) {
+    ws->flags |= _FLAG_SECURE;
   }
   if (ws->port < 1) {
-    ws->port = ws->secure ? 443 : 80;
+    ws->port = (ws->flags & _FLAG_SECURE) ? 443 : 80;
+  }
+
+  if (!u.path) {
+    RCB(finish, ws->path = strdup("/"));
+  } else if (strcmp("socket", u.scheme) == 0) {
+    ws->flags |= _FLAG_NO_NETWORK;
+    if (u.host == u.path - 1) {
+      *(u.path - 1) = '/'; // WARNING: Dependence of iwn_url_parse implementation
+    }
+    RCB(finish, ws->path = strdup(spec->path_ext ? spec->path_ext : "/"));
+  } else {
+    size_t len = strlen(u.path);
+    RCB(finish, ws->path = malloc(len + 2));
+    ws->path[0] = '/';
+    memcpy(ws->path + 1, u.path, len + 1);
   }
 
   rc = _ws_connect(ws);

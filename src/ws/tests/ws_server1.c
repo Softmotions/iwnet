@@ -25,7 +25,6 @@ static int _handle_root(struct iwn_wf_req *req, void *user_data) {
 }
 
 static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_len, uint8_t frame) {
-
   if (strcmp(msg, "disconnect") == 0) {
     return false;
   }
@@ -72,6 +71,7 @@ int main(int argc, char *argv[]) {
   int port = 9292;
   int nthreads = 1;
   int oneshot = 1;
+  const char *listen = "localhost";
 
   for (int i = 0; i < argc; ++i) {
     if (strcmp(argv[i], "--ssl") == 0) {
@@ -82,6 +82,8 @@ int main(int argc, char *argv[]) {
       nthreads = iwatoi(argv[i + 1]);
     } else if (strcmp(argv[i], "--poll-oneshot-events") == 0 && i + 1 < argc) {
       oneshot = iwatoi(argv[i + 1]);
+    } else if (strcmp(argv[i], "--listen") == 0 && i + 1 < argc) {
+      listen = argv[i + 1];
     }
   }
 
@@ -105,10 +107,10 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));
 
   struct iwn_wf_server_spec spec = {
-    .listen                        = "localhost",
-    .port                          = port,
-    .poller                        = poller,
-    .request_timeout_sec           = -1,
+    .listen = listen,
+    .port = port,
+    .poller = poller,
+    .request_timeout_sec = -1,
     .request_timeout_keepalive_sec = -1,
   };
 

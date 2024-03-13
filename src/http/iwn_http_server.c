@@ -30,6 +30,8 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/un.h>
+#include <sys/file.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -2568,8 +2570,12 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   }
   if (!spec->listen) {
     spec->listen = "localhost";
+  } else if (strstr(spec->listen, "socket://") == spec->listen) {
+    spec->listen = spec->listen + IW_LLEN("socket://");
+    spec->port = -1;
   }
-  RCA(spec->listen = iwpool_strdup2(pool, spec->listen), finish);
+
+  RCB(finish, spec->listen = iwpool_strdup2(pool, spec->listen));
 
   struct iwn_poller_task task = {
     .user_data = server,
@@ -2580,44 +2586,77 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     .poller = spec->poller
   };
 
-  struct addrinfo hints = {
-    .ai_socktype = SOCK_STREAM,
-    .ai_family = AF_UNSPEC,
-    .ai_flags = AI_PASSIVE
-  };
+  if (spec->port > 0) { // Network socket
+    struct addrinfo hints = {
+      .ai_socktype = SOCK_STREAM,
+      .ai_family = AF_UNSPEC,
+      .ai_flags = AI_PASSIVE
+    };
 
-  struct addrinfo *result, *rp;
-  char port[32];
-  snprintf(port, sizeof(port), "%d", spec->port);
+    struct addrinfo *result, *rp;
+    char port[32];
+    snprintf(port, sizeof(port), "%d", spec->port);
 
-  int rci = getaddrinfo(spec->listen, port, &hints, &result);
-  if (rci) {
-    rc = IW_ERROR_FAIL;
-    iwlog_error("Error getting local address and port: %s", gai_strerror(rci));
-    goto finish;
-  }
+    int rci = getaddrinfo(spec->listen, port, &hints, &result);
+    if (rci) {
+      rc = IW_ERROR_FAIL;
+      iwlog_error("Error getting local address and port: %s", gai_strerror(rci));
+      goto finish;
+    }
 
-  optval = 1;
-  for (rp = result; rp; rp = rp->ai_next) {
-    task.fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+    optval = 1;
+    for (rp = result; rp; rp = rp->ai_next) {
+      task.fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+      server->fd = task.fd;
+      if (task.fd < 0) {
+        continue;
+      }
+      fcntl(task.fd, F_SETFD, FD_CLOEXEC);
+      setsockopt(task.fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
+      if (bind(task.fd, rp->ai_addr, rp->ai_addrlen) == 0) {
+        break;
+      }
+      close(task.fd);
+    }
+
+    freeaddrinfo(result);
+    if (!rp) {
+      rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
+      iwlog_ecode_error2(rc, "Could not find any suitable address to bind");
+      goto finish;
+    }
+  } else { // Unix socket file
+    struct sockaddr_un saddr = {
+      .sun_family = AF_UNIX,
+    };
+
+    int lock_fd;
+    char lock_path[sizeof(saddr.sun_path) + IW_LLEN(".lock")];
+    size_t listensz = strlen(spec->listen);
+
+    if (listensz >= sizeof(saddr.sun_path)) {
+      rc = IW_ERROR_INVALID_ARGS;
+      iwlog_ecode_error(rc, "Unix socket path exceeds its maximum length: %zd", sizeof(saddr.sun_path) - 1);
+      goto finish;
+    }
+    memcpy(saddr.sun_path, spec->listen, listensz + 1);
+    memcpy(lock_path, spec->listen, listensz);
+    memcpy(lock_path + listensz, ".lock", IW_LLEN(".lock") + 1);
+
+    RCN(finish, lock_fd = open(lock_path, O_RDONLY | O_CREAT, 0600));
+    int rci = flock(lock_fd, LOCK_EX | LOCK_NB);
+    if (rci == -1) {
+      rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
+      iwlog_ecode_error(rc, "Unix socket path: %s is held by another process", lock_path);
+      goto finish;
+    }
+    unlink(spec->listen);
+
+    RCN(finish, task.fd = socket(AF_UNIX, SOCK_STREAM, 0));
     server->fd = task.fd;
-    if (task.fd < 0) {
-      continue;
-    }
-    fcntl(task.fd, F_SETFD, FD_CLOEXEC);
-    setsockopt(task.fd, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
-    if (bind(task.fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-      break;
-    }
-    close(task.fd);
+    RCN(finish, bind(task.fd, (void*) &saddr, sizeof(saddr)));
   }
 
-  freeaddrinfo(result);
-  if (!rp) {
-    rc = iwrc_set_errno(IW_ERROR_ERRNO, errno);
-    iwlog_ecode_error2(rc, "Could not find any suitable address to bind");
-    goto finish;
-  }
   RCN(finish, optval = fcntl(task.fd, F_GETFL, 0));
   RCN(finish, fcntl(task.fd, F_SETFL, optval | O_NONBLOCK));
 
@@ -2640,6 +2679,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
 
 finish:
   if (rc) {
+    iwlog_ecode_error3(rc);
     if (server) {
       _server_destroy(server);
     } else {
@@ -2649,4 +2689,4 @@ finish:
     *out_fd = server->fd;
   }
   return rc;
-}
+};

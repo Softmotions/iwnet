@@ -17,8 +17,14 @@ struct iwn_ws_client_ctx {
 
 /// Websocket client configuration.
 struct iwn_ws_client_spec {
-  /// Connection url. Required. Eg: wss://localhost/ws
+  /// Connection url. Required.
+  /// Eg: wss://localhost/ws
+  /// Eg: socket:///tmp/server.socket
   const char *url;
+  /// HTTP request path during initial websocket handshake over HTTP.
+  /// Used when path information is not provided by connection URL.
+  /// Especially useful in `socket://` connection mode.
+  const char *path_ext;
   struct iwn_poller *poller; ///< Required
 
   void  (*on_message)(const struct iwn_ws_client_ctx *ctx, const char *buf, size_t buf_len, uint8_t frame);
