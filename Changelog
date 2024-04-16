@@ -1,4 +1,4 @@
-iwnet (1.1.0) UNRELEASED; urgency=medium
+iwnet (1.1.0) testing; urgency=medium
 
   * impl: Supported Unix domain sockets by WS/HTTP client/server
   * fix: Used portable version of pthreads barrier (iowow/iwth.h)
@@ -16,4 +16,4 @@ iwnet (1.1.0) UNRELEASED; urgency=medium
   * fix: FreeBSD build failed.
   * fix: Endless loop in ws_server.c
 
- -- Anton Adamansky <adamansky@gmail.com>  Mon, 25 Apr 2022 15:09:48 +0700
+ -- Anton Adamansky <adamansky@gmail.com>  Tue, 16 Apr 2024 11:08:00 +0700
