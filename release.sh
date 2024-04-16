@@ -20,7 +20,7 @@ readme() {
 }
 
 release_tag() {
-  echo "Creating EJDB2 release"
+  echo "Creating IWNET release"
   readme
 
   git pull origin master
@@ -47,7 +47,7 @@ while [ "$1" != "" ]; do
              ;;
     "-r" )   release_tag
              exit
-            ;;
+             ;;
   esac
   shift
 done
