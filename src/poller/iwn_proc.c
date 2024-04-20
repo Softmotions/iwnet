@@ -176,7 +176,7 @@ static void _proc_wait_worker(void *arg) {
   while (cc.map) { // FIXME
     int wstatus = 0;
     pid_t pid = wait(&wstatus);
-    if (pid != -1) { // No child processes or shutdown
+    if (pid != -1 && (WIFEXITED(wstatus) || WIFSIGNALED(wstatus))) { // No child processes or shutdown
       _proc_unref(pid, wstatus);
     } else {
       return;
