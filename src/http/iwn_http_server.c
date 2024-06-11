@@ -2278,6 +2278,7 @@ bool iwn_http_response_write_jbl(
   RCC(rc, finish, jbl_as_json(jbl, jbl_xstr_json_printer, xstr, 0));
   RCC(rc, finish,
       iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));
+  RCC(rc, finish, iwn_http_response_code_set(request, status_code));
   iwn_http_response_body_set(request, iwxstr_ptr(xstr), iwxstr_size(xstr), 0);
   rc = iwn_http_response_end(request);
 
@@ -2301,6 +2302,7 @@ bool iwn_http_response_write_jbn(
   RCC(rc, finish, jbn_as_json(n, jbl_xstr_json_printer, xstr, 0));
   RCC(rc, finish,
       iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));
+  RCC(rc, finish, iwn_http_response_code_set(request, status_code));
   iwn_http_response_body_set(request, iwxstr_ptr(xstr), iwxstr_size(xstr), 0);
   rc = iwn_http_response_end(request);
 
