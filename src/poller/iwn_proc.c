@@ -494,15 +494,73 @@ iwrc iwn_proc_wait(pid_t pid) {
     pthread_mutex_unlock(&cc.mtx);
     return 0;
   }
-  while (1) {
+  do {
     pthread_cond_wait(&cc.cond, &cc.mtx);
     proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
-    if (!proc) {
+    if (!proc || proc->wstatus != -1) {
       break;
     }
-  }
+  } while (1);
   pthread_mutex_unlock(&cc.mtx);
   return 0;
+}
+
+iwrc iwn_proc_wait_timeout(pid_t pid, long timeout_ms, bool *out_timeout) {
+  iwrc rc = 0;
+  *out_timeout = false;
+  long remaining = timeout_ms;
+
+  if (timeout_ms < 1) {
+    return iwn_proc_wait(pid);
+  }
+
+  pthread_mutex_lock(&cc.mtx);
+  struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
+  if (!proc) {
+    pthread_mutex_unlock(&cc.mtx);
+    return IW_ERROR_NOT_EXISTS;
+  }
+  if (proc->wstatus != -1) {
+    pthread_mutex_unlock(&cc.mtx);
+    return 0;
+  }
+  do {
+    bool bv = false;
+    uint64_t ts1, ts2;
+
+    rc = iwp_current_time_ms(&ts1, true);
+    if (rc) {
+      break;
+    }
+
+    rc = iw_cond_timed_wait_ms(&cc.cond, &cc.mtx, remaining, &bv);
+    if (rc) {
+      break;
+    }
+
+    if (bv) {
+      *out_timeout = true;
+      break;
+    }
+
+    proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
+    if (!proc || proc->wstatus != -1) {
+      break;
+    }
+
+    rc = iwp_current_time_ms(&ts2, true);
+    if (rc) {
+      break;
+    }
+
+    remaining -= (ts2 - ts1);
+    if (remaining < 1) {
+      *out_timeout = true;
+      break;
+    }
+  } while (1);
+  pthread_mutex_unlock(&cc.mtx);
+  return rc;
 }
 
 void iwn_proc_wait_all(void) {

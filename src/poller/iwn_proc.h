@@ -84,6 +84,8 @@ IW_EXPORT iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid);
 /// Blocks current thread until the child process identified by `pid` became inactive.
 IW_EXPORT iwrc iwn_proc_wait(pid_t pid);
 
+IW_EXPORT iwrc iwn_proc_wait_timeout(pid_t pid, long timeout_ms, bool *out_timeout);
+
 /// Blocks current thread until all child processes managed by this module became inactive.
 IW_EXPORT void iwn_proc_wait_all(void);
 
