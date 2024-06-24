@@ -94,6 +94,7 @@ static iwrc _init_lk(void) {
   pthread_condattr_init(&cattr);
   pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
   pthread_cond_init(&cc.cond, &cattr);
+  pthread_condattr_destroy(&cattr);
 
   if (!cc.map) {
     RCB(finish, cc.map = iwhmap_create_u32(_kv_free));
