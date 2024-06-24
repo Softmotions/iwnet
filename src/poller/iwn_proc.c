@@ -957,3 +957,14 @@ bool iwn_proc_dispose2(int signal, long timeout_ms) {
 void iwn_proc_dispose(void) {
   iwn_proc_dispose2(0, 0);
 }
+
+int iwn_proc_num_managed(void) {
+  if (!cc.map) {
+    return 0;
+  }
+  int ret = 0;
+  pthread_mutex_lock(&cc.mtx);
+  ret = iwhmap_count(cc.map);
+  pthread_mutex_unlock(&cc.mtx);
+  return ret;
+}

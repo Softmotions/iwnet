@@ -147,4 +147,7 @@ IW_EXPORT bool iwn_proc_dispose2(int signal, long timeout_ms);
 /// @note Returned value should be released by `free()`.
 IW_EXPORT IW_ALLOC char* iwn_proc_command_get(const struct iwn_proc_spec *spec);
 
+/// Gets instant number of managed processes
+IW_EXPORT int iwn_proc_num_managed(void);
+
 IW_EXTERN_C_END
