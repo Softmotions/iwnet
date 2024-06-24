@@ -2645,7 +2645,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     memcpy(lock_path, spec->listen, listensz);
     memcpy(lock_path + listensz, ".lock", IW_LLEN(".lock") + 1);
 
-    RCN(finish, lock_fd = open(lock_path, O_RDONLY | O_CREAT, 0600));
+    RCN(finish, lock_fd = open(lock_path, O_RDONLY | O_CREAT | O_CLOEXEC, 0600));
     int rci = flock(lock_fd, LOCK_EX | LOCK_NB);
     if (rci == -1) {
       rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
