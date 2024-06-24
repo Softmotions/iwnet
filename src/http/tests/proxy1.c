@@ -101,7 +101,7 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, _endpoint_spawn());
 
   iwn_poller_poll(poller);
-  iwn_proc_dispose();
+  iwn_proc_dispose2(SIGTERM, 10000);
 
 finish:
   IWN_ASSERT(rc == 0);

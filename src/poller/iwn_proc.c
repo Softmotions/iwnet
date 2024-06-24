@@ -2,6 +2,8 @@
 #include "iwn_scheduler.h"
 
 #include <iowow/iwlog.h>
+#include <iowow/iwth.h>
+#include <iowow/iwp.h>
 #include <iowow/iwhmap.h>
 #include <iowow/iwutils.h>
 #include <iowow/iwstw.h>
@@ -63,7 +65,6 @@ static struct  {
   pthread_cond_t  cond;
 } cc = {
   .mtx = PTHREAD_MUTEX_INITIALIZER,
-  .cond = PTHREAD_COND_INITIALIZER
 };
 
 static void _proc_destroy(struct proc *proc) {
@@ -89,6 +90,11 @@ static void _kv_free(void *key, void *val) {
 
 static iwrc _init_lk(void) {
   iwrc rc = 0;
+  pthread_condattr_t cattr;
+  pthread_condattr_init(&cattr);
+  pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+  pthread_cond_init(&cc.cond, &cattr);
+
   if (!cc.map) {
     RCB(finish, cc.map = iwhmap_create_u32(_kv_free));
   }
@@ -509,6 +515,59 @@ void iwn_proc_wait_all(void) {
   pthread_mutex_unlock(&cc.mtx);
 }
 
+iwrc iwn_proc_wait_all_timeout(long timeout_ms, bool *out_timeout) {
+  iwrc rc = 0;
+  *out_timeout = false;
+  long remaining = timeout_ms;
+
+  if (timeout_ms < 1) {
+    iwn_proc_wait_all();
+    return 0;
+  }
+
+  pthread_mutex_lock(&cc.mtx);
+  do {
+    bool bv = false;
+    uint64_t ts1, ts2;
+
+    if (!cc.map || iwhmap_count(cc.map) == 0) {
+      break;
+    }
+
+    rc = iwp_current_time_ms(&ts1, true);
+    if (rc) {
+      break;
+    }
+
+    rc = iw_cond_timed_wait_ms(&cc.cond, &cc.mtx, remaining, &bv);
+    if (rc) {
+      break;
+    }
+
+    if (bv) {
+      *out_timeout = true;
+      break;
+    }
+
+    if (!cc.map || iwhmap_count(cc.map) == 0) {
+      break;
+    }
+
+    rc = iwp_current_time_ms(&ts2, true);
+    if (rc) {
+      break;
+    }
+
+    remaining -= (ts2 - ts1);
+    if (remaining < 1) {
+      *out_timeout = true;
+      break;
+    }
+  } while (1);
+  pthread_mutex_unlock(&cc.mtx);
+  return rc;
+}
+
 void iwn_proc_kill(pid_t pid, int signum) {
   kill(pid, signum);
 }
@@ -874,9 +933,14 @@ char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
   return iwxstr_destroy_keep_ptr(xstr);
 }
 
-void iwn_proc_dispose(void) {
+bool iwn_proc_dispose2(int signal, long timeout_ms) {
+  bool timeout = false;
   struct iwhmap *map = 0;
-  iwn_proc_kill_all(SIGTERM);
+  iwn_proc_kill_all(signal ? signal : SIGKILL);
+  iwrc rc = iwn_proc_wait_all_timeout(timeout_ms, &timeout);
+  if (rc) {
+    iwlog_ecode_error3(rc);
+  }
   pthread_mutex_lock(&cc.mtx);
   map = cc.map;
   cc.map = 0;
@@ -884,4 +948,11 @@ void iwn_proc_dispose(void) {
   pthread_mutex_unlock(&cc.mtx);
   iwstw_shutdown(&cc.stw, false);
   iwhmap_destroy(map);
+  pthread_mutex_destroy(&cc.mtx);
+  pthread_cond_destroy(&cc.cond);
+  return timeout;
+}
+
+void iwn_proc_dispose(void) {
+  iwn_proc_dispose2(0, 0);
 }

@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
 
 finish:
   shutdown();
-  iwn_proc_dispose();
+  iwn_proc_dispose2(SIGTERM, 0);
   IWN_ASSERT(rc == 0);
   return iwn_assertions_failed > 0 ? 1 : 0;
 }

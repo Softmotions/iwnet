@@ -20,7 +20,7 @@ struct iwn_proc_ctx {
 
 struct iwn_proc_fork_child_ctx {
   const struct iwn_proc_ctx *ctx;
-  int  comm_fds[4]; 
+  int  comm_fds[4];
   void (*cmd_arg_append)(struct iwn_proc_fork_child_ctx *ctx, const char *arg);
   void (*cmd_arg_replace)(struct iwn_proc_fork_child_ctx *ctx, const char *arg, const char *replace);
 };
@@ -48,7 +48,7 @@ struct iwn_proc_spec {
 
   /// Strderr callback.
   void (*on_stderr)(const struct iwn_proc_ctx *ctx, const char *buf, size_t len);
-    
+
   /// Data channel callback
   void (*on_dataout)(const struct iwn_proc_ctx *ctx, const char *buf, size_t len);
 
@@ -86,6 +86,10 @@ IW_EXPORT iwrc iwn_proc_wait(pid_t pid);
 
 /// Blocks current thread until all child processes managed by this module became inactive.
 IW_EXPORT void iwn_proc_wait_all(void);
+
+/// Waits for all child processes comletion, awaiting maximim time `timeout_ms` in total.
+/// Sets `out_timeout` to true If timeout has been occurred false otherwise.
+IW_EXPORT iwrc iwn_proc_wait_all_timeout(long timeout_ms, bool *out_timeout);
 
 /// Writes `buf` of size `len` into process standard input.
 /// @param pid Process pid
@@ -136,6 +140,8 @@ IW_EXPORT void iwn_proc_unref(pid_t pid);
 
 /// Dispose process management module releasing out all memory resources.
 IW_EXPORT void iwn_proc_dispose(void);
+
+IW_EXPORT bool iwn_proc_dispose2(int signal, long timeout_ms);
 
 /// Returns process spawn command.
 /// @note Returned value should be released by `free()`.

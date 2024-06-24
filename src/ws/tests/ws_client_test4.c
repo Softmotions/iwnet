@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
 
   iwn_poller_poll(poller);
 
-  iwn_proc_dispose();
+  iwn_proc_dispose2(SIGTERM, 10000);
   iwn_poller_destroy(&poller);
 
 finish:
