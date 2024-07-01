@@ -505,62 +505,82 @@ iwrc iwn_proc_wait(pid_t pid) {
   return 0;
 }
 
-iwrc iwn_proc_wait_timeout(pid_t pid, long timeout_ms, bool *out_timeout) {
-  iwrc rc = 0;
-  *out_timeout = false;
-  long remaining = timeout_ms;
+iwrc iwn_proc_wait_list_timeout(pid_t *pids_, int pids_num, long timeout_ms, bool *out_timeout) {
+  if (!pids_ || pids_num < 1) {
+    return 0;
+  }
+  if (pids_num > 4096) {
+    return IW_ERROR_INVALID_ARGS;
+  }
 
-  if (timeout_ms < 1) {
-    return iwn_proc_wait(pid);
+  if (out_timeout) {
+    *out_timeout = false;
+  }
+
+  iwrc rc = 0;
+  int pids_towait = 0;
+  long remaining = timeout_ms;
+  pid_t pids[pids_num];
+
+  for (int i = 0; i < pids_num; ++i) {
+    if (pids_[i] > -1) {
+      pids_towait++;
+      pids[i] = pids_[i];
+    } else {
+      pids[i] = -1;
+    }
   }
 
   pthread_mutex_lock(&cc.mtx);
-  struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
-  if (!proc) {
-    pthread_mutex_unlock(&cc.mtx);
-    return IW_ERROR_NOT_EXISTS;
+
+  while (pids_towait > 0) {
+    for (int i = 0; i < pids_num; ++i) {
+      if (pids[i] > -1) {
+        struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pids[i]) : 0;
+        if (!proc || proc->wstatus != -1) {
+          pids[i] = -1;
+          --pids_towait;
+        }
+      }
+    }
+
+    if (pids_towait < 1) {
+      break;
+    }
+
+    if (timeout_ms > 0) {
+      bool bv = false;
+      uint64_t ts1, ts2;
+
+      RCC(rc, finish, iwp_current_time_ms(&ts1, true));
+      RCC(rc, finish, iw_cond_timed_wait_ms(&cc.cond, &cc.mtx, remaining, &bv));
+      if (bv) {
+        if (out_timeout) {
+          *out_timeout = true;
+        }
+        break;
+      }
+
+      RCC(rc, finish, iwp_current_time_ms(&ts2, true));
+      remaining -= (ts2 - ts1);
+      if (remaining < 1) {
+        if (out_timeout) {
+          *out_timeout = true;
+        }
+        break;
+      }
+    } else {
+      RCT(finish, pthread_cond_wait(&cc.cond, &cc.mtx));
+    }
   }
-  if (proc->wstatus != -1) {
-    pthread_mutex_unlock(&cc.mtx);
-    return 0;
-  }
-  do {
-    bool bv = false;
-    uint64_t ts1, ts2;
 
-    rc = iwp_current_time_ms(&ts1, true);
-    if (rc) {
-      break;
-    }
-
-    rc = iw_cond_timed_wait_ms(&cc.cond, &cc.mtx, remaining, &bv);
-    if (rc) {
-      break;
-    }
-
-    if (bv) {
-      *out_timeout = true;
-      break;
-    }
-
-    proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
-    if (!proc || proc->wstatus != -1) {
-      break;
-    }
-
-    rc = iwp_current_time_ms(&ts2, true);
-    if (rc) {
-      break;
-    }
-
-    remaining -= (ts2 - ts1);
-    if (remaining < 1) {
-      *out_timeout = true;
-      break;
-    }
-  } while (1);
+finish:
   pthread_mutex_unlock(&cc.mtx);
   return rc;
+}
+
+iwrc iwn_proc_wait_timeout(pid_t pid, long timeout_ms, bool *out_timeout) {
+  return iwn_proc_wait_list_timeout((pid_t[]) { pid }, 1, timeout_ms, out_timeout);
 }
 
 void iwn_proc_wait_all(void) {
