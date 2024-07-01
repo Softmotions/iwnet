@@ -86,7 +86,7 @@ IW_EXPORT iwrc iwn_proc_wait(pid_t pid);
 
 IW_EXPORT iwrc iwn_proc_wait_timeout(pid_t pid, long timeout_ms, bool *out_timeout);
 
-IW_EXPORT iwrc iwn_proc_wait_list_timeout(pid_t *pids, int pids_num, long timeout_ms, bool *out_timeout);
+IW_EXPORT iwrc iwn_proc_wait_list_timeout(const pid_t *pids, int pids_num, long timeout_ms, bool *out_timeout);
 
 /// Blocks current thread until all child processes managed by this module became inactive.
 IW_EXPORT void iwn_proc_wait_all(void);

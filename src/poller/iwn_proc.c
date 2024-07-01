@@ -505,7 +505,7 @@ iwrc iwn_proc_wait(pid_t pid) {
   return 0;
 }
 
-iwrc iwn_proc_wait_list_timeout(pid_t *pids_, int pids_num, long timeout_ms, bool *out_timeout) {
+iwrc iwn_proc_wait_list_timeout(const pid_t *pids_, int pids_num, long timeout_ms, bool *out_timeout) {
   if (!pids_ || pids_num < 1) {
     return 0;
   }
