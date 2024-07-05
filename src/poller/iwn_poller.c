@@ -798,6 +798,7 @@ static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   p->fd = -1;
+  p->stop = true;
   p->flags = spec.flags & (IWN_POLLER_POLL_NO_FDS);
 #ifdef IWN_EPOLL
   p->timer_fd = -1;
@@ -977,6 +978,7 @@ void iwn_poller_flags_set(struct iwn_poller *p, uint32_t flags) {
 }
 
 void iwn_poller_poll(struct iwn_poller *p) {
+  p->stop = false;
   if (p->thread_name) {
     iwp_set_current_thread_name(p->thread_name);
     free(p->thread_name);
