@@ -941,7 +941,7 @@ finish:
 }
 
 iwrc iwn_poller_add_destroy_hook(struct iwn_poller *poller, iwn_poller_destroy_hook hook) {
-  if (!hook || poller) {
+  if (!hook || !poller) {
     return IW_ERROR_INVALID_ARGS;
   }
   return iwulist_push(&poller->destroy_hooks, &hook);
