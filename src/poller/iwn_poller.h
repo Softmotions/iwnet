@@ -46,6 +46,8 @@ IW_EXTERN_C_START
 
 struct iwn_poller;
 
+typedef void (*iwn_poller_destroy_hook)(struct iwn_poller*);
+
 /// File descriptor poller monitoring task.
 struct iwn_poller_task {
   int      fd;                                                   ///< File descriptor beeng polled
@@ -157,5 +159,7 @@ IW_EXPORT bool iwn_poller_alive(struct iwn_poller*);
 /// Runs a given `probe` callback in the context of polled filed descriptor `fd`.
 /// All fd related data structures will be alive during callback call.
 IW_EXPORT bool iwn_poller_probe(struct iwn_poller*, int fd, iwn_poller_probe_fn probe, void *fn_user_data);
+
+IW_EXPORT iwrc iwn_poller_add_destroy_hook(struct iwn_poller*, iwn_poller_destroy_hook hook);
 
 IW_EXTERN_C_END

@@ -6,6 +6,7 @@
 #include <iowow/iwtp.h>
 #include <iowow/iwhmap.h>
 #include <iowow/iwth.h>
+#include <iowow/iwarr.h>
 
 #include <pthread.h>
 #include <stdbool.h>
@@ -56,6 +57,8 @@ struct iwn_poller {
   IWTP tp;
   struct iwhmap *slots;
   char *thread_name;
+
+  struct iwulist destroy_hooks; // void (*hook)(struct iwn_poller*)
 
   pthread_mutex_t    mtx;
   pthread_barrier_t  _barrier_poll; ///< Poll-in-thread barrier
@@ -329,6 +332,12 @@ static void _destroy(struct iwn_poller *p) {
     _service_fds_unsubcribe(p);
 #endif
 
+    for (int i = 0, l = iwulist_length(&p->destroy_hooks); i < l; ++i) {
+      iwn_poller_destroy_hook h = *(iwn_poller_destroy_hook*) iwulist_get(&p->destroy_hooks, i);
+      h(p);
+    }
+
+    iwulist_destroy_keep(&p->destroy_hooks);
     iwhmap_destroy(p->slots);
     pthread_mutex_destroy(&p->mtx);
     free(p);
@@ -805,6 +814,7 @@ static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out
   p->event_fd = -1;
 #endif
   p->max_poll_events = spec.one_shot_events;
+  p->destroy_hooks.usize = sizeof(iwn_poller_destroy_hook);
 
   RCN(finish, pthread_mutex_init(&p->mtx, 0));
   RCB(finish, p->slots = iwhmap_create_u32(0));
@@ -928,6 +938,13 @@ finish:
     s->timeout_limit = timeout_limit;
     _timer_check((void*) s, timeout_limit);
   }
+}
+
+iwrc iwn_poller_add_destroy_hook(struct iwn_poller *poller, iwn_poller_destroy_hook hook) {
+  if (!hook || poller) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  return iwulist_push(&poller->destroy_hooks, &hook);
 }
 
 bool iwn_poller_alive(struct iwn_poller *p) {
