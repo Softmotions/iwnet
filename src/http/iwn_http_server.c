@@ -1246,7 +1246,7 @@ static bool _proxy_init(struct client *client) {
     proxy->channel_buf_max_size = (size_t) 1024 * 1024; // 1 Mb
   }
   pthread_mutex_init(&proxy->mtx, 0);
-  RCB(finish, proxy->from_endpoint_buf = iwxstr_new());
+  RCB(finish, proxy->from_endpoint_buf = iwxstr_create_empty());
 
   RCB(finish, proxy->to_endpoint_buf = iwxstr_wrap(client->stream.buf, client->stream.length, client->stream.capacity));
   if (proxy->headers.first) {              // We have an extra headers for proxy endpoint
@@ -2098,7 +2098,7 @@ iwrc iwn_http_response_end(struct iwn_http_req *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
-  struct iwxstr *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_create_empty();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2123,7 +2123,7 @@ iwrc iwn_http_response_stream_start(
   ) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  struct iwxstr *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_create_empty();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2188,7 +2188,7 @@ iwrc iwn_http_response_chunk_write(
   if (body_len < 0) {
     body_len = strlen(body);
   }
-  struct iwxstr *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_create_empty();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2221,7 +2221,7 @@ finish:
 iwrc iwn_http_response_chunk_end(struct iwn_http_req *request) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  struct iwxstr *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_create_empty();
   if (!xstr) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
@@ -2274,7 +2274,7 @@ bool iwn_http_response_write_jbl(
   ) {
   iwrc rc = 0;
   struct iwxstr *xstr = 0;
-  RCB(finish, xstr = iwxstr_new());
+  RCB(finish, xstr = iwxstr_create_empty());
   RCC(rc, finish, jbl_as_json(jbl, jbl_xstr_json_printer, xstr, 0));
   RCC(rc, finish,
       iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));
@@ -2298,7 +2298,7 @@ bool iwn_http_response_write_jbn(
   ) {
   iwrc rc = 0;
   struct iwxstr *xstr = 0;
-  RCB(finish, xstr = iwxstr_new());
+  RCB(finish, xstr = iwxstr_create_empty());
   RCC(rc, finish, jbn_as_json(n, jbl_xstr_json_printer, xstr, 0));
   RCC(rc, finish,
       iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));

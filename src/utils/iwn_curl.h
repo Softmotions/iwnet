@@ -174,7 +174,7 @@ static iwrc xcurlreq_query_add(
   iwrc rc = 0;
   char *aname = 0, *avalue = 0;
   if (!data->_qxstr) {
-    RCA(data->_qxstr = iwxstr_new(), finish);
+    RCA(data->_qxstr = iwxstr_create_empty(), finish);
   }
   RCA(aname = curl_easy_escape(curl, name, name_len), finish);
   RCA(avalue = curl_easy_escape(curl, value, value_len), finish);
@@ -220,7 +220,7 @@ static iwrc xcurlreq_add(
   iwrc rc = 0;
   char *aname = 0, *avalue = 0;
   if (!data->_xstr) {
-    RCA(data->_xstr = iwxstr_new(), finish);
+    RCA(data->_xstr = iwxstr_create_empty(), finish);
   }
   RCA(aname = curl_easy_escape(curl, name, name_len), finish);
   RCA(avalue = curl_easy_escape(curl, value, value_len), finish);

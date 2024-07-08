@@ -22,8 +22,8 @@ static void* _poller_worker(void *arg) {
 }
 
 static iwrc init(void) {
-  xstdout = iwxstr_new();
-  xstderr = iwxstr_new();
+  xstdout = iwxstr_create_empty();
+  xstderr = iwxstr_create_empty();
   return 0;
 }
 

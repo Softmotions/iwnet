@@ -93,7 +93,7 @@ static bool _request_handler(struct iwn_http_req *req) {
   } else if (iwn_http_request_target_is(req, "/large", -1)) {
     IWN_ASSERT(iwn_http_request_is_streamed(req));
     struct iwxstr *xstr;
-    RCA(xstr = iwxstr_new(), finish);
+    RCA(xstr = iwxstr_create_empty(), finish);
     req->user_data = xstr;
     req->on_request_dispose = _on_chunk_req_destroy;
     iwn_http_request_chunk_next(req, _chunk_req_cb);

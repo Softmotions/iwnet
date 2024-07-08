@@ -755,8 +755,8 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   pthread_mutex_init(&ws->mtx, &attr);
   pthread_mutexattr_destroy(&attr);
 
-  RCB(finish, ws->output = iwxstr_new());
-  RCB(finish, ws->input = iwxstr_new());
+  RCB(finish, ws->output = iwxstr_create_empty());
+  RCB(finish, ws->input = iwxstr_create_empty());
   RCB(finish, ws->urlbuf = strdup(spec->url));
 
   struct iwn_url u;

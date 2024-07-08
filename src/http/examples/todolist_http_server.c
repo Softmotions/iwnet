@@ -130,7 +130,7 @@ static int _todo_list(struct iwn_wf_req *req, void *user_data) {
   struct iwxstr *xstr;
 
   // For the sake of simplicity response is not streamed and assembled as buffer.
-  RCB(finish, xstr = iwxstr_new());
+  RCB(finish, xstr = iwxstr_create_empty());
 
   iwxstr_printf(xstr, "#  \tDone\tTitle\n");
   for (struct item *n = items; n; n = n->next) {
@@ -165,7 +165,7 @@ static int _todo_get(struct iwn_wf_req *req, void *user_data) {
     return 404;
   }
 
-  RCB(finish, xstr = iwxstr_new());
+  RCB(finish, xstr = iwxstr_create_empty());
   RCC(rc, finish, iwxstr_printf(xstr, "ID:\t%d\n", n->id));
   RCC(rc, finish, iwxstr_printf(xstr, "Title:\t%s\n", n->title));
   RCC(rc, finish, iwxstr_printf(xstr, "Done:\t%s\n", n->done ? "yes" : "no"));

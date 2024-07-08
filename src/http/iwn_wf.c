@@ -1337,7 +1337,7 @@ iwrc iwn_wf_cookie_add(
   iwrc rc = 0;
   struct iwxstr *xstr;
 
-  RCA(xstr = iwxstr_new(), finish);
+  RCA(xstr = iwxstr_create_empty(), finish);
   RCC(rc, finish, iwxstr_printf(xstr, "%s=\"%s\"", name, value));
   if (opts.max_age_sec < 0) {
     RCC(rc, finish, iwxstr_cat(xstr, "; Max-Age=0", IW_LLEN("; Max-Age=0")));
@@ -1536,7 +1536,7 @@ static void _route_print(struct _pctx ctx, struct route *r) {
   for (int i = 0; i < ctx.indent; ++i) {
     fprintf(ctx.out, "  ");
   }
-  struct iwxstr *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_create_empty();
   if (!xstr) {
     return;
   }

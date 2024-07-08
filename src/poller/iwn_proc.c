@@ -300,7 +300,7 @@ static int64_t _on_ready(
   }
 
   struct iwxstr *xstr;
-  RCB(finish, xstr = iwxstr_new());
+  RCB(finish, xstr = iwxstr_create_empty());
 
   while (!rc) {
     char buf[1024];
@@ -435,7 +435,7 @@ iwrc iwn_proc_stdin_write(pid_t pid, const void *buf, size_t len, bool close) {
   }
   pthread_mutex_lock(&proc->mtx);
   if (!proc->buf_stdin) {
-    RCB(finish, proc->buf_stdin = iwxstr_new2(len));
+    RCB(finish, proc->buf_stdin = iwxstr_create(len));
   }
   if (len > 0) {
     RCC(rc, finish, iwxstr_cat(proc->buf_stdin, buf, len));
@@ -463,7 +463,7 @@ iwrc iwn_proc_datain_write(pid_t pid, const char *buf, size_t len, bool close) {
   }
   pthread_mutex_lock(&proc->mtx);
   if (!proc->buf_datain) {
-    RCB(finish, proc->buf_datain = iwxstr_new2(len));
+    RCB(finish, proc->buf_datain = iwxstr_create(len));
   }
   if (len > 0) {
     RCC(rc, finish, iwxstr_cat(proc->buf_datain, buf, len));
@@ -997,7 +997,7 @@ child_exit:
 }
 
 char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
-  struct iwxstr *xstr = iwxstr_new();
+  struct iwxstr *xstr = iwxstr_create_empty();
   if (!xstr) {
     return 0;
   }
