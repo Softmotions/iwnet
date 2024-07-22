@@ -62,7 +62,7 @@ list(APPEND _TARGETS "${CMAKE_BINARY_DIR}/include/generated_mimegen.h")
 
 add_custom_command(
   OUTPUT "${CMAKE_BINARY_DIR}/include/data_cacert.inc"
-  DEPENDS hoststrliteral
+  DEPENDS hoststrliteral ${CMAKE_SOURCE_DIR}/tools/cacert.pem
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
   COMMAND cmake -E make_directory ${CMAKE_BINARY_DIR}/include
   COMMAND
@@ -72,10 +72,10 @@ add_custom_command(
 
 add_custom_command(
   OUTPUT "${CMAKE_BINARY_DIR}/include/generated_mimegen.h"
-  DEPENDS hostmimegen
+  DEPENDS hostmimegen ${CMAKE_SOURCE_DIR}/tools/mime.types
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
   COMMAND cmake -E make_directory ${CMAKE_BINARY_DIR}/include
-  COMMAND $<TARGET_FILE:hostmimegen> "./mime.types" >
+  COMMAND $<TARGET_FILE:hostmimegen> ${CMAKE_SOURCE_DIR}/tools/mime.types >
           "${CMAKE_BINARY_DIR}/include/generated_mimegen.h")
 
 add_custom_target(generated DEPENDS ${_TARGETS})
