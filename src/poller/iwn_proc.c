@@ -72,7 +72,7 @@ static void _proc_destroy(struct proc *proc) {
     return;
   }
   for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
-    if (proc->fds[i] > -1) {
+    if (proc->fds[i] != -1) {
       iwn_poller_remove(proc->spec.poller, proc->fds[i]);
       proc->fds[i] = -1;
     }
@@ -153,7 +153,7 @@ static void _proc_unref(pid_t pid, int wstatus) {
   pthread_mutex_unlock(&cc.mtx);
 
   for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
-    if (proc->fds[i] > -1) {
+    if (proc->fds[i] != -1) {
       iwn_poller_remove(proc->spec.poller, proc->fds[i]);
       proc->fds[i] = -1;
     }
@@ -523,7 +523,7 @@ iwrc iwn_proc_wait_list_timeout(const pid_t *pids_, int pids_num, long timeout_m
   pid_t pids[pids_num];
 
   for (int i = 0; i < pids_num; ++i) {
-    if (pids_[i] > -1) {
+    if (pids_[i] != -1) {
       pids_towait++;
       pids[i] = pids_[i];
     } else {
@@ -535,7 +535,7 @@ iwrc iwn_proc_wait_list_timeout(const pid_t *pids_, int pids_num, long timeout_m
 
   while (pids_towait > 0) {
     for (int i = 0; i < pids_num; ++i) {
-      if (pids[i] > -1) {
+      if (pids[i] != -1) {
         struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pids[i]) : 0;
         if (!proc || proc->wstatus != -1) {
           pids[i] = -1;
@@ -815,7 +815,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
 
     proc_added = true;
 
-    if (fds[1] > -1) {
+    if (fds[1] != -1) {
       close(fds[1]);
       rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[0],
@@ -835,7 +835,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
         _proc_ref(pid);
       }
     }
-    if (fds[3] > -1) {
+    if (fds[3] != -1) {
       close(fds[3]);
       rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[2],
@@ -855,7 +855,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
         _proc_ref(pid);
       }
     }
-    if (fds[4] > -1) {
+    if (fds[4] != -1) {
       close(fds[4]);
       rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[5],
@@ -871,8 +871,8 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
         rc = 0;
       }
     }
-    if (fds[7] > -1) {
-      close(7);
+    if (fds[7] != -1) {
+      close(fds[7]);
       rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[6],
         .user_data = (void*) (intptr_t) pid,
@@ -891,7 +891,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
         _proc_ref(pid);
       }
     }
-    if (fds[8] > -1) {
+    if (fds[8] != -1) {
       close(fds[8]);
       rc = iwn_poller_add(&(struct iwn_poller_task) {
         .fd = fds[9],
@@ -935,25 +935,25 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
       RCC(rc, finish, spec->on_fork_child(&fcc));
     }
 
-    if (fds[1] > -1) {
+    if (fds[1] != -1) {
       while ((dup2(fds[1], STDOUT_FILENO) == -1) && (errno == EINTR));
       close(fds[0]);
       close(fds[1]);
     }
-    if (fds[3] > -1) {
+    if (fds[3] != -1) {
       while ((dup2(fds[3], STDERR_FILENO) == -1) && (errno == EINTR));
       close(fds[2]);
       close(fds[3]);
     }
-    if (fds[4] > -1) {
+    if (fds[4] != -1) {
       while ((dup2(fds[4], STDIN_FILENO) == -1) && (errno == EINTR));
       close(fds[4]);
       close(fds[5]);
     }
-    if (fds[6] > -1) { // DATAOUT
+    if (fds[6] != -1) { // DATAOUT
       close(fds[6]);
     }
-    if (fds[9] > -1) { // DATAIN
+    if (fds[9] != -1) { // DATAIN
       close(fds[9]);
     }
 
