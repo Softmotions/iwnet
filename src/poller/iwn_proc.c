@@ -271,8 +271,8 @@ static iwrc _proc_init(struct proc *proc, int fds[10]) {
   }
   if (spec->on_dataout) {
     RCN(finish, pipe(&fds[6]));
-    proc->fds[FDS_DATAOUT] = fds[7];
-    RCC(rc, finish, _make_non_blocking(fds[7]));
+    proc->fds[FDS_DATAOUT] = fds[6];
+    RCC(rc, finish, _make_non_blocking(fds[6]));
   }
   if (spec->write_datain) {
     RCN(finish, pipe(&fds[8]));
