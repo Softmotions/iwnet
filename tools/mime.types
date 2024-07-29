@@ -645,6 +645,7 @@ image/jpx					jpx jpf
 image/naplps
 image/pcx					pcx
 image/png					png
+image/webp			  webp
 image/prs.btif
 image/prs.pti
 image/svg+xml					svg svgz
