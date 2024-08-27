@@ -3,6 +3,7 @@
 /// Websocket client.
 
 #include "iwn_ws.h"
+#include <iowow/iwjson.h>
 
 IW_EXTERN_C_START
 
@@ -70,6 +71,10 @@ IW_EXPORT int iwn_ws_client_fd_get(struct iwn_ws_client *ws);
 IW_EXPORT bool iwn_ws_client_write_text(struct iwn_ws_client *ws, const void *buf, size_t buf_len);
 
 IW_EXPORT bool iwn_ws_client_write_text_fd(struct iwn_poller *p, int fd, const void *buf, size_t buf_len);
+
+IW_EXPORT bool iwn_ws_client_write_json(struct iwn_ws_client*, struct jbl_node *json);
+
+IW_EXPORT bool iwn_ws_client_write_json_fd(struct iwn_poller *p, int fd, struct jbl_node *json);
 
 IW_EXPORT bool iwn_ws_client_write_binary(struct iwn_ws_client *ws, const void *buf, size_t buf_len);
 

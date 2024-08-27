@@ -1,3 +1,4 @@
+#include "iwn_ws.h"
 #include "iwn_ws_server.h"
 #include "iwn_http_server_internal.h"
 #include "iwn_base64.h"
@@ -420,6 +421,30 @@ bool iwn_ws_server_write(struct iwn_ws_sess *sess, const char *buf, ssize_t buf_
 
 bool iwn_ws_server_write_fd(struct iwn_poller *p, int fd, const char *buf, ssize_t buf_len) {
   return _ws_server_fd_write(p, fd, buf, buf_len, WSLAY_TEXT_FRAME);
+}
+
+bool iwn_ws_server_write_json(struct iwn_ws_sess *sess, struct jbl_node *json) {
+  bool rv = false;
+  struct iwxstr *xstr = iwxstr_create_empty();
+  if (xstr) {
+    if (!jbn_as_json(json, jbl_xstr_json_printer, xstr, 0)) {
+      rv = iwn_ws_server_write(sess, iwxstr_ptr(xstr), iwxstr_len(xstr));
+    }
+    iwxstr_destroy(xstr);
+  }
+  return rv;
+}
+
+bool iwn_ws_server_write_json_fd(struct iwn_poller *p, int fd, struct jbl_node *json) {
+  bool rv = false;
+  struct iwxstr *xstr = iwxstr_create_empty();
+  if (xstr) {
+    if (!jbn_as_json(json, jbl_xstr_json_printer, xstr, 0)) {
+      rv = iwn_ws_server_write_fd(p, fd, iwxstr_ptr(xstr), iwxstr_len(xstr));
+    }
+    iwxstr_destroy(xstr);
+  }
+  return rv;
 }
 
 bool iwn_ws_server_printf_va(struct iwn_ws_sess *sess, const char *fmt, va_list va) {

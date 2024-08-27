@@ -1,8 +1,7 @@
 #pragma once
 
-#include "iwn_ws.h"
 #include "iwn_wf.h"
-
+#include <iowow/iwjson.h>
 #include <stdarg.h>
 
 IW_EXTERN_C_START
@@ -40,6 +39,10 @@ struct iwn_ws_handler_spec {
 IW_EXPORT bool iwn_ws_server_write(struct iwn_ws_sess*, const char *buf, ssize_t buf_len);
 
 IW_EXPORT bool iwn_ws_server_write_fd(struct iwn_poller *p, int fd, const char *buf, ssize_t buf_len);
+
+IW_EXPORT bool iwn_ws_server_write_json(struct iwn_ws_sess*, struct jbl_node *json);
+
+IW_EXPORT bool iwn_ws_server_write_json_fd(struct iwn_poller *p, int fd, struct jbl_node *json);
 
 /// Writes prinf formatted messages into websocket data channel.
 /// @return `false` if write operation failed.

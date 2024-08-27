@@ -706,6 +706,30 @@ bool iwn_ws_client_write_text_fd(struct iwn_poller *p, int fd, const void *buf, 
   return _write_fd(p, fd, buf, buf_len, WSLAY_TEXT_FRAME);
 }
 
+bool iwn_ws_client_write_json(struct iwn_ws_client *ws, struct jbl_node *json) {
+  bool rv = false;
+  struct iwxstr *xstr = iwxstr_create_empty();
+  if (xstr) {
+    if (!jbn_as_json(json, jbl_xstr_json_printer, xstr, 0)) {
+      rv = iwn_ws_client_write_text(ws, iwxstr_ptr(xstr), iwxstr_len(xstr));
+    }
+    iwxstr_destroy(xstr);
+  }
+  return rv;
+}
+
+bool iwn_ws_client_write_json_fd(struct iwn_poller *p, int fd, struct jbl_node *json) {
+  bool rv = false;
+  struct iwxstr *xstr = iwxstr_create_empty();
+  if (xstr) {
+    if (!jbn_as_json(json, jbl_xstr_json_printer, xstr, 0)) {
+      rv = iwn_ws_client_write_text_fd(p, fd, iwxstr_ptr(xstr), iwxstr_len(xstr));
+    }
+    iwxstr_destroy(xstr);
+  }
+  return rv;
+}
+
 bool iwn_ws_client_write_binary(struct iwn_ws_client *ws, const void *buf, size_t buf_len) {
   return _write(ws, buf, buf_len, WSLAY_BINARY_FRAME);
 }
