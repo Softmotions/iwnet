@@ -120,6 +120,7 @@ list(
   ${CMAKE_CURRENT_SOURCE_DIR}/ssl/iwn_brssl_poller_adapter.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_poller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_proc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_watcher.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_scheduler.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_poller_adapter.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_direct_poller_adapter.h

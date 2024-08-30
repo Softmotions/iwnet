@@ -14,6 +14,7 @@ Works on Linux, macOS, FreeBSD
 * SSL Layer is based on BearSSL ([iwn_brssl_poller_adapter.h](./src/ssl/iwn_brssl_poller_adapter.h))
 * Manager of child processes ([iwn_proc.h](./src/poller/iwn_proc.h))
 * Timer ([iwn_scheduler.h](./src/poller/iwn_scheduler.h))
+* Inotify watcher wrapper [iwn_watcher](./src/poller/iwn_watcher.h)
 
 ## Build from sources
 
