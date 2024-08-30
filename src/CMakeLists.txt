@@ -78,7 +78,7 @@ set(MODULES
     ws
     http)
 
-  list(APPEND PROJECT_LIBRARIES "IOWOW::static")
+list(APPEND PROJECT_LIBRARIES "IOWOW::static")
 
 list(
   APPEND
@@ -95,9 +95,9 @@ list(APPEND ALL_SRC ${ROOT_SRC})
 foreach(MODULE IN LISTS MODULES)
   if(NOT EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/CMakeLists.txt)
     file(GLOB MODULE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.c
-         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.cpp)
+         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.cc)
     file(GLOB MODULE_HDRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.h
-         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.hpp)
+         ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE}/*.hh)
     list(APPEND ALL_SRC ${MODULE_SRC})
     list(APPEND ALL_HDRS ${MODULE_HDRS})
     list(APPEND PROJECT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/${MODULE})
@@ -120,6 +120,7 @@ list(
   ${CMAKE_CURRENT_SOURCE_DIR}/ssl/iwn_brssl_poller_adapter.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_poller.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_proc.h
+  ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_watcher.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_scheduler.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_poller_adapter.h
   ${CMAKE_CURRENT_SOURCE_DIR}/poller/iwn_direct_poller_adapter.h

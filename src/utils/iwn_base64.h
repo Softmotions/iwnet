@@ -23,7 +23,7 @@
 #include <stddef.h>
 #include <iowow/basedefs.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 #define base64_VARIANT_ORIGINAL            1
 #define base64_VARIANT_ORIGINAL_NO_PADDING 3
@@ -63,4 +63,4 @@ __attribute__((nonnull(1)));
 
 IW_EXPORT char* iwn_base64_encode_url(const void *buf, size_t buf_len, size_t *out_len);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

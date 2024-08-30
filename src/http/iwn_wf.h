@@ -6,7 +6,7 @@
 #include <iowow/iwlog.h>
 #include <stdio.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 /// Error codes specific to web-framework module.
 typedef enum {
@@ -288,4 +288,4 @@ IW_EXPORT void iwn_wf_destroy(struct iwn_wf_ctx *ctx);
 /// Initialize global web-framework state and register WF error codes.
 IW_EXPORT iwrc iwn_wf_init(void);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

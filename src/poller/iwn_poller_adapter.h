@@ -5,7 +5,7 @@
 
 #include "iwn_poller.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 struct iwn_poller_adapter;
 
@@ -23,4 +23,4 @@ struct iwn_poller_adapter {
   int     fd;
 };
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

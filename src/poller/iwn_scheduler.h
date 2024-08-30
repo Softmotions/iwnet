@@ -5,7 +5,7 @@
 #include "iwn_poller.h"
 #include <iowow/iwtp.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 /// Task execute callback.
 typedef void (*iwn_scheduler_task_f)(void *arg);
@@ -28,4 +28,4 @@ IW_EXPORT iwrc iwn_schedule(const struct iwn_scheduler_spec *spec);
 
 IW_EXPORT iwrc iwn_schedule2(const struct iwn_scheduler_spec *spec, int *out_fd);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

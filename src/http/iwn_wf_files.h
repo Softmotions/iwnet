@@ -4,7 +4,7 @@
 
 #include "iwn_wf.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 /// Sends file as response of given `req` with content type `ctype` located at given `path`.
 ///
@@ -25,4 +25,4 @@ IW_EXPORT int iwn_wf_fileobj_serve(
 /// Creates route configuration what servers files located under specified `dir` and parent `route`.
 IW_EXPORT struct iwn_wf_route* iwn_wf_route_dir_attach(struct iwn_wf_route *route, const char *dir);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

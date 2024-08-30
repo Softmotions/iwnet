@@ -10,7 +10,7 @@
 #include <pthread.h>
 #include <stdint.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 #if defined(__FreeBSD__) || defined(__APPLE__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #define IWN_KQUEUE
@@ -162,4 +162,4 @@ IW_EXPORT bool iwn_poller_probe(struct iwn_poller*, int fd, iwn_poller_probe_fn 
 
 IW_EXPORT iwrc iwn_poller_add_destroy_hook(struct iwn_poller*, iwn_poller_destroy_hook hook);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

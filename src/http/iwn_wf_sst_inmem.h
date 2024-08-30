@@ -6,9 +6,9 @@
 
 #include "iwn_wf.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 /// Initialize iwn_wf_session_store `fout_sst` configuration.
 iwrc sst_inmem_create(struct iwn_wf_session_store *fout_sst);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

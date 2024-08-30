@@ -2,7 +2,7 @@
 
 #include "iwnet.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 /// Checks if given network `port` is bound on specified `listen` address.
 ///
@@ -14,4 +14,4 @@ IW_EXTERN_C_START
 ///
 IW_EXPORT iwrc iwn_port_is_bound(const char *listen, int port, uint32_t flags, bool *out);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

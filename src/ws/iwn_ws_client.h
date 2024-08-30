@@ -5,7 +5,7 @@
 #include "iwn_ws.h"
 #include <iowow/iwjson.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 struct iwn_ws_client;
 
@@ -84,4 +84,4 @@ IW_EXPORT bool iwn_ws_client_ping(struct iwn_ws_client *ws, const void *buf, siz
 
 IW_EXPORT bool iwn_ws_client_ping_fd(struct iwn_poller *p, int fd, const void *buf, size_t buf_len);
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

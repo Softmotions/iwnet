@@ -3,7 +3,7 @@
 #include <iowow/basedefs.h>
 #include <iowow/iwpool.h>
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 struct iwn_pairs;
 
@@ -84,4 +84,4 @@ IW_EXPORT iwrc iwn_pair_add_pool_all(
   ssize_t           val_len);
 
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;

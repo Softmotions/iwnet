@@ -2,7 +2,7 @@
 
 #include "iwn_poller.h"
 
-IW_EXTERN_C_START
+IW_EXTERN_C_START;
 
 #define WS_MAGIC13 "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -27,4 +27,4 @@ typedef enum {
   _WS_ERROR_END,
 } iwn_ws_ecode_e;
 
-IW_EXTERN_C_END
+IW_EXTERN_C_END;
