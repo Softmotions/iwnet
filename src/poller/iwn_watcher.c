@@ -64,6 +64,7 @@ iwrc iwn_watcher_create(const struct iwn_watcher_spec *spec, struct iwn_watcher 
   if (!spec || !out || !spec->poller || !spec->on_event) {
     return IW_ERROR_INVALID_ARGS;
   }
+  *out = 0;
   struct iwn_watcher *w = malloc(sizeof(*w));
   if (!w) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
@@ -90,6 +91,7 @@ iwrc iwn_watcher_create(const struct iwn_watcher_spec *spec, struct iwn_watcher 
   });
   if (!rc) {
     iwref_ref(&w->ref);
+    *out = w;
   }
 
 finish:
