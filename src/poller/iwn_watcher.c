@@ -50,11 +50,11 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t events) {
       }
       break;
     }
-  }
-  const struct inotify_event *event;
-  for (char *ptr = buf; ptr < buf + len; ptr += sizeof(struct inotify_event) + event->len) {
-    event = (const struct inotify_event*) ptr;
-    w->on_event(event, w->on_event_user_data);
+    const struct inotify_event *event;
+    for (char *ptr = buf; ptr < buf + len; ptr += sizeof(struct inotify_event) + event->len) {
+      event = (const struct inotify_event*) ptr;
+      w->on_event(event, w->on_event_user_data);
+    }
   }
   return 0;
 }
