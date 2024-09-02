@@ -33,6 +33,7 @@ static void _watcher_destroy(void *d) {
 
 static void _on_dispose(const struct iwn_poller_task *t) {
   struct iwn_watcher *w = t->user_data;
+  w->fd = -1;
   w->poller = 0;
   iwref_unref(&w->ref);
 }
