@@ -13,7 +13,7 @@ struct iwn_watcher {
   struct iwn_poller  *poller;
   void  (*on_event)(const struct inotify_event *evt, void *on_event_user_data);
   void *on_event_user_data;
-  bool destroy;
+  bool  destroy;
 };
 
 static void _watcher_destroy(void *d) {
@@ -33,6 +33,7 @@ static void _watcher_destroy(void *d) {
 
 static void _on_dispose(const struct iwn_poller_task *t) {
   struct iwn_watcher *w = t->user_data;
+  w->poller = 0;
   iwref_unref(&w->ref);
 }
 
