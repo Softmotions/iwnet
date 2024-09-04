@@ -1987,7 +1987,7 @@ void iwn_http_response_body_set(
   struct iwn_http_req *request,
   const char          *body,
   ssize_t              body_len,
-  void (              *body_free )(void*)
+  void               (*body_free)(void*)
   ) {
   if (!body || body_len == 0) {
     iwn_http_response_body_clear(request);

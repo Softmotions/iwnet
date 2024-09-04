@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
 
   struct iwn_wf_server_spec spec = {
     .listen = "localhost",
-    .port   = port,
+    .port = port,
     .poller = poller,
   };
   if (ssl) {

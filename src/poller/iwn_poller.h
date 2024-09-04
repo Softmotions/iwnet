@@ -67,13 +67,13 @@ struct iwn_poller_spec {
   /// Number of cpu cores if zero.
   /// Default: 2, Max: 1024
   int num_threads;
-  
+
   /// Max number of events to take for each poll iteration.
   /// Default: 1, Max: 128
   int one_shot_events;
 
   /// Default: 0, Max: 2
-  /// @see iwtp_spec::overflow_threads_factor  
+  /// @see iwtp_spec::overflow_threads_factor
   int overflow_threads_factor;
 
   /// Default: 0 (unlimited)
@@ -82,7 +82,7 @@ struct iwn_poller_spec {
 
   /// Poller operational flags.
   /// Bitmask of following:
-  ///   - IWN_POLLER_POLL_NO_FDS 
+  ///   - IWN_POLLER_POLL_NO_FDS
   unsigned flags;
 
   /// @see iwtp_spec::warn_on_overflow_thread_spawn

@@ -34,17 +34,23 @@ void wslay_queue_init(struct wslay_queue *queue) {
   queue->tail = &queue->top;
 }
 
-void wslay_queue_deinit(struct wslay_queue *queue) { (void)queue; }
+void wslay_queue_deinit(struct wslay_queue *queue) {
+  (void) queue;
+}
 
-void wslay_queue_push(struct wslay_queue *queue,
-                      struct wslay_queue_entry *ent) {
+void wslay_queue_push(
+  struct wslay_queue       *queue,
+  struct wslay_queue_entry *ent
+  ) {
   ent->next = NULL;
   *queue->tail = ent;
   queue->tail = &ent->next;
 }
 
-void wslay_queue_push_front(struct wslay_queue *queue,
-                            struct wslay_queue_entry *ent) {
+void wslay_queue_push_front(
+  struct wslay_queue       *queue,
+  struct wslay_queue_entry *ent
+  ) {
   ent->next = queue->top;
   queue->top = ent;
 
@@ -61,12 +67,12 @@ void wslay_queue_pop(struct wslay_queue *queue) {
   }
 }
 
-struct wslay_queue_entry *wslay_queue_top(struct wslay_queue *queue) {
+struct wslay_queue_entry* wslay_queue_top(struct wslay_queue *queue) {
   assert(queue->top);
   return queue->top;
 }
 
-struct wslay_queue_entry *wslay_queue_tail(struct wslay_queue *queue) {
+struct wslay_queue_entry* wslay_queue_tail(struct wslay_queue *queue) {
   assert(queue->top);
   return wslay_struct_of(queue->tail, struct wslay_queue_entry, next);
 }

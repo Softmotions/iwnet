@@ -47,6 +47,7 @@
 #  define hton64(x) (x)
 #else /* !WORDS_BIGENDIAN */
 uint64_t wslay_byteswap64(uint64_t x);
+
 #  define ntoh64(x) wslay_byteswap64(x)
 #  define hton64(x) wslay_byteswap64(x)
 #endif /* !WORDS_BIGENDIAN */

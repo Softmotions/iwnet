@@ -134,7 +134,7 @@ static int hex2bin(
  * Original code by Thomas Pornin.
  */
 #define EQ(x, y) \
-  ((((0U - ((unsigned int) (x) ^ (unsigned int) (y))) >> 8) & 0xFF) ^ 0xFF)
+        ((((0U - ((unsigned int) (x) ^ (unsigned int) (y))) >> 8) & 0xFF) ^ 0xFF)
 #define GT(x, y) ((((unsigned int) (y) - (unsigned int) (x)) >> 8) & 0xFF)
 #define GE(x, y) (GT(y, x) ^ 0xFF)
 #define LT(x, y) GT(y, x)

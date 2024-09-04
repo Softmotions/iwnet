@@ -33,7 +33,7 @@
 
 #include <stddef.h>
 
-#define wslay_struct_of(ptr, type, member)                                     \
-  ((type *)(void *)((char *)(ptr)-offsetof(type, member)))
+#define wslay_struct_of(ptr, type, member) \
+        ((type*) (void*) ((char*) (ptr) - offsetof(type, member)))
 
 #endif /* WSLAY_MACRO_H */

@@ -8,14 +8,14 @@
 
 static atomic_int iwn_assertions_failed;
 
-#define IWN_ASSERT_FATAL(v__) \
-  if (!(v__)) { \
-    iwlog_error2("Assertion failed: "#v__); \
-    exit(1); \
-  }
+#define IWN_ASSERT_FATAL(v__)                     \
+        if (!(v__)) {                             \
+          iwlog_error2("Assertion failed: "#v__); \
+          exit(1);                                \
+        }
 
-#define IWN_ASSERT(v__) \
-  if (!(v__)) { \
-    ++iwn_assertions_failed; \
-    iwlog_error2("Assertion failed: "#v__); \
-  }
+#define IWN_ASSERT(v__)                           \
+        if (!(v__)) {                             \
+          ++iwn_assertions_failed;                \
+          iwlog_error2("Assertion failed: "#v__); \
+        }

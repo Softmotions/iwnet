@@ -276,7 +276,7 @@ IW_EXPORT void iwn_http_response_body_set(
   struct iwn_http_req*,
   const char *body,
   ssize_t     body_len,
-  void (     *body_free )(void*));
+  void      (*body_free)(void*));
 
 /// Completes a response for given request.
 /// All response headers, body will be transferred to the client peer.

@@ -15,21 +15,21 @@
 IW_EXTERN_C_START;
 
 // Curl return code check
-#define XCC(cc_, label_, op_)               \
-  cc_ = op_;                                \
-  if (cc_) {                                \
-    iwlog_error2(curl_easy_strerror(cc_));  \
-    rc = WF_ERROR_CURL_API;                 \
-    goto label_;                            \
-  }
+#define XCC(cc_, label_, op_)                    \
+        cc_ = op_;                               \
+        if (cc_) {                               \
+          iwlog_error2(curl_easy_strerror(cc_)); \
+          rc = WF_ERROR_CURL_API;                \
+          goto label_;                           \
+        }
 
-#define XUCC(cc_, label_, op_)              \
-  cc_ = xcurlcode(op_);                     \
-  if (cc_) {                                \
-    iwlog_error2(curl_easy_strerror(cc_));  \
-    rc = WF_ERROR_CURL_API;                 \
-    goto label_;                            \
-  }
+#define XUCC(cc_, label_, op_)                   \
+        cc_ = xcurlcode(op_);                    \
+        if (cc_) {                               \
+          iwlog_error2(curl_easy_strerror(cc_)); \
+          rc = WF_ERROR_CURL_API;                \
+          goto label_;                           \
+        }
 
 struct xcurl_cursor {
   const char *rp;
@@ -49,8 +49,8 @@ struct xcurlreq {
   const char *payload;
   size_t      payload_len;
   struct curl_slist *headers;
-  struct iwxstr  *_xstr;
-  struct iwxstr  *_qxstr;
+  struct iwxstr     *_xstr;
+  struct iwxstr     *_qxstr;
   uint64_t flags;
 };
 
@@ -159,8 +159,8 @@ static const char* xcurl_hdr_find(const char *name, IWLIST *headers) {
 static iwrc xcurlreq_query_add(
   CURL *curl,
   struct xcurlreq *data, const char *name, size_t name_len,
-  const char *value, size_t value_len) {
-
+  const char *value, size_t value_len
+  ) {
   if (!data || !name || !value) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -195,8 +195,8 @@ static iwrc xcurlreq_query_add_i64(
   struct xcurlreq *data,
   const char      *name,
   size_t           name_len,
-  int64_t          value) {
-
+  int64_t          value
+  ) {
   char buf[32];
   size_t len = iwitoa(value, buf, sizeof(buf));
   return xcurlreq_query_add(curl, data, name, name_len, buf, len);
@@ -205,8 +205,8 @@ static iwrc xcurlreq_query_add_i64(
 static iwrc xcurlreq_add(
   CURL *curl,
   struct xcurlreq *data, const char *name, size_t name_len,
-  const char *value, size_t value_len) {
-
+  const char *value, size_t value_len
+  ) {
   if (!data || !name || !value) {
     return IW_ERROR_INVALID_ARGS;
   }
@@ -242,8 +242,8 @@ static iwrc xcurlreq_add_i64(
   struct xcurlreq *data,
   const char      *name,
   size_t           name_len,
-  int64_t          value) {
-
+  int64_t          value
+  ) {
   char buf[32];
   size_t len = iwitoa(value, buf, sizeof(buf));
   return xcurlreq_add(curl, data, name, name_len, buf, len);
@@ -254,8 +254,8 @@ static void xcurlreq_hdr_add(
   const char      *name,
   size_t           name_len,
   const char      *value,
-  size_t           value_len) {
-
+  size_t           value_len
+  ) {
   if (name_len == (size_t) -1) {
     name_len = strlen(name);
   }

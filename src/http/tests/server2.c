@@ -313,10 +313,10 @@ int main(int argc, char *argv[]) {
   RCC(rc, finish, iwn_poller_create(nthreads, oneshot, &poller));
 
   struct iwn_wf_server_spec spec = {
-    .listen                        = "localhost",
-    .port                          = port,
-    .poller                        = poller,
-    .request_timeout_sec           = -1,
+    .listen = "localhost",
+    .port = port,
+    .poller = poller,
+    .request_timeout_sec = -1,
     .request_timeout_keepalive_sec = -1,
   };
 

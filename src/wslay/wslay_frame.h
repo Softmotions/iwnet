@@ -39,7 +39,7 @@ enum wslay_frame_state {
   RECV_PAYLOADLEN,
   RECV_EXT_PAYLOADLEN,
   RECV_MASKKEY,
-  RECV_PAYLOAD
+  RECV_PAYLOAD,
 };
 
 struct wslay_frame_opcode_memo {
@@ -51,14 +51,14 @@ struct wslay_frame_opcode_memo {
 #define WSLAY_FRAME_HDR_SIZ 16
 
 struct wslay_frame_context {
-  uint8_t ibuf[4096];
+  uint8_t  ibuf[4096];
   uint8_t *ibufmark;
   uint8_t *ibuflimit;
   struct wslay_frame_opcode_memo iom;
   uint64_t ipayloadlen;
   uint64_t ipayloadoff;
-  uint8_t imask;
-  uint8_t imaskkey[4];
+  uint8_t  imask;
+  uint8_t  imaskkey[4];
   enum wslay_frame_state istate;
   size_t ireqread;
 

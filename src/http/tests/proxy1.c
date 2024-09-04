@@ -89,11 +89,11 @@ int main(int argc, char *argv[]) {
   }, &ctx));
 
   struct iwn_wf_server_spec spec = {
-    .listen                        = "localhost",
-    .port                          = port,
-    .poller                        = poller,
-    .proxy_handler                 = _server_proxy_handler,
-    .request_timeout_sec           = -1,
+    .listen = "localhost",
+    .port = port,
+    .poller = poller,
+    .proxy_handler = _server_proxy_handler,
+    .request_timeout_sec = -1,
     .request_timeout_keepalive_sec = -1,
   };
 

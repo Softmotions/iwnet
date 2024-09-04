@@ -36,19 +36,19 @@
 struct wslay_event_byte_chunk {
   struct wslay_queue_entry qe;
   uint8_t *data;
-  size_t data_length;
+  size_t   data_length;
 };
 
 struct wslay_event_imsg {
-  uint8_t fin;
-  uint8_t rsv;
-  uint8_t opcode;
+  uint8_t  fin;
+  uint8_t  rsv;
+  uint8_t  opcode;
   uint32_t utf8state;
   struct wslay_queue chunks;
   size_t msg_length;
 };
 
-enum wslay_event_msg_type { WSLAY_NON_FRAGMENTED, WSLAY_FRAGMENTED };
+enum wslay_event_msg_type { WSLAY_NON_FRAGMENTED, WSLAY_FRAGMENTED, };
 
 struct wslay_event_omsg {
   struct wslay_queue_entry qe;
@@ -58,7 +58,7 @@ struct wslay_event_omsg {
   enum wslay_event_msg_type type;
 
   uint8_t *data;
-  size_t data_length;
+  size_t   data_length;
 
   union wslay_event_msg_source source;
   wslay_event_fragmented_msg_callback read_callback;
@@ -71,11 +71,11 @@ struct wslay_event_frame_user_data {
 
 enum wslay_event_close_status {
   WSLAY_CLOSE_RECEIVED = 1 << 0,
-  WSLAY_CLOSE_QUEUED = 1 << 1,
-  WSLAY_CLOSE_SENT = 1 << 2
+  WSLAY_CLOSE_QUEUED   = 1 << 1,
+  WSLAY_CLOSE_SENT     = 1 << 2,
 };
 
-enum wslay_event_config { WSLAY_CONFIG_NO_BUFFERING = 1 << 0 };
+enum wslay_event_config { WSLAY_CONFIG_NO_BUFFERING = 1 << 0, };
 
 struct wslay_event_context {
   /* config status, bitwise OR of enum wslay_event_config values*/
@@ -122,7 +122,7 @@ struct wslay_event_context {
   /* The sum of message length in send_queue */
   size_t queued_msg_length;
   /* Buffer used for fragmented messages */
-  uint8_t _obuf[4096];
+  uint8_t  _obuf[4096];
   uint8_t *obuf;
   uint8_t *obuflimit;
   uint8_t *obufmark;
@@ -130,9 +130,9 @@ struct wslay_event_context {
   uint64_t opayloadlen;
   /* next byte offset of payload currently being sent. */
   uint64_t opayloadoff;
-  struct wslay_event_callbacks callbacks;
+  struct wslay_event_callbacks       callbacks;
   struct wslay_event_frame_user_data frame_user_data;
-  void *user_data;
+  void   *user_data;
   uint8_t allowed_rsv_bits;
 };
 

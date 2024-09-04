@@ -12,7 +12,7 @@ struct iwn_watcher;
 
 struct iwn_watcher_spec {
   struct iwn_poller *poller;
-  void (*on_event)(const struct inotify_event *evt, void *on_event_user_data);
+  void  (*on_event)(const struct inotify_event *evt, void *on_event_user_data);
   void *on_event_user_data;
 };
 
