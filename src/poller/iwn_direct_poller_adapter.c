@@ -51,8 +51,7 @@ iwrc iwn_direct_poller_adapter(
   void                         *user_data,
   uint32_t                      events,
   uint32_t                      events_mod,
-  long                          timeout_sec
-  ) {
+  long                          timeout_sec) {
   iwrc rc = 0;
   struct pa *a = calloc(1, sizeof(*a));
   if (!a) {

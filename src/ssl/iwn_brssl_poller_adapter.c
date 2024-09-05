@@ -309,8 +309,7 @@ finish:
 
 static void x509_start_chain(
   const br_x509_class **ctx,
-  const char           *server_name
-  ) {
+  const char           *server_name) {
   struct x509_client_context *x509 = (void*) ctx;
   if (!x509->verifyhost) {
     server_name = 0;
@@ -326,8 +325,7 @@ static void x509_start_cert(const br_x509_class **ctx, uint32_t length) {
 static void x509_append(
   const br_x509_class **ctx,
   const unsigned char  *buf,
-  size_t                len
-  ) {
+  size_t                len) {
   struct x509_client_context *x509 = (void*) ctx;
   x509->minimal.vtable->append(&x509->minimal.vtable, buf, len);
 }
@@ -349,8 +347,7 @@ static unsigned x509_end_chain(const br_x509_class **ctx) {
 
 static const br_x509_pkey* x509_get_pkey(
   const br_x509_class* const *ctx,
-  unsigned                   *usages
-  ) {
+  unsigned                   *usages) {
   struct x509_client_context *x509 = (void*) ctx;
   return x509->minimal.vtable->get_pkey(&x509->minimal.vtable, usages);
 }

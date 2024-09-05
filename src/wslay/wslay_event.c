@@ -101,8 +101,7 @@ static uint32_t decode(uint32_t *state, uint32_t *codep, uint32_t byte) {
 
 static ssize_t wslay_event_frame_recv_callback(
   uint8_t *buf, size_t len,
-  int flags, void *user_data
-  ) {
+  int flags, void *user_data) {
   struct wslay_event_frame_user_data *e
     = (struct wslay_event_frame_user_data*) user_data;
   return e->ctx->callbacks.recv_callback(e->ctx, buf, len, flags, e->user_data);
@@ -110,8 +109,7 @@ static ssize_t wslay_event_frame_recv_callback(
 
 static ssize_t wslay_event_frame_send_callback(
   const uint8_t *data, size_t len,
-  int flags, void *user_data
-  ) {
+  int flags, void *user_data) {
   struct wslay_event_frame_user_data *e
     = (struct wslay_event_frame_user_data*) user_data;
   return e->ctx->callbacks.send_callback(e->ctx, data, len, flags,
@@ -120,8 +118,7 @@ static ssize_t wslay_event_frame_send_callback(
 
 static int wslay_event_frame_genmask_callback(
   uint8_t *buf, size_t len,
-  void *user_data
-  ) {
+  void *user_data) {
   struct wslay_event_frame_user_data *e
     = (struct wslay_event_frame_user_data*) user_data;
   return e->ctx->callbacks.genmask_callback(e->ctx, buf, len, e->user_data);
@@ -129,8 +126,7 @@ static int wslay_event_frame_genmask_callback(
 
 static int wslay_event_byte_chunk_init(
   struct wslay_event_byte_chunk **chunk,
-  size_t                          len
-  ) {
+  size_t                          len) {
   *chunk = malloc(sizeof(struct wslay_event_byte_chunk) + len);
   if (*chunk == NULL) {
     return WSLAY_ERR_NOMEM;
@@ -150,15 +146,13 @@ static void wslay_event_byte_chunk_free(struct wslay_event_byte_chunk *c) {
 static void wslay_event_byte_chunk_copy(
   struct wslay_event_byte_chunk *c,
   size_t off, const uint8_t *data,
-  size_t data_length
-  ) {
+  size_t data_length) {
   memcpy(c->data + off, data, data_length);
 }
 
 static void wslay_event_imsg_set(
   struct wslay_event_imsg *m, uint8_t fin,
-  uint8_t rsv, uint8_t opcode
-  ) {
+  uint8_t rsv, uint8_t opcode) {
   m->fin = fin;
   m->rsv = rsv;
   m->opcode = opcode;
@@ -182,8 +176,7 @@ static void wslay_event_imsg_reset(struct wslay_event_imsg *m) {
 
 static int wslay_event_imsg_append_chunk(
   struct wslay_event_imsg *m,
-  size_t                   len
-  ) {
+  size_t                   len) {
   if (len == 0) {
     return 0;
   } else {
@@ -202,8 +195,7 @@ static int wslay_event_omsg_non_fragmented_init(
   struct wslay_event_omsg **m,
   uint8_t opcode, uint8_t rsv,
   const uint8_t *msg,
-  size_t msg_length
-  ) {
+  size_t msg_length) {
   *m = malloc(sizeof(struct wslay_event_omsg) + msg_length + WSLAY_FRAME_HDR_SIZ);
   if (!*m) {
     return WSLAY_ERR_NOMEM;
@@ -224,8 +216,7 @@ static int wslay_event_omsg_non_fragmented_init(
 static int wslay_event_omsg_fragmented_init(
   struct wslay_event_omsg **m, uint8_t opcode, uint8_t rsv,
   const union wslay_event_msg_source source,
-  wslay_event_fragmented_msg_callback read_callback
-  ) {
+  wslay_event_fragmented_msg_callback read_callback) {
   *m = calloc(1, sizeof(struct wslay_event_omsg));
   if (!*m) {
     return WSLAY_ERR_NOMEM;
@@ -244,8 +235,7 @@ static void wslay_event_omsg_free(struct wslay_event_omsg *m) {
 
 static uint8_t* wslay_event_flatten_queue(
   struct wslay_queue *queue,
-  size_t              len
-  ) {
+  size_t              len) {
   if (len == 0) {
     return NULL;
   } else {
@@ -274,8 +264,7 @@ static int wslay_event_is_msg_queueable(wslay_event_context_ptr ctx) {
 
 int wslay_event_queue_close(
   wslay_event_context_ptr ctx, uint16_t status_code,
-  const uint8_t *reason, size_t reason_length
-  ) {
+  const uint8_t *reason, size_t reason_length) {
   if (!wslay_event_is_msg_queueable(ctx)) {
     return WSLAY_ERR_NO_MORE_MSG;
   } else if (reason_length > 123) {
@@ -311,8 +300,7 @@ static int wslay_event_queue_close_wrapper(
   wslay_event_context_ptr ctx,
   uint16_t                status_code,
   const uint8_t          *reason,
-  size_t                  reason_length
-  ) {
+  size_t                  reason_length) {
   int r;
   ctx->read_enabled = 0;
   if (  (r = wslay_event_queue_close(ctx, status_code, reason, reason_length))
@@ -324,22 +312,19 @@ static int wslay_event_queue_close_wrapper(
 
 static int wslay_event_verify_rsv_bits(
   wslay_event_context_ptr ctx,
-  uint8_t                 rsv
-  ) {
+  uint8_t                 rsv) {
   return ((rsv & ~ctx->allowed_rsv_bits) == 0);
 }
 
 int wslay_event_queue_msg(
   wslay_event_context_ptr       ctx,
-  const struct wslay_event_msg *arg
-  ) {
+  const struct wslay_event_msg *arg) {
   return wslay_event_queue_msg_ex(ctx, arg, WSLAY_RSV_NONE);
 }
 
 int wslay_event_queue_msg_ex(
   wslay_event_context_ptr ctx,
-  const struct wslay_event_msg *arg, uint8_t rsv
-  ) {
+  const struct wslay_event_msg *arg, uint8_t rsv) {
   int r;
   struct wslay_event_omsg *omsg;
   if (!wslay_event_is_msg_queueable(ctx)) {
@@ -371,8 +356,7 @@ int wslay_event_queue_fragmented_msg(wslay_event_context_ptr ctx, const struct w
 
 int wslay_event_queue_fragmented_msg_ex(
   wslay_event_context_ptr ctx, const struct wslay_event_fragmented_msg *arg,
-  uint8_t rsv
-  ) {
+  uint8_t rsv) {
   int r;
   struct wslay_event_omsg *omsg;
   if (!wslay_event_is_msg_queueable(ctx)) {
@@ -393,16 +377,14 @@ int wslay_event_queue_fragmented_msg_ex(
 
 void wslay_event_config_set_callbacks(
   wslay_event_context_ptr             ctx,
-  const struct wslay_event_callbacks *callbacks
-  ) {
+  const struct wslay_event_callbacks *callbacks) {
   ctx->callbacks = *callbacks;
 }
 
 static int wslay_event_context_init(
   wslay_event_context_ptr            *ctx,
   const struct wslay_event_callbacks *callbacks,
-  void                               *user_data
-  ) {
+  void                               *user_data) {
   int i, r;
   struct wslay_frame_callbacks frame_callbacks = {
     wslay_event_frame_send_callback, wslay_event_frame_recv_callback,
@@ -441,8 +423,7 @@ static int wslay_event_context_init(
 
 int wslay_event_context_server_init(
   wslay_event_context_ptr *ctx, const struct wslay_event_callbacks *callbacks,
-  void *user_data
-  ) {
+  void *user_data) {
   int r;
   if ((r = wslay_event_context_init(ctx, callbacks, user_data)) != 0) {
     return r;
@@ -453,8 +434,7 @@ int wslay_event_context_server_init(
 
 int wslay_event_context_client_init(
   wslay_event_context_ptr *ctx, const struct wslay_event_callbacks *callbacks,
-  void *user_data
-  ) {
+  void *user_data) {
   int r;
   if ((r = wslay_event_context_init(ctx, callbacks, user_data)) != 0) {
     return r;
@@ -496,8 +476,7 @@ void wslay_event_context_free(wslay_event_context_ptr ctx) {
 
 static void wslay_event_call_on_frame_recv_start_callback(
   wslay_event_context_ptr        ctx,
-  const struct wslay_frame_iocb *iocb
-  ) {
+  const struct wslay_frame_iocb *iocb) {
   if (ctx->callbacks.on_frame_recv_start_callback) {
     struct wslay_event_on_frame_recv_start_arg arg;
     arg.fin = iocb->fin;
@@ -510,8 +489,7 @@ static void wslay_event_call_on_frame_recv_start_callback(
 
 static void wslay_event_call_on_frame_recv_chunk_callback(
   wslay_event_context_ptr        ctx,
-  const struct wslay_frame_iocb *iocb
-  ) {
+  const struct wslay_frame_iocb *iocb) {
   if (ctx->callbacks.on_frame_recv_chunk_callback) {
     struct wslay_event_on_frame_recv_chunk_arg arg;
     arg.data = iocb->data;
@@ -947,8 +925,7 @@ int wslay_event_get_close_sent(wslay_event_context_ptr ctx) {
 
 void wslay_event_config_set_allowed_rsv_bits(
   wslay_event_context_ptr ctx,
-  uint8_t                 rsv
-  ) {
+  uint8_t                 rsv) {
   /* We currently only allow WSLAY_RSV1_BIT or WSLAY_RSV_NONE */
   ctx->allowed_rsv_bits = rsv & WSLAY_RSV1_BIT;
 }
@@ -963,8 +940,7 @@ void wslay_event_config_set_no_buffering(wslay_event_context_ptr ctx, int val) {
 
 void wslay_event_config_set_max_recv_msg_length(
   wslay_event_context_ptr ctx,
-  uint64_t                val
-  ) {
+  uint64_t                val) {
   ctx->max_recv_msg_length = val;
 }
 

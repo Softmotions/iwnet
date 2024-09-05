@@ -287,8 +287,7 @@ finish:
 static int64_t _on_ready(
   const struct iwn_poller_task *t,
   uint32_t                      flags,
-  int                           fdi
-  ) {
+  int                           fdi) {
   iwrc rc = 0;
   int64_t ret = 0;
   int fd = t->fd;

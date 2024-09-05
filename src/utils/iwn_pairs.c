@@ -77,8 +77,7 @@ iwrc iwn_pair_add_pool(
   const char       *key,
   ssize_t           key_len,
   char             *val,
-  ssize_t           val_len
-  ) {
+  ssize_t           val_len) {
   struct iwn_pair *p = iwpool_alloc(sizeof(*p), pool);
   if (!p) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
@@ -103,8 +102,7 @@ iwrc iwn_pair_add_pool_all(
   const char       *key,
   ssize_t           key_len,
   const char       *val,
-  ssize_t           val_len
-  ) {
+  ssize_t           val_len) {
   char *pval = 0;
   if (val_len) {
     if (val_len < 0) {

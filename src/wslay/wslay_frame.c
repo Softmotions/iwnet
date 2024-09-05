@@ -37,8 +37,7 @@
 int wslay_frame_context_init(
   wslay_frame_context_ptr            *ctx,
   const struct wslay_frame_callbacks *callbacks,
-  void                               *user_data
-  ) {
+  void                               *user_data) {
   *ctx = malloc(sizeof(struct wslay_frame_context));
   if (*ctx == NULL) {
     return -1;
@@ -59,8 +58,7 @@ void wslay_frame_context_free(wslay_frame_context_ptr ctx) {
 
 ssize_t wslay_frame_send(
   wslay_frame_context_ptr  ctx,
-  struct wslay_frame_iocb *iocb
-  ) {
+  struct wslay_frame_iocb *iocb) {
   if (ctx->ostate == PREP_HEADER) {
     uint8_t buf[WSLAY_FRAME_HDR_SIZ] = { 0 };
     uint8_t *wp = buf;
@@ -230,8 +228,7 @@ static ssize_t wslay_recv(wslay_frame_context_ptr ctx) {
 
 ssize_t wslay_frame_recv(
   wslay_frame_context_ptr  ctx,
-  struct wslay_frame_iocb *iocb
-  ) {
+  struct wslay_frame_iocb *iocb) {
   ssize_t r;
   if (ctx->istate == RECV_HEADER1) {
     uint8_t fin, opcode, rsv, payloadlen;

@@ -78,8 +78,7 @@ static ssize_t _wslay_recv_callback(
   uint8_t                *buf,
   size_t                  len,
   int                     flags,
-  void                   *user_data
-  ) {
+  void                   *user_data) {
   ssize_t rci = -1;
   struct ctx *ctx = user_data;
   struct iwn_poller_adapter *pa = ctx->hreq->poller_adapter;
@@ -107,8 +106,7 @@ static ssize_t _wslay_send_callback(
   const uint8_t          *buf,
   size_t                  len,
   int                     flags,
-  void                   *user_data
-  ) {
+  void                   *user_data) {
   ssize_t rci = -1;
   struct ctx *ctx = user_data;
   struct iwn_poller_adapter *pa = ctx->hreq->poller_adapter;
@@ -180,8 +178,7 @@ finish:
 static void _wslay_msg_recv_callback(
   wslay_event_context_ptr                   wctx,
   const struct wslay_event_on_msg_recv_arg *arg,
-  void                                     *user_data
-  ) {
+  void                                     *user_data) {
   struct ctx *ctx = user_data;
   struct msg *m = 0;
 

@@ -1311,8 +1311,7 @@ bool iwn_http_proxy_header_set(
   struct iwn_http_req *req,
   const char          *header_name,
   const char          *header_value,
-  ssize_t              header_value_len
-  ) {
+  ssize_t              header_value_len) {
   struct client *client = (void*) req;
   size_t header_name_len = strlen(header_name);
   char *hname = iwpool_strndup2(client->pool, header_name, header_name_len);
@@ -1747,8 +1746,7 @@ bool iwn_http_connection_is_upgrade(struct iwn_http_req *request) {
 struct iwn_val iwn_http_request_header_get(
   struct iwn_http_req *request,
   const char          *header_name,
-  ssize_t              header_name_len
-  ) {
+  ssize_t              header_name_len) {
   struct client *client = (void*) request;
   if (header_name_len < 0) {
     header_name_len = strlen(header_name);
@@ -1772,8 +1770,7 @@ static bool _iteration_headers_assign(
   struct client  *client,
   struct iwn_val *key,
   struct iwn_val *val,
-  int            *iter
-  ) {
+  int            *iter) {
   struct token token = client->tokens.buf[*iter];
   if (client->tokens.buf[*iter].type == HS_TOK_BODY) {
     return false;
@@ -1795,8 +1792,7 @@ bool iwn_http_request_headers_iterate(
   struct iwn_http_req *request,
   struct iwn_val      *key,
   struct iwn_val      *val,
-  int                 *iter
-  ) {
+  int                 *iter) {
   struct client *client = (void*) request;
   if (*iter == 0) {
     for ( ; *iter < client->tokens.size; (*iter)++) {
@@ -1845,8 +1841,7 @@ iwrc iwn_http_response_header_add(
   struct iwn_http_req *request,
   const char          *header_name,
   const char          *header_value,
-  ssize_t              header_value_len
-  ) {
+  ssize_t              header_value_len) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -1875,8 +1870,7 @@ iwrc iwn_http_response_header_set(
   struct iwn_http_req *request,
   const char          *header_name,
   const char          *header_value,
-  ssize_t              header_value_len
-  ) {
+  ssize_t              header_value_len) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -1915,8 +1909,7 @@ finish:
 iwrc iwn_http_response_header_i64_set(
   struct iwn_http_req *req,
   const char          *header_name,
-  int64_t              header_value
-  ) {
+  int64_t              header_value) {
   char buf[64];
   int len = snprintf(buf, sizeof(buf), "%" PRId64, header_value);
   return iwn_http_response_header_set(req, header_name, buf, len);
@@ -1926,8 +1919,7 @@ iwrc iwn_http_response_header_printf_va(
   struct iwn_http_req *req,
   const char          *header_name,
   const char          *fmt,
-  va_list              va
-  ) {
+  va_list              va) {
   iwrc rc = 0;
   char buf[1024];
   char *wp = buf;
@@ -1963,8 +1955,7 @@ iwrc iwn_http_response_header_printf(
   struct iwn_http_req *req,
   const char          *header_name,
   const char          *fmt,
-  ...
-  ) {
+  ...) {
   va_list va;
   va_start(va, fmt);
   iwrc rc = iwn_http_response_header_printf_va(req, header_name, fmt, va);
@@ -1987,8 +1978,7 @@ void iwn_http_response_body_set(
   struct iwn_http_req *request,
   const char          *body,
   ssize_t              body_len,
-  void               (*body_free)(void*)
-  ) {
+  void               (*body_free)(void*)) {
   if (!body || body_len == 0) {
     iwn_http_response_body_clear(request);
     return;
@@ -2119,8 +2109,7 @@ finish:
 
 iwrc iwn_http_response_stream_start(
   struct iwn_http_req          *request,
-  iwn_http_server_chunk_handler chunk_cb
-  ) {
+  iwn_http_server_chunk_handler chunk_cb) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct iwxstr *xstr = iwxstr_create_empty();
@@ -2149,8 +2138,7 @@ void iwn_http_response_stream_write(
   ssize_t                       buf_len,
   void (                       *buf_free )(void*),
   iwn_http_server_chunk_handler chunk_cb,
-  bool                         *again
-  ) {
+  bool                         *again) {
   if (!buf_free) {
     buf_free = _noop_free;
   }
@@ -2181,8 +2169,7 @@ iwrc iwn_http_response_chunk_write(
   char                         *body,
   ssize_t                       body_len,
   iwn_http_server_chunk_handler chunk_cb,
-  bool                         *again
-  ) {
+  bool                         *again) {
   iwrc rc = 0;
   struct client *client = (void*) request;
   if (body_len < 0) {
@@ -2245,8 +2232,7 @@ bool iwn_http_response_write(
   int                  status_code,
   const char          *content_type,
   const char          *body,
-  ssize_t              body_len
-  ) {
+  ssize_t              body_len) {
   iwrc rc = 0;
   RCC(rc, finish, iwn_http_response_code_set(request, status_code));
   if (!content_type) {
@@ -2270,8 +2256,7 @@ finish:
 bool iwn_http_response_write_jbl(
   struct iwn_http_req *request,
   int                  status_code,
-  struct jbl          *jbl
-  ) {
+  struct jbl          *jbl) {
   iwrc rc = 0;
   struct iwxstr *xstr = 0;
   RCB(finish, xstr = iwxstr_create_empty());
@@ -2294,8 +2279,7 @@ finish:
 bool iwn_http_response_write_jbn(
   struct iwn_http_req *request,
   int                  status_code,
-  JBL_NODE             n
-  ) {
+  JBL_NODE             n) {
   iwrc rc = 0;
   struct iwxstr *xstr = 0;
   RCB(finish, xstr = iwxstr_create_empty());
@@ -2323,8 +2307,7 @@ bool iwn_http_response_by_code(struct iwn_http_req *request, int code) {
 bool iwn_http_response_printf_va(
   struct iwn_http_req *req,
   int status_code, const char *content_type,
-  const char *fmt, va_list va
-  ) {
+  const char *fmt, va_list va) {
   iwrc rc = 0;
   bool ret = false;
   char buf[1024];
@@ -2360,8 +2343,7 @@ finish:
 bool iwn_http_response_printf(
   struct iwn_http_req *req,
   int status_code, const char *content_type,
-  const char *fmt, ...
-  ) {
+  const char *fmt, ...) {
   va_list va;
   va_start(va, fmt);
   bool res = iwn_http_response_printf_va(req, status_code, content_type, fmt, va);
@@ -2441,8 +2423,7 @@ static void _server_on_dispose(const struct iwn_poller_task *t) {
 void iwn_http_request_wf_set(
   struct iwn_http_req *request, void *user_data,
   void (*wf_on_request_dispose)(struct iwn_http_req*),
-  void (*wf_on_response_headers_write)(struct iwn_http_req*)
-  ) {
+  void (*wf_on_response_headers_write)(struct iwn_http_req*)) {
   struct client *client = (void*) request;
   client->_wf_data = user_data;
   client->_wf_on_request_dispose = wf_on_request_dispose;
@@ -2497,8 +2478,7 @@ static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data)
 bool iwn_http_server_ssl_set(
   struct iwn_poller                     *poller,
   int                                    server_fd,
-  const struct iwn_http_server_ssl_spec *ssl
-  ) {
+  const struct iwn_http_server_ssl_spec *ssl) {
   return iwn_poller_probe(poller, server_fd, _probe_ssl_set, (void*) ssl);
 }
 

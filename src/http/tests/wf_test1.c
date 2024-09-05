@@ -175,8 +175,7 @@ static bool _ensure_multipart(
   const char       *name,
   const char       *file,
   const char       *ctype,
-  const char       *data
-  ) {
+  const char       *data) {
   IWN_ASSERT_FATAL(parts && name);
   struct iwn_pair *part = iwn_pair_find(parts, name, -1), *p = 0;
   if (!part) {

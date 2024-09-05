@@ -40,8 +40,7 @@ void wslay_queue_deinit(struct wslay_queue *queue) {
 
 void wslay_queue_push(
   struct wslay_queue       *queue,
-  struct wslay_queue_entry *ent
-  ) {
+  struct wslay_queue_entry *ent) {
   ent->next = NULL;
   *queue->tail = ent;
   queue->tail = &ent->next;
@@ -49,8 +48,7 @@ void wslay_queue_push(
 
 void wslay_queue_push_front(
   struct wslay_queue       *queue,
-  struct wslay_queue_entry *ent
-  ) {
+  struct wslay_queue_entry *ent) {
   ent->next = queue->top;
   queue->top = ent;
 

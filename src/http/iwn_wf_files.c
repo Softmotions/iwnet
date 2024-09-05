@@ -388,8 +388,7 @@ static int _wf_file_serve(
   const char        *ctype,
   void              *file_or_path,
   void (            *on_completed )(void*),
-  void              *on_completed_data
-  ) {
+  void              *on_completed_data) {
   iwrc rc = 0;
   int ret = 0;
   struct ctx *ctx;
@@ -469,8 +468,7 @@ static void _fileobj_serve_oncomplete_noop(void *d) {
 
 int iwn_wf_fileobj_serve(
   struct iwn_wf_req *req, const char *ctype, FILE *file,
-  void (*on_completed)(void*), void *on_completed_data
-  ) {
+  void (*on_completed)(void*), void *on_completed_data) {
   if (!on_completed) {
     on_completed = _fileobj_serve_oncomplete_noop;
   }

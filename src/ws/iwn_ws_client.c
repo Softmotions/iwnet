@@ -234,8 +234,7 @@ static ssize_t _wslay_event_recv_callback(
   uint8_t                *buf,
   size_t                  len,
   int                     flags,
-  void                   *user_data
-  ) {
+  void                   *user_data) {
   ssize_t rci = -1;
   struct iwn_ws_client *ws = user_data;
   struct iwn_poller_adapter *pa = ws->pa;
@@ -264,8 +263,7 @@ static ssize_t _wslay_event_send_callback(
   const uint8_t          *buf,
   size_t                  len,
   int                     flags,
-  void                   *user_data
-  ) {
+  void                   *user_data) {
   ssize_t rci = -1;
   struct iwn_ws_client *ws = user_data;
   struct iwn_poller_adapter *pa = ws->pa;
@@ -292,8 +290,7 @@ again:
 static void _wslay_event_on_msg_recv_callback(
   wslay_event_context_ptr                   ctx,
   const struct wslay_event_on_msg_recv_arg *arg,
-  void                                     *user_data
-  ) {
+  void                                     *user_data) {
   struct iwn_ws_client *ws = user_data;
   if (  (  arg->msg_length > 0
         && (arg->opcode == WSLAY_TEXT_FRAME || arg->opcode == WSLAY_BINARY_FRAME))
@@ -305,8 +302,7 @@ static void _wslay_event_on_msg_recv_callback(
 
 static int _wslay_genmask_callback(
   wslay_event_context_ptr ctx, uint8_t *buf, size_t len,
-  void *user_data
-  ) {
+  void *user_data) {
   size_t tow = len;
   while (tow > 0) {
     uint32_t rn = iwu_rand_u32();

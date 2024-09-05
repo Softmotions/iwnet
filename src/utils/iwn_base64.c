@@ -35,8 +35,7 @@ static char* bin2hex(
   char* const                hex,
   const size_t               hex_maxlen,
   const unsigned char* const bin,
-  const size_t               bin_len
-  ) {
+  const size_t               bin_len) {
   size_t i = (size_t) 0U;
   unsigned int x;
   int b;
@@ -68,8 +67,7 @@ static int hex2bin(
   const size_t         hex_len,
   const char* const    ignore,
   size_t* const        bin_len,
-  const char** const   hex_end
-  ) {
+  const char** const   hex_end) {
   size_t bin_pos = (size_t) 0U;
   size_t hex_pos = (size_t) 0U;
   int ret = 0;
@@ -198,8 +196,7 @@ char* iwn_base64_encode(
   size_t                    *out_b64_len,
   const unsigned char* const bin,
   const size_t               bin_len,
-  const int                  variant
-  ) {
+  const int                  variant) {
   size_t acc_len = (size_t) 0;
   size_t b64_pos = (size_t) 0;
   size_t bin_pos = (size_t) 0;
@@ -246,8 +243,7 @@ char* iwn_base64_encode(
 static int _base642bin_skip_padding(
   const char* const b64,
   const size_t b64_len, size_t* const b64_pos_p,
-  const char* const ignore, size_t padding_len
-  ) {
+  const char* const ignore, size_t padding_len) {
   int c;
 
   while (padding_len > 0) {
@@ -271,8 +267,7 @@ int iwn_base64_decode(
   unsigned char* const bin, const size_t bin_maxlen,
   const char* const b64, const size_t b64_len,
   const char* const ignore, size_t* const bin_len,
-  const char** const b64_end, const int variant
-  ) {
+  const char** const b64_end, const int variant) {
   size_t acc_len = (size_t) 0;
   size_t b64_pos = (size_t) 0;
   size_t bin_pos = (size_t) 0;

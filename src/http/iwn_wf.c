@@ -385,8 +385,7 @@ static const char* _header_parse_skip_name(const char *rp, const char *ep) {
 
 static const char* _header_parse_next_parameter2(
   bool header_value, const char *rp, const char *ep,
-  struct iwn_pair *kv
-  ) {
+  struct iwn_pair *kv) {
   if (rp >= ep || _c_is_lsep(*rp)) {
     return 0;
   }
@@ -502,8 +501,7 @@ static const char* _header_parse_next_parameter(const char *rp, const char *ep, 
 
 const char* iwn_wf_header_val_part_next(
   const char *header_val, const char *ptr, const char *end,
-  struct iwn_pair *out
-  ) {
+  struct iwn_pair *out) {
   return _header_parse_next_parameter2(ptr == header_val, ptr, end, out);
 }
 
@@ -738,8 +736,7 @@ static const char* _multipart_parse_next(
   const char       *rp,
   const char* const ep,
   struct iwn_pairs *parts,
-  bool             *eof
-  ) {
+  bool             *eof) {
   #define _HL_CDIS  IW_LLEN("content-disposition")
   #define _HL_CTYPE IW_LLEN("content-type")
 
@@ -878,8 +875,7 @@ const char* dbg_multipart_parse_next(
   const char       *rp,
   const char* const ep,
   struct iwn_pairs *parts,
-  bool             *eof
-  ) {
+  bool             *eof) {
   return _multipart_parse_next(pool, boundary, boundary_len, rp, ep, parts, eof);
 }
 
@@ -1332,8 +1328,7 @@ iwrc iwn_wf_cookie_add(
   struct iwn_wf_req              *req,
   const char                     *name,
   const char                     *value,
-  const struct iwn_wf_cookie_opts opts
-  ) {
+  const struct iwn_wf_cookie_opts opts) {
   iwrc rc = 0;
   struct iwxstr *xstr;
 
