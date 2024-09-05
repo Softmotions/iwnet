@@ -179,7 +179,7 @@ struct client {
 #define HS_META_END_CHUNK    2
 #define HS_META_NEXT         0
 
-// *INDENT-OFF*
+// uncrustify:off
 enum token_e {
   HS_TOK_NONE,        HS_TOK_METHOD,     HS_TOK_TARGET,     HS_TOK_VERSION,
   HS_TOK_HEADER_KEY,  HS_TOK_HEADER_VAL, HS_TOK_CHUNK_BODY, HS_TOK_BODY,
@@ -211,27 +211,27 @@ static const int8_t _transitions[] = {
 //                                            A-Z G-Z
 //                spc \n  \r  :   \t  ;   0-9 a-f g-z tch vch etc
 /* ST start */    BR, BR, BR, BR, BR, BR, BR, MT, MT, MT, BR, BR,
-/* MT method */   MS, BR, BR, BR, BR, BR, MT, MT, MT, MT, BR, BR,
+/* MT method */ MS, BR, BR, BR, BR, BR, MT, MT, MT, MT, BR, BR,
 /* MS methodsp */ BR, BR, BR, BR, BR, BR, TR, TR, TR, TR, TR, BR,
-/* TR target */   TS, BR, BR, TR, BR, TR, TR, TR, TR, TR, TR, BR,
+/* TR target */ TS, BR, BR, TR, BR, TR, TR, TR, TR, TR, TR, BR,
 /* TS targetsp */ BR, BR, BR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
-/* VN version */  BR, BR, RR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
-/* RR rl \r */    BR, RN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* RN rl \n */    BR, BR, BR, BR, BR, BR, HK, HK, HK, HK, BR, BR,
-/* HK headkey */  BR, BR, BR, HS, BR, BR, HK, HK, HK, HK, BR, BR,
-/* HS headspc */  HS, HS, HS, HV, HS, HV, HV, HV, HV, HV, HV, BR,
-/* HV headval */  HV, BR, HR, HV, HV, HV, HV, HV, HV, HV, HV, BR,
-/* HR head\r */   BR, HE, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* HE head\n */   BR, BR, ER, BR, BR, BR, HK, HK, HK, HK, BR, BR,
-/* ER hend\r */   BR, HN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* HN hend\n */   BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
-/* BD body */     BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
-/* CS chksz */    BR, BR, CR, BR, BR, CE, CS, CS, BR, BR, BR, BR,
-/* CB chkbd */    CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
-/* CE chkext */   BR, BR, CR, CE, CE, CE, CE, CE, CE, CE, CE, BR,
-/* CR chksz\r */  BR, CN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* CN chksz\n */  CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
-/* CD chkend */   BR, BR, C1, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* VN version */ BR, BR, RR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
+/* RR rl \r */ BR, RN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* RN rl \n */ BR, BR, BR, BR, BR, BR, HK, HK, HK, HK, BR, BR,
+/* HK headkey */ BR, BR, BR, HS, BR, BR, HK, HK, HK, HK, BR, BR,
+/* HS headspc */ HS, HS, HS, HV, HS, HV, HV, HV, HV, HV, HV, BR,
+/* HV headval */ HV, BR, HR, HV, HV, HV, HV, HV, HV, HV, HV, BR,
+/* HR head\r */ BR, HE, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* HE head\n */ BR, BR, ER, BR, BR, BR, HK, HK, HK, HK, BR, BR,
+/* ER hend\r */ BR, HN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* HN hend\n */ BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
+/* BD body */ BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
+/* CS chksz */ BR, BR, CR, BR, BR, CE, CS, CS, BR, BR, BR, BR,
+/* CB chkbd */ CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
+/* CE chkext */ BR, BR, CR, CE, CE, CE, CE, CE, CE, CE, CE, BR,
+/* CR chksz\r */ BR, CN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* CN chksz\n */ CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
+/* CD chkend */ BR, BR, C1, BR, BR, BR, BR, BR, BR, BR, BR, BR,
 /* C1 chkend\r */ BR, C2, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
 /* C2 chkend\n */ BR, BR, BR, BR, BR, BR, CS, CS, BR, BR, BR, BR
 };
@@ -241,51 +241,51 @@ static const int8_t _meta_transitions[] = {
 //                 not cl not te endkey endval end h  toobig
 /* WFK wait */     M_WFK, M_WFK, M_WFK, M_ANY, M_END, M_ERR,
 /* ANY matchkey */ M_MTE, M_MCL, M_WFK, M_ERR, M_END, M_ERR,
-/* MTE matchte */  M_MTE, M_WFK, M_MCK, M_ERR, M_ERR, M_ERR,
-/* MCL matchcl */  M_WFK, M_MCL, M_CLV, M_ERR, M_ERR, M_ERR,
-/* CLV clvalue */  M_ERR, M_ERR, M_ERR, M_SML, M_ERR, M_ERR,
+/* MTE matchte */ M_MTE, M_WFK, M_MCK, M_ERR, M_ERR, M_ERR,
+/* MCL matchcl */ M_WFK, M_MCL, M_CLV, M_ERR, M_ERR, M_ERR,
+/* CLV clvalue */ M_ERR, M_ERR, M_ERR, M_SML, M_ERR, M_ERR,
 /* MCK matchchk */ M_WFK, M_ERR, M_ERR, M_CHK, M_ERR, M_ERR,
 /* SML smallbdy */ M_SML, M_SML, M_SML, M_SML, M_BDY, M_BIG,
 /* CHK chunkbdy */ M_CHK, M_CHK, M_CHK, M_CHK, M_ZER, M_ERR,
-/* BIG bigbody */  M_BIG, M_BIG, M_BIG, M_BIG, M_STR, M_ERR,
+/* BIG bigbody */ M_BIG, M_BIG, M_BIG, M_BIG, M_STR, M_ERR,
 
 //                         *** chunked body ***
 
 //                 nonzer endsz  endchk
-/* ZER zerochk */  M_CSZ, M_LST, M_ERR, M_ERR, M_ERR, M_ERR,
-/* CSZ chksize */  M_CSZ, M_CBD, M_ERR, M_ERR, M_ERR, M_ERR,
-/* CBD readchk */  M_CBD, M_CBD, M_ZER, M_ERR, M_ERR, M_ERR,
-/* LST lastchk */  M_LST, M_END, M_END, M_ERR, M_ERR, M_ERR,
+/* ZER zerochk */ M_CSZ, M_LST, M_ERR, M_ERR, M_ERR, M_ERR,
+/* CSZ chksize */ M_CSZ, M_CBD, M_ERR, M_ERR, M_ERR, M_ERR,
+/* CBD readchk */ M_CBD, M_CBD, M_ZER, M_ERR, M_ERR, M_ERR,
+/* LST lastchk */ M_LST, M_END, M_END, M_ERR, M_ERR, M_ERR,
 
 //                         *** streamed body ***
 
 //                 next
-/* STR readstr */  M_SEN, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
-/* SEN strend */   M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+/* STR readstr */ M_SEN, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+/* SEN strend */ M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
 
 //                         *** small body ***
 
 //                 next
 /* BDY readbody */ M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
-/* END reqend */   M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
+/* END reqend */ M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
 };
 
 static const int8_t _ctype[] = {
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
-  HS_ETC,   HS_ETC,   HS_TAB,   HS_NL,    HS_ETC,   HS_ETC,   HS_CR,
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,
-  HS_ETC,   HS_ETC,   HS_ETC,   HS_ETC,   HS_SPC,   HS_TCHAR, HS_VCHAR,
+  HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC,
+  HS_ETC, HS_ETC, HS_TAB, HS_NL, HS_ETC, HS_ETC, HS_CR,
+  HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC,
+  HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_ETC,
+  HS_ETC, HS_ETC, HS_ETC, HS_ETC, HS_SPC, HS_TCHAR, HS_VCHAR,
   HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_VCHAR,
   HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_VCHAR, HS_DIGIT,
   HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT, HS_DIGIT,
-  HS_DIGIT, HS_DIGIT, HS_COLN,  HS_SCOLN, HS_VCHAR, HS_VCHAR, HS_VCHAR,
-  HS_VCHAR, HS_VCHAR, HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,
-  HS_HEX,   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
+  HS_DIGIT, HS_DIGIT, HS_COLN, HS_SCOLN, HS_VCHAR, HS_VCHAR, HS_VCHAR,
+  HS_VCHAR, HS_VCHAR, HS_HEX, HS_HEX, HS_HEX, HS_HEX, HS_HEX,
+  HS_HEX, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
   HS_VCHAR, HS_VCHAR, HS_VCHAR, HS_TCHAR, HS_TCHAR, HS_TCHAR, HS_HEX,
-  HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_HEX,   HS_ALPHA, HS_ALPHA,
+  HS_HEX, HS_HEX, HS_HEX, HS_HEX, HS_HEX, HS_ALPHA, HS_ALPHA,
   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA,
   HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_ALPHA, HS_VCHAR, HS_TCHAR, HS_VCHAR,
@@ -383,7 +383,7 @@ static char const *_status_text[] = {
   "", "", "", "", "", "", "", "", "", "",
   "", "", "", "", "", "", "", "", "", ""
 };
-// *INDENT-ON*
+// uncrustify:on
 
 static iwrc _server_ref(struct server *server, struct server **out);
 static void _server_unref(struct server *server);
