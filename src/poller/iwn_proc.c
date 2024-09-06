@@ -717,39 +717,6 @@ static void _kill_ensure_task(void *arg) {
   }
 }
 
-iwrc iwn_proc_kill_ensure(struct iwn_poller *poller, pid_t pid, int signum, int max_attempts, int last_signum) {
-  if (getpgid(pid) == -1) {
-    return 0;
-  }
-  if (max_attempts == 0) {
-    max_attempts = 1;
-  }
-  struct ktask *t = malloc(sizeof(*t));
-  if (!t) {
-    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
-  }
-  *t = (struct ktask) {
-    .pid = pid,
-    .signum = signum,
-    .attempts = max_attempts,
-    .last_signum = last_signum > 0 ? last_signum : SIGKILL
-  };
-  kill(pid, signum);
-
-  iwrc rc = iwn_schedule(&(struct iwn_scheduler_spec) {
-    .poller = poller,
-    .timeout_ms = max_attempts < 0 ? -max_attempts * 1000 : 1000,
-    .user_data = t,
-    .task_fn = _kill_ensure_task,
-    .on_cancel = _kill_ensure_task_cancel,
-  });
-  if (rc) {
-    iwlog_ecode_error3(rc);
-    free(t);
-  }
-  return rc;
-}
-
 static void _fork_child_cmd_arg_append(struct iwn_proc_fork_child_ctx *fcc, const char *arg) {
   struct proc *proc = (void*) fcc->ctx;
   if (arg) {

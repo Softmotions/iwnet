@@ -123,18 +123,6 @@ IW_EXPORT void iwn_proc_kill(pid_t pid, int signum);
 /// Sends `signum` to all managed processes.
 IW_EXPORT void iwn_proc_kill_all(int signum);
 
-/// Sends a sequence of signals to the managed process identified by `pid`.
-///
-/// - If `max_attempts` > 0 `signum` will be sent to the process `max_attempts` times then `last_signum` will be send.
-/// - If `max_attempts` < 0 `signum` will be send to the process and then after `max_attempts` seconds `last_signum`
-///   will be send.
-///
-/// @param poller The poller used to schedule signal attempts actions via `iwn_scheduler.h` api.
-///
-IW_EXPORT iwrc iwn_proc_kill_ensure(
-  struct iwn_poller *poller, pid_t pid, int signum, int max_attempts,
-  int last_signum);
-
 /// Increments ref count of the managed process preventing disposition of process related
 /// data structure until ref count became zero.
 IW_EXPORT void iwn_proc_ref(pid_t pid);
