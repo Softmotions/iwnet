@@ -39,6 +39,7 @@ struct iwn_ws_client_spec {
 
   uint8_t reconnect_attempts_num;      ///< Number of reconnect attempts. Default: 0
   uint8_t reconnect_attempt_pause_sec; ///< Number of seconds to wait before next reconnect attempt. Default: 5
+  bool    quiet;
 };
 
 /// Opens websocket client connection according to provided `spec`.

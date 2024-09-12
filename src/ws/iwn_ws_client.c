@@ -776,6 +776,7 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   ws->ctx.poller = spec->poller;
   ws->ctx.user_data = spec->user_data;
   ws->ctx.ws = ws;
+  ws->quiet = spec->quiet;
   ws->fd = -1;
 
   if (!ws->spec.reconnect_attempt_pause_sec) {
