@@ -608,7 +608,7 @@ bool iwn_ws_client_destroy(struct iwn_ws_client *ws) {
 
 static void _ws_reconnect(void *d) {
   struct iwn_ws_client *ws = d;
-  if (ws->reconnect_attempt++ < ws->spec.reconnect_attempts_num) {
+  if (iwn_poller_alive(ws->spec.poller) && ws->reconnect_attempt++ < ws->spec.reconnect_attempts_num) {
     iwrc rc = _ws_connect(ws);
     if (!rc) {
       ws->reconnect_attempt = 0;
@@ -632,6 +632,7 @@ static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user
   pthread_mutex_unlock(&ws->mtx);
   if (  ws->close_cas
      || ws->wsl == 0
+     || !iwn_poller_alive(ws->spec.poller)
      || wslay_event_get_close_received(ws->wsl)
      || wslay_event_get_close_sent(ws->wsl)
      || ws->reconnect_attempt >= ws->spec.reconnect_attempts_num) {
@@ -643,7 +644,7 @@ static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user
       .poller = ws->spec.poller,
       .timeout_ms = (uint32_t) ws->spec.reconnect_attempt_pause_sec * 1000,
       .on_cancel = _ws_reconnect_cancel,
-      .task_fn = _ws_reconnect
+      .on_dispose = _ws_reconnect
     })) {
       _ws_dispose(ws);
     }
