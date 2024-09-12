@@ -12,7 +12,7 @@ typedef void (*iwn_scheduler_task_f)(void *arg);
 
 /// Delayed task spe.
 struct iwn_scheduler_spec {
-  iwn_scheduler_task_f task_fn; ///< Task execute callback.
+  iwn_scheduler_task_f task_fn; ///< Task execute callback. Either `task_fn` or `on_dispose` must be specified.
   void (*on_cancel)(void*);     ///< Optional on_cancel handler.
                                 ///  Called when pending task execution will be cancelled for
                                 ///  some reason. Eg: poller shutdown.
