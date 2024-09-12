@@ -60,6 +60,7 @@ struct iwn_ws_client {
   volatile bool close_cas;
   volatile bool dispose_cas;
   char client_key[32];
+  bool quiet;
 };
 
 static bool _initialized;
@@ -126,7 +127,9 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
   if (ws->scheme == 0 || strcmp(ws->scheme, "socket") != 0) {
     rci = getaddrinfo(ws->host, port, &hints, &si);
     if (rci) {
-      iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | %s", gai_strerror(rci));
+      if (!ws->quiet) {
+        iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | %s", gai_strerror(rci));
+      }
       return WS_ERROR_PEER_CONNECT;
     }
 
@@ -140,7 +143,9 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
       } else if (sa->sa_family == AF_INET6) {
         addr = &((struct sockaddr_in6*) sa)->sin6_addr;
       } else {
-        iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | Unsupported address family: 0x%x", (int) sa->sa_family);
+        if (!ws->quiet) {
+          iwlog_ecode_error(WS_ERROR_PEER_CONNECT, "ws | Unsupported address family: 0x%x", (int) sa->sa_family);
+        }
         rc = WS_ERROR_PEER_CONNECT;
         goto finish;
       }
@@ -152,7 +157,9 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
 
       fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
       if (fd < 0) {
-        iwlog_warn("ws | Error opening socket %s:%s %s %s", ws->host, port, saddr, strerror(errno));
+        if (!ws->quiet) {
+          iwlog_warn("ws | Error opening socket %s:%s %s %s", ws->host, port, saddr, strerror(errno));
+        }
         continue;
       }
 
@@ -166,7 +173,9 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
 
       if (rci == -1) {
         if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
-          iwlog_warn("ws | Error connecting %s:%s %s %s", ws->host, port, saddr, strerror(errno));
+          if (!ws->quiet) {
+            iwlog_warn("ws | Error connecting %s:%s %s %s", ws->host, port, saddr, strerror(errno));
+          }
           close(fd), fd = -1;
           continue;
         }
@@ -182,7 +191,9 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
 
     if (strlen(ws->host) >= sizeof(saddr.sun_path)) {
       rc = IW_ERROR_INVALID_ARGS;
-      iwlog_ecode_error(rc, "Unix socket path exceeds its maximum length: %zd", sizeof(saddr.sun_path) - 1);
+      if (!ws->quiet) {
+        iwlog_ecode_error(rc, "Unix socket path exceeds its maximum length: %zd", sizeof(saddr.sun_path) - 1);
+      }
       goto finish;
     }
     strncpy(saddr.sun_path, ws->host, sizeof(saddr.sun_path) - 1);
@@ -193,7 +204,9 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
 
     if (rci == -1) {
       if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
-        iwlog_warn("ws | Error Unix socket connecting  %s %s", ws->host, strerror(errno));
+        if (!ws->quiet) {
+          iwlog_warn("ws | Error Unix socket connecting  %s %s", ws->host, strerror(errno));
+        }
         close(fd), fd = -1;
         goto finish;
       }
