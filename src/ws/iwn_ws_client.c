@@ -109,8 +109,7 @@ static iwrc _fd_make_non_blocking(int fd) {
 
 static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
   assert(out_fd);
-
-  *out_fd = 0;
+  *out_fd = -1;
 
   char nbuf[IWNUMBUF_SIZE];
   snprintf(nbuf, sizeof(nbuf), "%d", ws->port);
