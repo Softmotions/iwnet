@@ -734,11 +734,11 @@ static void _fork_child_cmd_arg_replace(struct iwn_proc_fork_child_ctx *fcc, con
   struct proc *proc = (void*) fcc->ctx;
   struct iwulist *list = &proc->argl;
   for (int i = 0, l = iwulist_length(list); i < l; ++i) {
-    const char *item = *(char**) iwulist_at2(list, i);
-    if (strcmp(item, arg) == 0) {
+    const char **item = iwulist_at2(list, i);
+    if (strcmp(*item, arg) == 0) {
       char *v = iwpool_strdup2(proc->pool, replace);
       if (v) {
-        iwulist_set(list, i, v);
+        *item = v;
       }
       break;
     }
