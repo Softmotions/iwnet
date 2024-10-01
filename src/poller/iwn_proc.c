@@ -905,7 +905,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
         .cmd_arg_append = _fork_child_cmd_arg_append,
         .cmd_arg_replace = _fork_child_cmd_arg_replace,
       };
-      RCC(rc, finish, spec->on_fork_child(&fcc));
+      RCC(rc, child_exit, spec->on_fork_child(&fcc));
     }
 
     if (fds[1] != -1) {
