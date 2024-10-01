@@ -62,9 +62,11 @@ static struct  {
   struct iwhmap  *map; ///< Proc: pid -> struct *_proc
   struct iwstw   *stw; ///< Child process wait worker
   pthread_mutex_t mtx;
+  pthread_mutex_t spawn_mtx;
   pthread_cond_t  cond;
 } cc = {
   .mtx = PTHREAD_MUTEX_INITIALIZER,
+  .spawn_mtx = PTHREAD_MUTEX_INITIALIZER,
 };
 
 static void _proc_destroy(struct proc *proc) {
@@ -757,6 +759,11 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
   struct proc *proc = 0;
   int fds[10] = { -1, -1, -1, -1, -1, -1, -1, -1, -1, -1 };
 
+  int rci = pthread_mutex_lock(&cc.spawn_mtx);
+  if (rci) {
+    return iwrc_set_errno(IW_ERROR_THREADING_ERRNO, rci);
+  }
+
   RCB(finish, proc = _proc_create(spec));
   RCC(rc, finish, _proc_init(proc, fds));
 
@@ -948,6 +955,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
   }
 
 finish:
+  pthread_mutex_unlock(&cc.spawn_mtx);
   if (rc) {
     if (!proc_added) {
       _proc_destroy(proc);
@@ -994,6 +1002,7 @@ bool iwn_proc_dispose2(int signal, long timeout_ms) {
   iwstw_shutdown(&cc.stw, false);
   iwhmap_destroy(map);
   pthread_mutex_destroy(&cc.mtx);
+  pthread_mutex_destroy(&cc.spawn_mtx);
   pthread_cond_destroy(&cc.cond);
   return timeout;
 }
