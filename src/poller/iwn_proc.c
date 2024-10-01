@@ -148,14 +148,6 @@ static void _proc_unref(pid_t pid, int wstatus) {
   }
   if (proc->refs > 0) {
     pthread_mutex_unlock(&cc.mtx);
-    if (wstatus != -1) {
-      for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
-        if (proc->fds[i] != -1) {
-          iwn_poller_remove(proc->spec.poller, proc->fds[i]);
-          proc->fds[i] = -1;
-        }
-      }
-    }
     return;
   }
   pthread_mutex_unlock(&cc.mtx);
