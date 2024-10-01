@@ -91,20 +91,17 @@ static void _kv_free(void *key, void *val) {
 }
 
 static iwrc _init_lk(void) {
+  static bool init = false;
   iwrc rc = 0;
-  pthread_condattr_t cattr;
-  pthread_condattr_init(&cattr);
-  pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
-  pthread_cond_init(&cc.cond, &cattr);
-  pthread_condattr_destroy(&cattr);
-
-  if (!cc.map) {
+  if (__sync_bool_compare_and_swap(&init, false, true)) {
+    pthread_condattr_t cattr;
+    pthread_condattr_init(&cattr);
+    pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+    pthread_cond_init(&cc.cond, &cattr);
+    pthread_condattr_destroy(&cattr);
     RCB(finish, cc.map = iwhmap_create_u32(_kv_free));
-  }
-  if (!cc.stw) {
     rc = iwstw_start("proc_stw", 0, false, &cc.stw);
   }
-
 finish:
   return rc;
 }
@@ -114,7 +111,8 @@ static iwrc _proc_add(struct proc *proc) {
   pthread_mutex_lock(&cc.mtx);
   RCC(rc, finish, _init_lk());
   proc->refs = 1;
-  rc = iwhmap_put_u32(cc.map, proc->pid, proc);
+  RCC(rc, finish, iwhmap_put_u32(cc.map, proc->pid, proc));
+  pthread_cond_broadcast(&cc.cond);
 
 finish:
   pthread_mutex_unlock(&cc.mtx);
