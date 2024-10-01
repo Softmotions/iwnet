@@ -483,22 +483,30 @@ iwrc iwn_proc_datain_close(pid_t pid) {
   return iwn_proc_datain_write(pid, "", 0, true);
 }
 
-iwrc iwn_proc_wait(pid_t pid) {
+static iwrc _proc_wait(pid_t pid, bool fast) {
   pthread_mutex_lock(&cc.mtx);
   struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
-  if (!proc) {
+  if (!proc || (proc->wstatus != -1 && fast)) {
     pthread_mutex_unlock(&cc.mtx);
     return 0;
   }
   do {
     pthread_cond_wait(&cc.cond, &cc.mtx);
     proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
-    if (!proc) {
+    if (!proc || (proc->wstatus != -1 && fast)) {
       break;
     }
   } while (1);
   pthread_mutex_unlock(&cc.mtx);
   return 0;
+}
+
+iwrc iwn_proc_wait(pid_t pid) {
+  return _proc_wait(pid, false);
+}
+
+iwrc iwn_proc_wait_fast(pid_t pid) {
+  return _proc_wait(pid, true);
 }
 
 iwrc iwn_proc_wait_list_timeout(const pid_t *pids_, int pids_num, long timeout_ms, bool *out_timeout) {
