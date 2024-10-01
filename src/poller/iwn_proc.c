@@ -152,6 +152,7 @@ static void _proc_unref(pid_t pid, int wstatus) {
   }
   pthread_mutex_unlock(&cc.mtx);
 
+  // Now shutdown proc instance
   for (int i = 0; i < sizeof(proc->fds) / sizeof(proc->fds[0]); ++i) {
     if (proc->fds[i] != -1) {
       iwn_poller_remove(proc->spec.poller, proc->fds[i]);
@@ -487,16 +488,12 @@ iwrc iwn_proc_wait(pid_t pid) {
   struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
   if (!proc) {
     pthread_mutex_unlock(&cc.mtx);
-    return IW_ERROR_NOT_EXISTS;
-  }
-  if (proc->wstatus != -1) {
-    pthread_mutex_unlock(&cc.mtx);
     return 0;
   }
   do {
     pthread_cond_wait(&cc.cond, &cc.mtx);
     proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
-    if (!proc || proc->wstatus != -1) {
+    if (!proc) {
       break;
     }
   } while (1);
@@ -536,7 +533,7 @@ iwrc iwn_proc_wait_list_timeout(const pid_t *pids_, int pids_num, long timeout_m
     for (int i = 0; i < pids_num; ++i) {
       if (pids[i] != -1) {
         struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pids[i]) : 0;
-        if (!proc || proc->wstatus != -1) {
+        if (!proc) {
           pids[i] = -1;
           --pids_towait;
         }
