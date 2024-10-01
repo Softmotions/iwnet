@@ -509,6 +509,18 @@ iwrc iwn_proc_wait_fast(pid_t pid) {
   return _proc_wait(pid, true);
 }
 
+bool iwn_proc_set_user_data(pid_t pid, void *data) {
+  pthread_mutex_lock(&cc.mtx);
+  struct proc *proc = cc.map ? iwhmap_get_u32(cc.map, pid) : 0;
+  if (proc) {
+    proc->user_data = data;
+    pthread_mutex_unlock(&cc.mtx);
+    return true;
+  }
+  pthread_mutex_unlock(&cc.mtx);
+  return false;
+}
+
 iwrc iwn_proc_wait_list_timeout(const pid_t *pids_, int pids_num, long timeout_ms, bool *out_timeout) {
   if (!pids_ || pids_num < 1) {
     return 0;
