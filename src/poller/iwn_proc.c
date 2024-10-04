@@ -564,7 +564,7 @@ iwrc iwn_proc_wait_list_timeout(const pid_t *pids_, int pids_num, long timeout_m
       break;
     }
 
-    if (timeout_ms > 0) {
+    if (remaining > 0) {
       bool bv = false;
       uint64_t ts1, ts2;
 
