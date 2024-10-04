@@ -982,7 +982,7 @@ child_exit:
   if (rc) {
     iwlog_ecode_error(rc, "exec: %s", proc->path);
   }
-  exit(rc ? EXIT_FAILURE : EXIT_SUCCESS);
+  return 0;
 }
 
 char* iwn_proc_command_get(const struct iwn_proc_spec *spec) {
