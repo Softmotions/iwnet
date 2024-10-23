@@ -15,10 +15,22 @@
 #include <unistd.h>
 #include <sys/mman.h>
 
+#ifdef IW_BLOCKS
+#include <Block.h>
+#endif
+
 static int _aunit;
 
 static const char* _ecodefn(locale_t, uint32_t);
 static void _response_headers_write(struct iwn_http_req *hreq);
+
+#ifdef IW_BLOCKS
+
+IW_INLINE int _handler_block(struct iwn_wf_req *req, void *d) {
+  return req->route->handler_block(req);
+}
+
+#endif
 
 IW_INLINE iwrc _init(void) {
   static bool _initialized;
@@ -37,6 +49,13 @@ static void _route_destroy(struct route *route) {
     base->handler_dispose = 0;
     handler_dispose(base->ctx, base->user_data);
   }
+#ifdef IW_BLOCKS
+  if (base->handler_dispose_block) {
+    base->handler_dispose_block();
+  }
+  Block_release(base->handler_block);
+  Block_release(base->handler_dispose_block);
+#endif
   route->pattern = 0;
   route->pattern_len = 0;
   if (route->pattern_re) {
@@ -161,6 +180,17 @@ static iwrc _route_import(const struct iwn_wf_route *spec, struct ctx *ctx, stru
   } else {
     ctx->root = route;
   }
+
+#ifdef IW_BLOCKS
+  if (route->base.handler_block) {
+    RCB(finish, route->base.handler_block = Block_copy(route->base.handler_block));
+    route->base.handler = _handler_block;
+  }
+  if (route->base.handler_dispose_block) {
+    RCB(finish, route->base.handler_dispose_block = Block_copy(route->base.handler_dispose_block));
+  }
+#endif
+
   *out = route;
 
 finish:
@@ -1146,6 +1176,18 @@ iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_rou
   }
   return rc;
 }
+
+#ifdef IW_BLOCKS
+
+iwrc iwn_wf_route_block(
+  const struct iwn_wf_route *spec_, struct iwn_wf_route **out_route,
+  int (^handler_block)(struct iwn_wf_req*)) {
+  struct iwn_wf_route spec = *spec_;
+  spec.handler_block = handler_block;
+  return iwn_wf_route(&spec, out_route);
+}
+
+#endif
 
 iwrc iwn_wf_create(const struct iwn_wf_route *root_route_spec, struct iwn_wf_ctx **out_ctx) {
   RCR(_init());

@@ -19,6 +19,13 @@ test_big_endian(WORDS_BIGENDIAN)
 add_definitions(-DHAVE_CONFIG_H)
 add_definitions(-D_FILE_OFFSET_BITS=64)
 
+check_include_file("Block.h" HAVE_BLOCK_H)
+if(NOT NOBLOCKS AND CMAKE_C_COMPILER_ID MATCHES "Clang" AND HAVE_BLOCK_H)
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fblocks")
+  list(PREPEND PROJECT_LIBRARIES "-lBlocksRuntime")
+  add_definitions(-DIW_BLOCKS)
+endif()
+
 include(AddIOWOW)
 
 find_package(Threads REQUIRED CMAKE_THREAD_PREFER_PTHREAD)

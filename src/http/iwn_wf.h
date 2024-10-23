@@ -143,6 +143,10 @@ struct iwn_wf_route {
   uint32_t       flags;                   ///< Matching flags @ref wf_flags
   iwn_wf_handler handler;                 ///< Optional route handler.
   iwn_wf_handler_dispose handler_dispose; ///< Optional handler dispose callback.
+#ifdef IW_BLOCKS
+  int (^handler_block)(struct iwn_wf_req*);
+  int (^handler_dispose_block)(void);
+#endif
   void       *user_data;                  ///< Optional route handler user data.
   const char *tag;                        ///< Constant string tag associated with routed, used for debugging.
 };
@@ -197,6 +201,12 @@ IW_EXPORT WUR iwrc iwn_wf_create(const struct iwn_wf_route *root, struct iwn_wf_
 /// @param[out] Optional placeholder to store resulted route configuration.
 ///             Used when you build hierarchy of routes.
 IW_EXPORT WUR iwrc iwn_wf_route(const struct iwn_wf_route *spec, struct iwn_wf_route **out_route);
+
+#ifdef IW_BLOCKS
+
+IW_EXPORT WUR iwrc iwn_wf_route_block(const struct iwn_wf_route*, struct iwn_wf_route**, int (^)(struct iwn_wf_req*));
+
+#endif
 
 /// Create HTTP server associated with web-framework context.
 /// If poller is active @ref iwn_poller_poll() server will process incoming HTTP request according
