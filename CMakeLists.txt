@@ -31,7 +31,7 @@ include(ProjectUtils)
 
 option(BUILD_TESTS "Build test cases" OFF)
 option(ASAN "Turn on address sanitizer" OFF)
-option(NOBLOCKS "Turen of Clang Blocks support" OFF)
+option(NOBLOCKS "Turn off Clang Blocks support" OFF)
 
 macro_ensure_out_of_source_build(
   "${CMAKE_PROJECT_NAME} requires an out of source build.")
