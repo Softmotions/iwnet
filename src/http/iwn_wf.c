@@ -1,3 +1,4 @@
+#include "iwn_wf.h"
 #include "iwn_wf_internal.h"
 #include "iwn_wf_sst_inmem.h"
 #include "iwn_codec.h"

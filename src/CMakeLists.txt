@@ -21,6 +21,7 @@ add_definitions(-D_FILE_OFFSET_BITS=64)
 
 check_include_file("Block.h" HAVE_BLOCK_H)
 if(NOT NOBLOCKS AND CMAKE_C_COMPILER_ID MATCHES "Clang" AND HAVE_BLOCK_H)
+  set(IW_BLOCKS ON)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fblocks")
   list(PREPEND PROJECT_LIBRARIES "-lBlocksRuntime")
   add_definitions(-DIW_BLOCKS)
@@ -76,6 +77,9 @@ set(PROJECT_GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in
                ${PROJECT_GENERATED_DIR}/config.h @ONLY)
 
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/iwnet.h.in
+               ${PROJECT_GENERATED_DIR}/iwnet.h @ONLY)
+
 set(MODULES
     bearssl
     wslay
@@ -114,7 +118,7 @@ endforeach(MODULE)
 list(
   APPEND
   PUB_HDRS
-  ${CMAKE_CURRENT_SOURCE_DIR}/iwnet.h
+  ${PROJECT_GENERATED_DIR}/iwnet.h 
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_mimetypes.h
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_base64.h
   ${CMAKE_CURRENT_SOURCE_DIR}/utils/iwn_codec.h

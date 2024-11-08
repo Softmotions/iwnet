@@ -4,6 +4,10 @@
 
 #include <iowow/basedefs.h>
 
+#ifndef IW_BLOCKS 
+#cmakedefine IW_BLOCKS 
+#endif
+
 IW_EXTERN_C_START;
 
 #define IWN_IPV4 0x01U

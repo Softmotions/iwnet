@@ -2,6 +2,7 @@
 
 /// High level HTTP web-framework.
 
+#include "iwnet.h"
 #include "iwn_http_server.h"
 #include <iowow/iwlog.h>
 #include <stdio.h>
