@@ -65,7 +65,7 @@ IW_EXPORT struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *ke
 IW_EXPORT struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
 
 /// Converts pair value to integer number if possible.
-IW_EXPORT iwrc iwn_val_i64(struct iwn_val *v, int64_t *out);
+IW_EXPORT iwrc iwn_val_i64(struct iwn_val *v, int64_t def, int64_t *out);
 
 /// Add a new `iwn_pair` instance allocated in given `pool` to the list of `pairs` chain.
 IW_EXPORT iwrc iwn_pair_add_pool(
