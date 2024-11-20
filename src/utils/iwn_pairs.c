@@ -46,7 +46,7 @@ void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p) {
   }
 }
 
-struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len) {
+struct iwn_pair* iwn_pair_find(const struct iwn_pairs *pairs, const char *key, ssize_t key_len) {
   if (IW_UNLIKELY(!pairs || !key || !key_len)) {
     return 0;
   }
@@ -61,7 +61,7 @@ struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t
   return 0;
 }
 
-struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize_t key_len) {
+struct iwn_val iwn_pair_find_val(const struct iwn_pairs *pairs, const char *key, ssize_t key_len) {
   struct iwn_pair *p = iwn_pair_find(pairs, key, key_len);
   if (p) {
     return (struct iwn_val) {

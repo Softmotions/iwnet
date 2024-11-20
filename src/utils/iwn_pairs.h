@@ -58,11 +58,11 @@ IW_EXPORT void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p);
 IW_EXPORT struct iwn_pair** iwn_pairs_to_array(struct iwpool *pool, const struct iwn_pairs *pairs, size_t *out_size);
 
 /// Finds a first pair matched the given `key`. Returns zero pointer if no matched pair found.
-IW_EXPORT struct iwn_pair* iwn_pair_find(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
+IW_EXPORT struct iwn_pair* iwn_pair_find(const struct iwn_pairs *pairs, const char *key, ssize_t key_len);
 
 /// Find a first pair value matched the given `key`. If not pair found then zero initialized `iwn_val`
 /// will be returned.
-IW_EXPORT struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize_t key_len);
+IW_EXPORT struct iwn_val iwn_pair_find_val(const struct iwn_pairs *pairs, const char *key, ssize_t key_len);
 
 /// Converts pair value to integer number if possible.
 IW_EXPORT iwrc iwn_val_i64(const struct iwn_val *v, int64_t def, int64_t *out);
