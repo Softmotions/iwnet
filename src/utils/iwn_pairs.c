@@ -1,6 +1,7 @@
 #include "iwn_pairs.h"
 
 #include <iowow/iwlog.h>
+#include <iowow/iwconv.h>
 
 #include <errno.h>
 #include <string.h>
@@ -69,6 +70,25 @@ struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize
     };
   }
   return (struct iwn_val) {};
+}
+
+iwrc iwn_pair_i64_val(struct iwn_pair *p, int64_t *out) {
+  iwrc rc = 0;
+  if (!p || !out) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  *out = 0;
+  if (p->val_len == 0) {
+    return 0;
+  }
+  char buf[p->val_len + 1];
+  memcpy(buf, p->val, p->val_len);
+  buf[p->val_len] = '\0';
+  int64_t llv = iw_strtoll(buf, 10, &rc);
+  if (!rc) {
+    *out = llv;
+  }
+  return rc;
 }
 
 iwrc iwn_pair_add_pool(
