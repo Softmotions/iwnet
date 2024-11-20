@@ -72,18 +72,18 @@ struct iwn_val iwn_pair_find_val(struct iwn_pairs *pairs, const char *key, ssize
   return (struct iwn_val) {};
 }
 
-iwrc iwn_pair_i64_val(struct iwn_pair *p, int64_t *out) {
+iwrc iwn_val_i64(struct iwn_val *v, int64_t *out) {
   iwrc rc = 0;
-  if (!p || !out) {
+  if (!v || !out) {
     return IW_ERROR_INVALID_ARGS;
   }
   *out = 0;
-  if (p->val_len == 0) {
+  if (v->len == 0) {
     return 0;
   }
-  char buf[p->val_len + 1];
-  memcpy(buf, p->val, p->val_len);
-  buf[p->val_len] = '\0';
+  char buf[v->len + 1];
+  memcpy(buf, v->buf, v->len);
+  buf[v->len] = '\0';
   int64_t llv = iw_strtoll(buf, 10, &rc);
   if (!rc) {
     *out = llv;
