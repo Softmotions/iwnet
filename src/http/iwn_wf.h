@@ -230,6 +230,9 @@ IW_EXPORT struct iwn_wf_route_submatch* iwn_wf_request_submatch_first(const stru
 /// Find the last regular expression submatch part for the current route.
 IW_EXPORT struct iwn_wf_route_submatch* iwn_wf_request_submatch_last(const struct iwn_wf_req*);
 
+/// Finds n-th regular expression submatch part for the current route starting from 1 (first submatch).
+IW_EXPORT struct iwn_wf_route_submatch* iwn_wf_request_submatch_nth(const struct iwn_wf_req*, int n);
+
 /// Parses a query string (the part after `?`) and fill the provided `pairs` chain
 /// where `pool` is used to store new pairs records. Values for pairs points to parts of query buffer which is modified
 // in place.

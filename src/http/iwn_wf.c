@@ -1429,6 +1429,16 @@ struct iwn_wf_route_submatch* iwn_wf_request_submatch_last(const struct iwn_wf_r
   return ss;
 }
 
+struct iwn_wf_route_submatch* iwn_wf_request_submatch_nth(const struct iwn_wf_req *req, int n) {
+  struct iwn_wf_route *r = req->route;
+  for (struct iwn_wf_route_submatch *s = req->first; s; s = s->next) {
+    if (s->route == r && (--n == 0)) {
+      return s;
+    }
+  }
+  return 0;
+}
+
 iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ctx_) {
   struct ctx *ctx = (void*) ctx_;
   struct iwn_wf_server_spec spec;
