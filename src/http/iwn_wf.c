@@ -1517,7 +1517,7 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
     case WF_ERROR_MAX_NESTED_ROUTES:
       return "Reached the maximum number of nested routes: 127 (WF_ERROR_MAX_NESTED_ROUTES)";
     case WF_ERROR_CURL_API:
-      return "CUrl API call error (WF_ERROR_CURL_API)";
+      return "CURL API call error (WF_ERROR_CURL_API)";
   }
   return 0;
 }
