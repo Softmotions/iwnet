@@ -294,6 +294,14 @@ IW_EXPORT bool iwn_http_response_write(
   const char *body,
   ssize_t     body_len);
 
+/// Writes a given reponse `buf` and transfers ownership over this buffer.
+/// This method has less memory relocations comaping to `iwn_http_response_write`
+iwrc iwn_http_response_write_transfer_buf(
+  struct iwn_http_req *request,
+  int                  status_code,
+  const char          *content_type,
+  struct iwxstr       *buf);
+
 /// Writes a given JSON object and completes response for specified request.
 IW_EXPORT bool iwn_http_response_write_jbl(
   struct iwn_http_req*,

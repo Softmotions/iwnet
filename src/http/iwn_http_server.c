@@ -2107,6 +2107,27 @@ finish:
   return rc;
 }
 
+static iwrc iwn_http_response_end_transfer_buf(struct iwn_http_req *request, struct iwxstr *buf) {
+  iwrc rc = 0;
+  struct client *client = (void*) request;
+  struct response *response = &client->response;
+  struct iwxstr *hdrs = iwxstr_create_empty();
+  if (!hdrs) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  iwn_http_response_body_clear(request);
+  client->response.body_len = iwxstr_size(buf);
+  RCC(rc, finish, _client_response_headers_write_http(client, hdrs));
+  RCC(rc, finish, iwxstr_unshift(buf, iwxstr_ptr(hdrs), iwxstr_size(hdrs)));
+
+  _client_response_setbuf(client, hdrs);
+  _client_write(client);
+
+finish:
+  iwxstr_destroy(hdrs);
+  return rc;
+}
+
 iwrc iwn_http_response_stream_start(
   struct iwn_http_req          *request,
   iwn_http_server_chunk_handler chunk_cb) {
@@ -2251,6 +2272,28 @@ finish:
     return false;
   }
   return true;
+}
+
+iwrc iwn_http_response_write_transfer_buf(
+  struct iwn_http_req *request,
+  int                  status_code,
+  const char          *content_type,
+  struct iwxstr       *buf) {
+  iwrc rc = 0;
+  RCC(rc, finish, iwn_http_response_code_set(request, status_code));
+  if (!content_type) {
+    content_type = "text/plain";
+  }
+  if (*content_type != '\0') {
+    // Content-type header disabled if empty
+    RCC(rc, finish, iwn_http_response_header_set(request, "content-type", content_type, -1));
+  }
+  rc = iwn_http_response_end_transfer_buf(request, buf);
+finish:
+  if (rc) {
+    iwxstr_destroy(buf);
+  }
+  return rc;
 }
 
 bool iwn_http_response_write_jbl(
