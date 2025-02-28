@@ -2120,7 +2120,7 @@ static iwrc iwn_http_response_end_transfer_buf(struct iwn_http_req *request, str
   RCC(rc, finish, _client_response_headers_write_http(client, hdrs));
   RCC(rc, finish, iwxstr_unshift(buf, iwxstr_ptr(hdrs), iwxstr_size(hdrs)));
 
-  _client_response_setbuf(client, hdrs);
+  _client_response_setbuf(client, buf);
   _client_write(client);
 
 finish:
