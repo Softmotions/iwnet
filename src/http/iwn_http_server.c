@@ -2301,18 +2301,14 @@ bool iwn_http_response_write_jbl(
   int                  status_code,
   struct jbl          *jbl) {
   iwrc rc = 0;
-  struct iwxstr *xstr = 0;
+  struct iwxstr *xstr;
   RCB(finish, xstr = iwxstr_create_empty());
   RCC(rc, finish, jbl_as_json(jbl, jbl_xstr_json_printer, xstr, 0));
-  RCC(rc, finish,
-      iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));
-  RCC(rc, finish, iwn_http_response_code_set(request, status_code));
-  iwn_http_response_body_set(request, iwxstr_ptr(xstr), iwxstr_size(xstr), 0);
-  rc = iwn_http_response_end(request);
+  RCC(rc, finish, iwn_http_response_write_transfer_buf(request, status_code, "application/json", xstr));
 
 finish:
-  iwxstr_destroy(xstr);
   if (rc) {
+    iwxstr_destroy(xstr);
     iwlog_ecode_error3(rc);
     return false;
   }
@@ -2322,20 +2318,16 @@ finish:
 bool iwn_http_response_write_jbn(
   struct iwn_http_req *request,
   int                  status_code,
-  JBL_NODE             n) {
+  struct jbl_node     *n) {
   iwrc rc = 0;
-  struct iwxstr *xstr = 0;
+  struct iwxstr *xstr;
   RCB(finish, xstr = iwxstr_create_empty());
   RCC(rc, finish, jbn_as_json(n, jbl_xstr_json_printer, xstr, 0));
-  RCC(rc, finish,
-      iwn_http_response_header_set(request, "content-type", "application/json", IW_LLEN("application/json")));
-  RCC(rc, finish, iwn_http_response_code_set(request, status_code));
-  iwn_http_response_body_set(request, iwxstr_ptr(xstr), iwxstr_size(xstr), 0);
-  rc = iwn_http_response_end(request);
+  RCC(rc, finish, iwn_http_response_write_transfer_buf(request, status_code, "application/json", xstr));
 
 finish:
-  iwxstr_destroy(xstr);
   if (rc) {
+    iwxstr_destroy(xstr);
     iwlog_ecode_error3(rc);
     return false;
   }
