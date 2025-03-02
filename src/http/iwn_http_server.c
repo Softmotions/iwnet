@@ -2110,7 +2110,6 @@ finish:
 static iwrc iwn_http_response_end_transfer_buf(struct iwn_http_req *request, struct iwxstr *buf) {
   iwrc rc = 0;
   struct client *client = (void*) request;
-  struct response *response = &client->response;
   struct iwxstr *hdrs = iwxstr_create_empty();
   if (!hdrs) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
