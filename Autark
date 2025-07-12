@@ -1,0 +1,142 @@
+meta {
+  name { iwnet }
+
+  version_major { 1 }
+  version_minor { 1 }
+  version_patch { 0 }
+
+  description { Pure C Asynchronous HTTP/IO framework with routing, websockets, SSL and reverse proxy. }
+  website { https://github.com/Softmotions/iwnet }
+  vendor { Softmotions (https://softmotions.com) }
+  maintainer { Anton Adamansky <adamansky@gmail.com> }
+  license { MIT }
+}
+
+option { IWNET_BUILD_SHARED_LIBS  Build shared library }
+option { IWNET_BUILD_TESTS        Build test cases }
+option { IWNET_RUN_TESTS          Build and run test cases }
+option { ENABLE_ASAN              Turn on address sanitizer }
+option { ENABLE_UBSAN             Turn on UB sanitizer }
+option { ENABLE_DEBINFO           Generate debuginfo even in release mode }
+
+set {
+  META_VERSION
+  ^{ ${META_VERSION_MAJOR} . ${META_VERSION_MINOR} . ${META_VERSION_PATCH} }
+}
+
+set {
+  META_REVISION
+  @{ git rev-parse --short HEAD }
+}
+
+if { defined { IWNET_RUN_TESTS }
+  set {
+    IWNET_BUILD_TESTS 1
+  }
+}
+
+if { !defined { IOWOW_URL } 
+  set {
+    IOWOW_URL
+    file:///home/adam/Projects/softmotions/iowow
+  }
+}
+
+check {
+  system.sh
+  fetch_resource.sh { ${IOWOW_URL} C{extern_iowow} IOWOW_SRC_DIR }
+}
+
+run {
+  shell { IOWOW_BUILD_SHARED_LIBS=1 autark --prefix C{} ${IOWOW_SRC_DIR} }
+  consumes {
+    ${IOWOW_SRC_DIR}
+  }
+}
+
+set {
+  LDFLAGS
+  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --libs --static libiowow}
+  ..${LDFLAGS}
+}
+
+set {
+  CFLAGS
+  -std=gnu11
+  -pedantic
+  -fsigned-char
+  -Wall
+  -Wextra
+  -Wfatal-errors
+  -Wno-implicit-fallthrough
+  -Wno-missing-braces
+  -Wno-missing-field-initializers
+  -Wno-sign-compare
+  -Wno-unknown-pragmas
+  -Wno-unused-function
+  -Wno-unused-parameter
+
+  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --cflags libiowow}
+
+  if { !eq { ${SYSTEM_NAME} Windows }
+    if { defined { IWNET_BUILD_SHARED_LIBS }
+      -fPIC
+    }
+  }
+  if { defined { ENABLE_ASAN }
+    -fsanitize=address
+    -fno-omit-frame-pointer
+  } else {
+    if { defined { ENABLE_UBSAN }
+      -fsanitize=undefined
+      -fno-omit-frame-pointer
+    }
+  }
+  if { eq { ${BUILD_TYPE} Release }
+    -O3
+    if { defined { ENABLE_DEBINFO }
+      -g -ggdb
+    }
+    -DNDEBUG
+    -DIW_RELEASE
+  } else {
+    -O0
+    -g -ggdb
+    -Werror
+    -Wno-unused-variable
+    -DDEBUG -D_DEBUG -UNDEBUG
+  }
+  if { defined { SYSTEM_BIGENDIAN }
+    -DIW_BIGENDIAN
+    -DWORDS_BIGENDIAN
+  }
+  if { defined { SYSTEM_BITNESS_64 }
+    -DIW_64
+  }
+  if { defined { SYSTEM_BITNESS_32 }
+    -DIW_32
+  }
+  if { defined { SYSTEM_LINUX }
+    -D_XOPEN_SOURCE=700
+  }
+  if { defined { SYSTEM_APPLE }
+    -D_DARWIN_C_SOURCE
+  }
+  -D_DEFAULT_SOURCE
+  -D_LARGEFILE_SOURCE
+  -D_FILE_OFFSET_BITS=64
+  -DHAVE_CONFIG_H
+
+  if { !defined { IWNET_BUILD_SHARED_LIBS }
+    -DIW_NODLL
+  }
+  if { defined { IWNET_BUILD_TESTS }
+    -DIW_TESTS=1
+  }
+
+  -I C{src}
+  -I S{src}
+}
+
+include { ./src/Autark }
+
