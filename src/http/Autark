@@ -1,0 +1,33 @@
+set {
+  parent {
+    SOURCES
+  }
+  ..${SOURCES}
+  http/iwn_http_server.c
+  http/iwn_wf.c
+  http/iwn_wf_files.c
+  http/iwn_wf_sst_inmem.c
+}
+
+set {
+  parent {
+    PUB_HDRS
+  }
+  ..${PUB_HDRS}
+  http/iwn_wf_files.h
+  http/iwn_wf.h
+  http/iwn_wf_internal.h
+  http/iwn_wf_sst_inmem.h
+}
+
+set {
+  root {
+    CFLAGS
+  }
+  ..${CFLAGS}
+  -I SS{}
+}
+
+if { defined { IWNET_BUILD_TESTS } 
+  include { tests/Autark }
+}

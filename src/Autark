@@ -1,5 +1,35 @@
-check {
-  test_header.sh { arpa/inet.h HAVE_ARPA_INET_H } 
-  test_header.sh { netinet/in.h HAVE_NETINET_IN_H } 
-  test_header.sh { winsock2.h HAVE_WINSOCK2_H }
+configure {
+  iwnet.h.in
+  config.h.in
+}
+
+set {
+  SOURCES
+  iwnet.c
+}
+
+set {
+  PUB_HDRS
+  iwnet.h
+}
+
+include { utils/Autark }
+include { poller/Autark }
+include { http/Autark }
+include { ws/Autark }
+include { ssl/Autark }
+include { wslay/Autark }
+include { bearssl/Autark }
+
+cc {
+  ${SOURCES}
+  ${CFLAGS}
+  ${CC}
+  consumes {
+    iwnet.h
+    config.h
+    C{include/iowow/iowow.h}
+    C{include/data_cacert.inc} 
+    C{include/generated_mimegen.h} 
+  }
 }

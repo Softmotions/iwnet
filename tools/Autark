@@ -1,0 +1,32 @@
+
+cc {
+  set { _ mimegen.c strliteral.c }
+}
+
+foreach {
+  OBJ
+  ${CC_OBJS}
+  run {
+    exec { ${CC} ${OBJ} -o %{${OBJ}} }
+    consumes { ${OBJ} }
+    produces { %{${OBJ}} }
+  }
+}
+
+run {
+  shell { ./strliteral -i 'data_cacert' SS{cacert.pem} > C{include/data_cacert.inc} }
+  consumes { 
+    strliteral 
+  }
+  produces {
+    C{include/data_cacert.inc} 
+  }
+}
+
+run {
+  shell { ./mimegen SS{mime.types} > C{include/generated_mimegen.h} }
+  consumes { mimegen }
+  produces {
+    C{include/generated_mimegen.h}
+  }
+}

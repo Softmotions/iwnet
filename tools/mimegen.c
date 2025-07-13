@@ -2,7 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <ctype.h>
 #include <stdint.h>
 
 #define NSIZE 1024

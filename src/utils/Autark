@@ -1,0 +1,37 @@
+set {
+  parent {
+    SOURCES
+  }
+  ..${SOURCES}
+  utils/iwn_base64.c
+  utils/iwn_codec.c
+  utils/iwn_mimetypes.c
+  utils/iwn_net.c
+  utils/iwn_pairs.c
+  utils/iwn_url.c
+}
+
+set {
+  parent {
+    PUB_HDRS
+  }
+  ..${PUB_HDRS}
+  utils/iwn_base64.h
+  utils/iwn_codec.h
+  utils/iwn_curl.h
+  utils/iwn_mimetypes.h
+  utils/iwn_net.h
+  utils/iwn_pairs.h
+  utils/iwn_tests.h
+  utils/iwn_url.h
+  utils/iwn_utils.h
+}
+
+set {
+  root {
+    CFLAGS
+  }
+  ..${CFLAGS}
+  -I SS{}
+}
+

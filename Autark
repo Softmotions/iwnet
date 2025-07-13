@@ -12,6 +12,7 @@ meta {
   license { MIT }
 }
 
+option { IOWOW_URL                IOWOW external project sources location URL }
 option { IWNET_BUILD_SHARED_LIBS  Build shared library }
 option { IWNET_BUILD_TESTS        Build test cases }
 option { IWNET_RUN_TESTS          Build and run test cases }
@@ -44,6 +45,10 @@ if { !defined { IOWOW_URL }
 
 check {
   system.sh
+  test_blocks.sh { IW_BLOCKS }
+  test_header.sh { arpa/inet.h HAVE_ARPA_INET_H } 
+  test_header.sh { netinet/in.h HAVE_NETINET_IN_H } 
+  test_header.sh { winsock2.h HAVE_WINSOCK2_H }
   fetch_resource.sh { ${IOWOW_URL} C{extern_iowow} IOWOW_SRC_DIR }
 }
 
@@ -52,18 +57,24 @@ run {
   consumes {
     ${IOWOW_SRC_DIR}
   }
+  produces {
+    C{include/iowow/iowow.h}
+  }
 }
 
 set {
   LDFLAGS
   ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --libs --static libiowow}
+  if { defined { SYSTEM_WINDOWS }
+    -static-libgcc 
+    -static-libstdc++
+  }
   ..${LDFLAGS}
 }
 
 set {
   CFLAGS
   -std=gnu11
-  -pedantic
   -fsigned-char
   -Wall
   -Wextra
@@ -75,6 +86,7 @@ set {
   -Wno-unknown-pragmas
   -Wno-unused-function
   -Wno-unused-parameter
+  -Wno-overlength-strings
 
   ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --cflags libiowow}
 
@@ -122,11 +134,14 @@ set {
   if { defined { SYSTEM_APPLE }
     -D_DARWIN_C_SOURCE
   }
-  -D_DEFAULT_SOURCE
-  -D_LARGEFILE_SOURCE
-  -D_FILE_OFFSET_BITS=64
-  -DHAVE_CONFIG_H
-
+  if { defined { SYSTEM_WINDOWS } 
+    -D__USE_MINGW_ANSI_STDIO
+    -Wno-pedantic-ms-format"
+  }
+  if { defined { IW_BLOCKS } 
+    -fblocks
+    -DIW_BLOCKS
+  }
   if { !defined { IWNET_BUILD_SHARED_LIBS }
     -DIW_NODLL
   }
@@ -134,9 +149,15 @@ set {
     -DIW_TESTS=1
   }
 
+  -D_DEFAULT_SOURCE
+  -D_LARGEFILE_SOURCE
+  -D_FILE_OFFSET_BITS=64
+  -DHAVE_CONFIG_H
+
   -I C{src}
   -I S{src}
 }
 
-include { ./src/Autark }
+include { tools/Autark }
+include { src/Autark }
 

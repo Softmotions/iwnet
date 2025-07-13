@@ -1,0 +1,33 @@
+set {
+  parent {
+    SOURCES
+  }
+  ..${SOURCES}
+  wslay/wslay_event.c
+  wslay/wslay_frame.c
+  wslay/wslay_net.c
+  wslay/wslay_queue.c
+}
+
+set {
+  parent {
+    PUB_HDRS
+  }
+  ..${PUB_HDRS}
+  wslay/wslay_event.h
+  wslay/wslay_frame.h
+  wslay/wslay.h
+  wslay/wslay_macro.h
+  wslay/wslay_net.h
+  wslay/wslay_queue.h
+  wslay/wslayver.h
+}
+
+set {
+  root {
+    CFLAGS
+  }
+  ..${CFLAGS}
+  -I SS{}
+}
+
