@@ -1,6 +1,27 @@
 configure {
   iwnet.h.in
   config.h.in
+  libiwnet.pc.in
+}
+
+option { IWNET_OWNER_PROJECT_NAME Optional name of the owner project used to install
+                                  header files into IWNET_OWNER_PROJECT_NAME/META_PROJECT_NAME }
+
+if { ${IWNET_OWNER_PROJECT_NAME}
+  set {
+    IWNET_PUBLIC_HEADER_DESTINATION ^{ ${INSTALL_INCLUDE_DIR} / ${IWNET_OWNER_PROJECT_NAME} }
+  }
+} else {
+  set {
+    IWNET_PUBLIC_HEADER_DESTINATION ^{ ${INSTALL_INCLUDE_DIR} / ${META_NAME} }
+  }
+}
+
+set {
+  LDFLAGS_TEST
+  @{ ${PKGCONF} --libs cunit }
+  ${LIBIWNET_A}
+  ..${LDFLAGS}
 }
 
 set {
@@ -33,3 +54,60 @@ cc {
     C{include/generated_mimegen.h} 
   }
 }
+
+set {
+  LIBIWNET_A
+  CC { libiwnet.a }
+}
+
+run {
+  exec { ${AR} rcs ${LIBIWNET_A} ${CC_OBJS} }
+  consumes {
+    ${CC_OBJS}
+  }
+  produces {
+    ${LIBIWNET_A}
+  }
+}
+
+install { ${INSTALL_LIB_DIR} ${LIBIWNET_A} }
+
+if { ${IWNET_BUILD_SHARED_LIBS} 
+  set {
+    LIBIWNET_SO_BASE
+    libiwnet.so
+  }
+
+  set {
+    LIBIWNET_SO_BIN
+    ^{${LIBIWNET_SO_BASE} . ${META_VERSION}}
+  }
+
+  set {
+    LIBIWNET_SO_NAME
+    ^{${LIBIWNET_SO_BASE} . ${META_VERSION_MAJOR}}
+  }
+
+  run {
+    exec { ${CC} --shared -o ${LIBIWNET_SO_BIN}  ${CC_OBJS} }
+    consumes {
+      ${CC_OBJS}
+    }
+    produces {
+      ${LIBIWNET_SO_BIN}
+    }
+  }
+
+  run {
+    exec { ln -sf ${LIBIWNET_SO_BIN} ${LIBIWNET_SO_NAME} }
+    exec { ln -sf ${LIBIWNET_SO_BIN} ${LIBIWNET_SO_BASE} }
+    consumes {
+      ${LIBIWNET_SO_BIN}
+    }
+  }
+
+  install { ${INSTALL_LIB_DIR} ${LIBIWNET_SO_BIN} ${LIBIWNET_SO_BASE} ${LIBIWNET_SO_NAME} }
+}
+
+install { ${INSTALL_PKGCONFIG_DIR} libiwnet.pc }
+install { ${IWNET_PUBLIC_HEADER_DESTINATION} ${PUB_HDRS} }

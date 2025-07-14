@@ -1,0 +1,49 @@
+
+
+cc {
+  set { _
+    poller_pipe_test1.c
+    poller_proc_test1.c
+    poller_scheduler_test1.c
+    poller_timeout_test1.c
+  }
+  set { _ ..${CFLAGS} -DIW_STATIC -DIW_TESTS }
+}
+
+foreach {
+  OBJ
+  ${CC_OBJS}
+  run {
+    exec { ${CC} ${OBJ} ${LDFLAGS_TEST} -o %{${OBJ}} }
+    consumes { ${LIBIWNET_A} ${OBJ} }
+    produces { %{${OBJ}} }
+  }
+}
+
+if { ${IWNET_RUN_TESTS} 
+
+  cc {
+    echo.c
+    set { _ ..${CFLAGS} -DIW_STATIC }
+    objects {
+      TOOLS_OBJS
+    }
+  }
+
+  run {
+    exec { ${CC} ${TOOLS_OBJS} -o echo }
+    produces { echo }
+    consumes { ${TOOLS_OBJS} }
+  }
+
+  foreach {
+    OBJ
+    ${CC_OBJS}
+    run {
+      always
+      shell { %{${OBJ}} }
+      consumes { echo %{${OBJ}} }
+    }
+  }
+}
+

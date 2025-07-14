@@ -1,0 +1,54 @@
+
+cc {
+  set { _ 
+    ws_client_test1.c
+    ws_client_test2.c
+    ws_client_test4.c
+  }
+  set { _ ..${CFLAGS} -DIW_STATIC -DIW_TESTS }
+}
+
+foreach {
+  OBJ
+  ${CC_OBJS}
+  run {
+    exec { ${CC} ${OBJ} ${LDFLAGS_TEST} -o %{${OBJ}} }
+    consumes { ${LIBIWNET_A} ${OBJ} }
+    produces { %{${OBJ}} }
+  }
+}
+
+if { ${IWNET_RUN_TESTS} 
+  run {
+    shell { cp SS{*.pem} CC{} }
+  }
+
+  cc {
+    ws_server1.c
+    set { _ ..${CFLAGS} -DIW_STATIC }
+    objects {
+      TOOLS_OBJS
+    }
+  }
+
+  run {
+    exec { ${CC} ${TOOLS_OBJS} ${LDFLAGS_TEST} -o ws_server1 }
+    produces { ws_server1 }
+    consumes { ${TOOLS_OBJS} }
+  }
+
+  foreach {
+    OBJ
+    ${CC_OBJS}
+    run {
+      always
+      shell { %{${OBJ}} }
+      consumes { ws_server1 %{${OBJ}} }
+    }
+  }
+
+  run {
+    always
+    shell { ./ws_client_test1 --listen socket:///tmp/ws_server1.socket }
+  }
+}

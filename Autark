@@ -30,7 +30,7 @@ set {
   @{ git rev-parse --short HEAD }
 }
 
-if { defined { IWNET_RUN_TESTS }
+if { ${IWNET_RUN_TESTS}
   set {
     IWNET_BUILD_TESTS 1
   }
@@ -53,7 +53,7 @@ check {
 }
 
 run {
-  shell { IOWOW_BUILD_SHARED_LIBS=1 autark --prefix C{} ${IOWOW_SRC_DIR} }
+  shell { autark --prefix C{} ${IOWOW_SRC_DIR} }
   consumes {
     ${IOWOW_SRC_DIR}
   }
@@ -64,11 +64,14 @@ run {
 
 set {
   LDFLAGS
-  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --libs --static libiowow}
   if { defined { SYSTEM_WINDOWS }
     -static-libgcc 
     -static-libstdc++
   }
+  if { defined { IW_BLOCKS } 
+    -lBlocksRuntime 
+  }
+  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --libs --static libiowow}
   ..${LDFLAGS}
 }
 
@@ -91,32 +94,32 @@ set {
   ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --cflags libiowow}
 
   if { !eq { ${SYSTEM_NAME} Windows }
-    if { defined { IWNET_BUILD_SHARED_LIBS }
+    if { ${IWNET_BUILD_SHARED_LIBS}
       -fPIC
     }
   }
-  if { defined { ENABLE_ASAN }
+  if { ${ENABLE_ASAN}
     -fsanitize=address
     -fno-omit-frame-pointer
   } else {
-    if { defined { ENABLE_UBSAN }
+    if { ${ENABLE_UBSAN}
       -fsanitize=undefined
       -fno-omit-frame-pointer
     }
   }
-  if { eq { ${BUILD_TYPE} Release }
-    -O3
-    if { defined { ENABLE_DEBINFO }
-      -g -ggdb
-    }
-    -DNDEBUG
-    -DIW_RELEASE
-  } else {
+  if { prefix { ${BUILD_TYPE} Debug }
     -O0
     -g -ggdb
     -Werror
     -Wno-unused-variable
     -DDEBUG -D_DEBUG -UNDEBUG
+  } else {
+    -O3
+    if { ${ENABLE_DEBINFO}
+      -g -ggdb
+    }
+    -DNDEBUG
+    -DIW_RELEASE
   }
   if { defined { SYSTEM_BIGENDIAN }
     -DIW_BIGENDIAN
@@ -145,8 +148,8 @@ set {
   if { !defined { IWNET_BUILD_SHARED_LIBS }
     -DIW_NODLL
   }
-  if { defined { IWNET_BUILD_TESTS }
-    -DIW_TESTS=1
+  if { ${IWNET_BUILD_TESTS}
+    -DIW_TESTS
   }
 
   -D_DEFAULT_SOURCE

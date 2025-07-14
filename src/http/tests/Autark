@@ -1,0 +1,39 @@
+cc {
+  set { _ 
+    proxy1.c
+    server1.c
+    server2.c
+    wf_test1.c
+  }
+  set { _ ..${CFLAGS} -DIW_STATIC -DIW_TESTS }
+}
+
+foreach {
+  OBJ
+  ${CC_OBJS}
+  run {
+    exec { ${CC} ${OBJ} ${LDFLAGS_TEST} -o %{${OBJ}} }
+    consumes { ${LIBIWNET_A} ${OBJ} }
+    produces { %{${OBJ}} }
+  }
+}
+
+if { ${IWNET_RUN_TESTS} 
+  run {
+    shell { cp SS{*.pem} CC{} }
+    shell { cp SS{*.sh} CC{} }
+    shell { cp SS{*.log} CC{} }
+  }
+
+  run {
+    always
+    exec { ./wf_test1 }
+    exec { ./server1-tests-run.sh }
+    exec { ./server1-tests-run.sh --valgrind }
+    exec { ./server1-tests-run.sh -- --ssl }
+    exec { ./server1-tests-run.sh --valgrind -- --ssl }
+    exec { ./server2-tests-run.sh }
+    exec { ./server2-tests-run.sh -- --ssl }
+    exec { ./proxy1-tests-run.sh }
+  }
+}

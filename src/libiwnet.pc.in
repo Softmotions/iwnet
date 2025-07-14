@@ -1,0 +1,13 @@
+exec_prefix=@INSTALL_PREFIX@/@INSTALL_BIN_DIR@
+libdir=@INSTALL_PREFIX@/@INSTALL_LIB_DIR@
+includedir=@INSTALL_PREFIX@/@INSTALL_INCLUDE_DIR@
+artifact=@META_NAME@
+
+Name: @META_NAME@
+Description: @META_DESCRIPTION@
+URL: @META_WEBSITE@
+Version: @META_VERSION@
+Libs: -L${libdir} -l${artifact}
+Requires: libiowow
+Libs.private: @LDFLAGS@
+Cflags: -I${includedir}

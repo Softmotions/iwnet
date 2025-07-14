@@ -31,6 +31,6 @@ set {
   -I SS{}
 }
 
-if { defined { IWNET_BUILD_TESTS } 
+if { ${IWNET_BUILD_TESTS} 
   include { tests/Autark }
 }
