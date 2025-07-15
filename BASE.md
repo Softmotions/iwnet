@@ -21,6 +21,7 @@ Works on Linux, macOS, FreeBSD
 
 * Linux, macOS or FreeBSD
 * gcc or clang compiler (clang is preferred since allows code blocks API provided by this project)
+* pkgconf or pkg-config
 
 **Building**
 
