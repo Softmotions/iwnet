@@ -7,10 +7,10 @@ configure {
   libiwnet.pc.in
 }
 
-option { IWNET_PUBLIC_HEADER_DESTINATION  Installation path relative to INSTALL_PREFIX for iwnet public header files. }
-if { !defined { IWNET_PUBLIC_HEADER_DESTINATION }
+option { IWNET_PUBLIC_HEADERS_DESTINATION  Installation path relative to INSTALL_PREFIX for iwnet public header files. }
+if { !defined { IWNET_PUBLIC_HEADERS_DESTINATION }
   set {
-    IWNET_PUBLIC_HEADER_DESTINATION ^{ ${INSTALL_INCLUDE_DIR} / ${META_NAME} }
+    IWNET_PUBLIC_HEADERS_DESTINATION ^{ ${INSTALL_INCLUDE_DIR} / ${META_NAME} }
   }
 }
 
@@ -107,4 +107,4 @@ if { ${IWNET_BUILD_SHARED_LIBS}
 }
 
 install { ${INSTALL_PKGCONFIG_DIR} libiwnet.pc }
-install { ${IWNET_PUBLIC_HEADER_DESTINATION} ${PUB_HDRS} }
+install { ${IWNET_PUBLIC_HEADERS_DESTINATION} ${PUB_HDRS} }
