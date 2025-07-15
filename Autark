@@ -49,6 +49,9 @@ check {
   test_header.sh { arpa/inet.h HAVE_ARPA_INET_H } 
   test_header.sh { netinet/in.h HAVE_NETINET_IN_H } 
   test_header.sh { winsock2.h HAVE_WINSOCK2_H }
+}
+
+check {
   fetch_resource.sh { ${IOWOW_URL} C{extern_iowow} IOWOW_SRC_DIR }
 }
 
