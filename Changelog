@@ -1,5 +1,4 @@
-iwnet (1.1.0) testing; urgency=medium
-
+2024-04-16  Anton Adamansky  <adamansky@gmail.com>  [v1.1.0]
   * impl: Supported Unix domain sockets by WS/HTTP client/server
   * fix: Used portable version of pthreads barrier (iowow/iwth.h)
   * fix: Fixed wrong handling of fd error events (iwn_poller)
@@ -9,11 +8,10 @@ iwnet (1.1.0) testing; urgency=medium
   * impl: Added iwn_http_response_write_jbn() and iwn_http_response_write_jbl() (iwn_http_server.h)
   * impl: Added iwn_wf_fileobj_serve() (iwn_wf_files.h)
   * impl: Added iwn_url_encode_new_printf() (iwn_codec.h)
-  * fix: Fixed possible deadlock in _client_accept() (iwn_http_server.c)  
+  * fix: Fixed possible deadlock in _client_accept() (iwn_http_server.c)
   * fix: Allow IPv6 server listening. (iwn_http_server.c)
   * impl: Added iwn_poller_fd_is_managed() (iwn_poller.h)
   * misc: Minors iwn_poller improvements.
   * fix: FreeBSD build failed.
   * fix: Endless loop in ws_server.c
 
- -- Anton Adamansky <adamansky@gmail.com>  Tue, 16 Apr 2024 11:08:00 +0700

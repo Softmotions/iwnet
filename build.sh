@@ -1,8 +1,10 @@
 #!/bin/sh
-# Autark build system script wrapper.
+# MIT License
+# Autark (https://autark.dev) build system script wrapper.
+# Copyright (c) 2012-2025 Softmotions Ltd <info@softmotions.com>
 
-META_VERSION=0.9.0
-META_REVISION=3e96e39
+META_VERSION=dev
+META_REVISION=74a2d95
 cd "$(cd "$(dirname "$0")"; pwd -P)"
 
 prev_arg=""
@@ -55,11 +57,9 @@ fi
 
 mkdir -p ${AUTARK_HOME}
 cat <<'a292effa503b' > ${AUTARK_HOME}/autark.c
-#ifndef CONFIG_H
-#define CONFIG_H
-#define META_VERSION "0.9.0"
-#define META_REVISION "3e96e39"
-#endif
+#define META_VERSION "dev"
+#define META_REVISION "74a2d95"
+#define _POSIX_C_SOURCE 200809L
 #define _AMALGAMATE_
 #define _XOPEN_SOURCE 600
 #define _POSIX_C_SOURCE 200809L
