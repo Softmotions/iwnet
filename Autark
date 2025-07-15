@@ -12,8 +12,8 @@ meta {
   license { MIT }
 }
 
-option { IOWOW_URL                IOWOW external project sources location URL }
-option { IWNET_BUILD_SHARED_LIBS  Build shared library }
+option { IOWOW_URL                IOWOW external project sources URL }
+option { IWNET_BUILD_SHARED_LIBS  Build shared libraries }
 option { IWNET_BUILD_TESTS        Build test cases }
 option { IWNET_RUN_TESTS          Build and run test cases }
 option { ENABLE_ASAN              Turn on address sanitizer }
@@ -60,6 +60,10 @@ run {
   produces {
     C{include/iowow/iowow.h}
   }
+}
+
+run-on-install {
+  shell { autark --prefix ${INSTALL_PREFIX} ${IOWOW_SRC_DIR} }
 }
 
 set {
