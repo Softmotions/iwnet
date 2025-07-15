@@ -9,4 +9,5 @@ URL: @META_WEBSITE@
 Version: @META_VERSION@
 Libs: -L${libdir} -l${artifact}
 Requires: libiowow
+Libs.private: @LDFLAGS_PKGCONF@
 Cflags: -I${includedir}
