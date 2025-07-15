@@ -1,6 +1,9 @@
 configure {
   iwnet.h.in
   config.h.in
+}
+
+configure {
   libiwnet.pc.in
 }
 
