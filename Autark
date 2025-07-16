@@ -82,9 +82,9 @@ set {
 
 set {
   LDFLAGS
-  ..${LDFLAGS_PKGCONF}
-  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --libs --static libiowow}
   ..${LDFLAGS}
+  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --libs --static libiowow}
+  ..${LDFLAGS_PKGCONF}
 }
 
 set {
