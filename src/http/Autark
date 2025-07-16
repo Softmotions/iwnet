@@ -18,6 +18,7 @@ set {
   http/iwn_wf.h
   http/iwn_wf_internal.h
   http/iwn_wf_sst_inmem.h
+  http/iwn_http_server.h
 }
 
 set {

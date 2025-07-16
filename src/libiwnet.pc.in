@@ -1,6 +1,6 @@
 exec_prefix=@INSTALL_PREFIX@/@INSTALL_BIN_DIR@
 libdir=@INSTALL_PREFIX@/@INSTALL_LIB_DIR@
-includedir=@INSTALL_PREFIX@/@INSTALL_INCLUDE_DIR@
+includedir=@INSTALL_PREFIX@/@IWNET_PUBLIC_HEADERS_DESTINATION@
 artifact=@META_NAME@
 
 Name: @META_NAME@
@@ -10,4 +10,4 @@ Version: @META_VERSION@
 Libs: -L${libdir} -l${artifact}
 Requires: libiowow
 Libs.private: @LDFLAGS_PKGCONF@
-Cflags: -I${includedir}
+Cflags: -I@INSTALL_PREFIX@/@INSTALL_INCLUDE_DIR@ -I${includedir}
