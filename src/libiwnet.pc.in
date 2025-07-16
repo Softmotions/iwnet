@@ -11,3 +11,4 @@ Libs: -L${libdir} -l${artifact}
 Requires: libiowow
 Libs.private: @LDFLAGS_PKGCONF@
 Cflags: -I@INSTALL_PREFIX@/@INSTALL_INCLUDE_DIR@ -I${includedir}
+Cflags.private: -DIW_STATIC
