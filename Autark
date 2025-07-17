@@ -154,7 +154,7 @@ set {
   if { defined { SYSTEM_LINUX }
     -D_XOPEN_SOURCE=700
   }
-  if { defined { SYSTEM_APPLE }
+  if { defined { SYSTEM_DARWIN }
     -D_DARWIN_C_SOURCE
   }
   if { defined { SYSTEM_WINDOWS } 
