@@ -36,6 +36,12 @@ if { ${IWNET_RUN_TESTS}
   }
 }
 
+if { eq { ${BUILD_TYPE} Release }
+  set {
+    STRIP_ENABLED 1
+  }
+}
+
 if { !defined { IOWOW_URL } 
   set {
     IOWOW_URL
@@ -110,14 +116,10 @@ set {
   -Wno-unused-function
   -Wno-unused-parameter
   -Wno-overlength-strings
+  -fPIC
 
   ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --cflags libiowow}
 
-  if { !eq { ${SYSTEM_NAME} Windows }
-    if { ${IWNET_BUILD_SHARED_LIBS}
-      -fPIC
-    }
-  }
   if { ${ENABLE_ASAN}
     -fsanitize=address
     -fno-omit-frame-pointer
@@ -167,6 +169,8 @@ set {
   }
   if { !defined { IWNET_BUILD_SHARED_LIBS }
     -DIW_NODLL
+  } else {
+    -DIW_API_EXPORTS
   }
   if { ${IWNET_BUILD_TESTS}
     -DIW_TESTS
