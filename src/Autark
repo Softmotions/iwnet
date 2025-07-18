@@ -85,8 +85,8 @@ if { ${IWNET_BUILD_SHARED_LIBS}
     }
     run {
       exec { ${CC} --shared -o ${LIBIWNET_SO_BIN}  ${CC_OBJS} }
-      if { ${STRIP_ENABLED} 
-        exec { strip --strip-debug ${LIBIWNET_SO_BIN} }
+      if { ${STRIP_CMD} 
+        exec { ${STRIP_CMD} ${LIBIWNET_SO_BIN} }
       }
       consumes {
         ${CC_OBJS}
@@ -116,8 +116,8 @@ if { ${IWNET_BUILD_SHARED_LIBS}
         -o ${LIBIWNET_SO_BIN} 
         ${CC_OBJS} 
       }
-      if { ${STRIP_ENABLED} 
-        exec { strip --strip-debug ${LIBIWNET_SO_BIN} }
+      if { ${STRIP_CMD} 
+        exec { ${STRIP_CMD} ${LIBIWNET_SO_BIN} }
       }
       consumes {
         ${CC_OBJS}
