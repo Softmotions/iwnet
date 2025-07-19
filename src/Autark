@@ -84,7 +84,7 @@ if { ${IWNET_BUILD_SHARED_LIBS}
       ^{${LIBIWNET_SO_BASE} . ${META_VERSION_MAJOR}}
     }
     run {
-      exec { ${CC} --shared -o ${LIBIWNET_SO_BIN}  ${CC_OBJS} }
+      exec { ${CC} -shared -o ${LIBIWNET_SO_BIN}  ${CC_OBJS} }
       if { ${STRIP_CMD} 
         exec { ${STRIP_CMD} ${LIBIWNET_SO_BIN} }
       }
