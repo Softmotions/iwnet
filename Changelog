@@ -1,3 +1,6 @@
+2025-07-19  Anton Adamansky  <adamansky@gmail.com>  [v1.2.0]
+  * Migration to Autark build system.
+
 2024-04-16  Anton Adamansky  <adamansky@gmail.com>  [v1.1.0]
   * impl: Supported Unix domain sockets by WS/HTTP client/server
   * fix: Used portable version of pthreads barrier (iowow/iwth.h)

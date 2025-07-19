@@ -45,7 +45,7 @@ if { eq { ${BUILD_TYPE} Release }
 if { !defined { IOWOW_URL } 
   set {
     IOWOW_URL
-    file:///home/adam/Projects/softmotions/iowow
+    https://github.com/Softmotions/iowow/archive/refs/heads/master.zip
   }
 }
 
