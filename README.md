@@ -15,14 +15,15 @@ Works on Linux, macOS, FreeBSD
 * Manager of child processes ([iwn_proc.h](./src/poller/iwn_proc.h))
 * Timer ([iwn_scheduler.h](./src/poller/iwn_scheduler.h))
 
-## Build from sources
+# Build from sources
 
 **Prerequisites**
 
 * Linux, macOS or FreeBSD
 * gcc or clang compiler (clang is preferred since allows code blocks API provided by this project)
+* pkgconf or pkg-config
 
-**Building**
+## Build by [Autark](https://github.com/Softmotions/autark)
 
 ```sh
 ./build.sh
