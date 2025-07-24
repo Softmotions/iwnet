@@ -29,11 +29,13 @@ if { ${IWNET_RUN_TESTS}
     always
     exec { ./wf_test1 }
     exec { ./server1-tests-run.sh }
-    exec { ./server1-tests-run.sh --valgrind }
     exec { ./server1-tests-run.sh -- --ssl }
-    exec { ./server1-tests-run.sh --valgrind -- --ssl }
     exec { ./server2-tests-run.sh }
     exec { ./server2-tests-run.sh -- --ssl }
     exec { ./proxy1-tests-run.sh }
+    if { defined { SYSTEM_LINUX } 
+      exec { ./server1-tests-run.sh --valgrind }
+      exec { ./server1-tests-run.sh --valgrind -- --ssl }
+    }
   }
 }
