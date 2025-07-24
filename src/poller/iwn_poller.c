@@ -1046,7 +1046,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
         continue;
       }
       fd = (int) event[i].ident;
-      if (fd < -1) { // Own, not fd related event
+      if (fd == p->fd) { // Own, not fd related event
         if (event[i].filter == EVFILT_TIMER) {
           if (__sync_bool_compare_and_swap(&p->housekeeping, false, true)) {
             _timer_ready_impl(p);
