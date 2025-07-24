@@ -1057,6 +1057,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
       }
       switch (event[i].filter) {
         case EVFILT_READ:
+        case EVFILT_TIMER:  
           events |= IWN_POLLIN;
           break;
         case EVFILT_WRITE:
