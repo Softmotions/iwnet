@@ -5,7 +5,7 @@ cc {
     ws_client_test2.c
     ws_client_test4.c
   }
-  set { _ ..${CFLAGS} -DIW_STATIC -DIW_TESTS }
+  ${CFLAGS_TESTS}
 }
 
 foreach {

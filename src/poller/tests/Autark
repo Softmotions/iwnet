@@ -7,7 +7,7 @@ cc {
     poller_scheduler_test1.c
     poller_timeout_test1.c
   }
-  set { _ ..${CFLAGS} -DIW_STATIC -DIW_TESTS }
+  ${CFLAGS_TESTS}
 }
 
 foreach {

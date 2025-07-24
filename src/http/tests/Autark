@@ -5,7 +5,7 @@ cc {
     server2.c
     wf_test1.c
   }
-  set { _ ..${CFLAGS} -DIW_STATIC -DIW_TESTS }
+  ${CFLAGS_TESTS}
 }
 
 foreach {
