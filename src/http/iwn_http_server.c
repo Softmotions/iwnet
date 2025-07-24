@@ -1191,7 +1191,7 @@ static int64_t _proxy_client_on_ready(struct iwn_poller_adapter *pa, void *user_
   iwrc rc = 0;
   // force ret to be > 0 in order to not apply default slot events mask (IWN_POLLIN)
   // do read client channel only if proxy endpoint in connected state.
-  uint32_t ret = IWN_POLLET;
+  int64_t ret = IWN_POLLET;
   uint32_t arm_endpoint = 0;
   struct client *client = user_data;
   struct proxy *proxy = &client->proxy;
