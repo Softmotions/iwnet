@@ -467,7 +467,7 @@ static void _stream_shift(struct stream *stream) {
     char *dst = stream->buf + stream->anchor;
     char *src = stream->buf + stream->token.index;
     ssize_t bytes = stream->length - stream->token.index;
-    memcpy(dst, src, bytes);
+    memmove(dst, src, bytes);
   }
   stream->token.index = stream->anchor;
   stream->index = stream->anchor + stream->token.len;
