@@ -5,9 +5,11 @@ set {
   ..${SOURCES}
   poller/iwn_proc.c
   poller/iwn_poller.c
-  poller/iwn_watcher.c
   poller/iwn_scheduler.c
   poller/iwn_direct_poller_adapter.c
+  if { defined { SYSTEM_LINUX } 
+    poller/iwn_watcher.c
+  }
 }
 
 set {
@@ -17,10 +19,12 @@ set {
   ..${PUB_HDRS}
   poller/iwn_poller.h
   poller/iwn_proc.h
-  poller/iwn_watcher.h
   poller/iwn_scheduler.h
   poller/iwn_poller_adapter.h
   poller/iwn_direct_poller_adapter.h
+  if { defined { SYSTEM_LINUX } 
+    poller/iwn_watcher.h
+  }
 }
 
 set {
