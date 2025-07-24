@@ -515,7 +515,7 @@ static iwrc _poller_timeout_create_fd(struct poller_slot *s) {
 static iwrc _poller_timeout_add(struct poller_slot *s) {
 #if defined(IWN_KQUEUE)
   struct kevent ev = {
-    (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_ONESHOT, NOTE_USECONDS, ((int64_t) s->timeout) * 1000
+    (unsigned) s->fd, EVFILT_TIMER, EV_ADD | EV_ONESHOT, NOTE_MSECONDS, (int64_t) s->timeout
   };
   if (kevent(s->poller->fd, &ev, 1, 0, 0, 0) == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
@@ -1046,7 +1046,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
         continue;
       }
       fd = (int) event[i].ident;
-      if (fd == p->fd) { // Own, not fd related event
+      if (fd < -1) { // Own, not fd related event
         if (event[i].filter == EVFILT_TIMER) {
           if (__sync_bool_compare_and_swap(&p->housekeeping, false, true)) {
             _timer_ready_impl(p);

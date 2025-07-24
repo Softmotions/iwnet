@@ -6,13 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(IWN_KQUEUE)
-#include <sys/event.h>
-#elif defined(IWN_EPOLL)
-#include <sys/epoll.h>
-#include <sys/timerfd.h>
-#endif
-
 static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t events) {
   struct iwn_scheduler_spec *s = t->user_data;
   assert(s);
