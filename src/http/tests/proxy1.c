@@ -99,6 +99,7 @@ int main(int argc, char *argv[]) {
 
   RCC(rc, finish, iwn_wf_server(&spec, ctx));
   RCC(rc, finish, _endpoint_spawn());
+  sleep(1);
 
   iwn_poller_poll(poller);
   iwn_proc_dispose2(SIGTERM, 10000);
