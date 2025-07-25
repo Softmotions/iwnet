@@ -35,7 +35,7 @@ fi
 SERVER="./proxy1 ${SOPTS}"
 
 run() {
-  sleep 1
+  sleep 5
   
   ARGS="-H Host:endpoint"
   BASE="${PROTO}://localhost:${PORT}"
