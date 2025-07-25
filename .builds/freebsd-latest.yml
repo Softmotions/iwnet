@@ -11,8 +11,8 @@ packages:
   - bash
 tasks:
   - run-tests-gcc: |
-      cd ./iowow
+      cd ./iwnet
       CC=gcc BUILD_TYPE=Debug IWNET_RUN_TESTS=1 ./build.sh -c
   - run-tests-clang: |
-      cd ./iowow
+      cd ./iwnet
       CC=clang BUILD_TYPE=Debug IWNET_RUN_TESTS=1 ./build.sh -c
