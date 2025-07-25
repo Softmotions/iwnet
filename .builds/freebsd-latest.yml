@@ -9,6 +9,7 @@ packages:
   - cunit
   - curl
   - bash
+  - unzip
 tasks:
   - run-tests-gcc: |
       cd ./iwnet

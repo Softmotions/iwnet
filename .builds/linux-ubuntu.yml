@@ -11,6 +11,7 @@ packages:
   - libcurl4-openssl-dev
   - curl
   - bash
+  - unzip
   - valgrind
 tasks:
   - run-tests-gcc: |
