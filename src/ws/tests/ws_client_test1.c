@@ -35,8 +35,6 @@ static void _on_ws_server_exit(const struct iwn_proc_ctx *ctx) {
 static void on_dispose(const struct iwn_ws_client_ctx *ctx) {
   fprintf(stderr, "Killing ws server: %d\n", ws_server_pid);
   iwn_proc_kill(ws_server_pid, SIGINT);
-  IWN_ASSERT(iwn_ws_client_destroy(ctx->ws));
-  ws = 0;
 }
 
 static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf, size_t len) {
@@ -89,14 +87,14 @@ int main(int argc, char *argv[]) {
     .parent_death_signal = SIGTERM,
 #endif
   }, &ws_server_pid));
- 
+
   iwn_poller_poll(poller);
   iwn_proc_dispose2(SIGTERM, 0);
   iwn_poller_destroy(&poller);
+  IWN_ASSERT(iwn_ws_client_destroy(ws));
 
 finish:
   IWN_ASSERT(rc == 0);
-  IWN_ASSERT(ws == 0);
   IWN_ASSERT(cnt == 4);
   return iwn_assertions_failed > 0 ? 1 : 0;
 }
