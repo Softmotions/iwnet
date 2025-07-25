@@ -54,7 +54,7 @@ struct iwn_poller {
   atomic_long timeout_next;      ///< Next timeout check
   atomic_long timeout_checktime; ///< Last time of timeout check
 
-  IWTP tp;
+  struct iwtp *tp;
   struct iwhmap *slots;
   char *thread_name;
 
