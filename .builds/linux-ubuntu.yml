@@ -1,0 +1,20 @@
+image: ubuntu/24.10
+secrets:
+  - 7179e7ce-6c56-46b5-9b85-091332eb3684
+sources:
+  - git@git.sr.ht:~adamansky/iwnet
+packages:
+  - gcc
+  - clang
+  - pkgconf
+  - libcunit1-dev
+  - libcurl4-openssl-dev
+  - curl
+  - bash
+tasks:
+  - run-tests-gcc: |
+      cd ./iowow
+      CC=gcc BUILD_TYPE=Debug IWNET_RUN_TESTS=1 ./build.sh -c
+  - run-tests-clang: |
+      cd ./iowow
+      CC=clang BUILD_TYPE=Debug IWNET_RUN_TESTS=1 ./build.sh -c
