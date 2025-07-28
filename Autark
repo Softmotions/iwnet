@@ -62,7 +62,7 @@ check {
 }
 
 run {
-  shell { autark --prefix C{} ${IOWOW_SRC_DIR} }
+  shell { ^{BUILD_TYPE= ${BUILD_TYPE}}  autark --prefix C{} ${IOWOW_SRC_DIR} }
   consumes {
     ${IOWOW_SRC_DIR}
   }
