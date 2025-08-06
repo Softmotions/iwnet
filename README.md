@@ -1,7 +1,5 @@
 # IWNET
 
-**NOTE: Issues tracker is disabled. You are welcome to contribute, pull requests accepted.**
-
 Pure `C` asynchronous HTTP framework providing websockets client/server, SSL, reverse proxy and routing.
 
 Works on Linux, macOS, FreeBSD
