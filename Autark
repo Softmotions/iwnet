@@ -49,6 +49,11 @@ if { !defined { IOWOW_URL }
   }
 }
 
+env {
+  PKG_CONFIG_PATH
+  C{${INSTALL_PKGCONFIG_DIR}}
+}
+
 check {
   system.sh
   test_blocks.sh { IW_BLOCKS }
@@ -97,7 +102,7 @@ set {
 set {
   LDFLAGS
   ..${LDFLAGS}
-  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --libs --static libiowow}
+  ..@{${PKGCONF} --libs --static libiowow}
   ..${LDFLAGS_PKGCONF}
 }
 
@@ -118,7 +123,7 @@ set {
   -Wno-overlength-strings
   -fPIC
 
-  ..@{${PKGCONF} --with-path C{${INSTALL_PKGCONFIG_DIR}} --cflags libiowow}
+  ..@{${PKGCONF} --cflags libiowow}
 
   if { ${ENABLE_ASAN}
     -fsanitize=address
