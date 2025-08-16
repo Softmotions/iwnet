@@ -102,7 +102,7 @@ set {
 set {
   LDFLAGS
   ..${LDFLAGS}
-  ..@{${PKGCONF} --libs --static libiowow}
+  ..@@{${PKGCONF} --libs --static libiowow}
   ..${LDFLAGS_PKGCONF}
 }
 
@@ -123,7 +123,7 @@ set {
   -Wno-overlength-strings
   -fPIC
 
-  ..@{${PKGCONF} --cflags libiowow}
+  ..@@{${PKGCONF} --cflags libiowow}
 
   if { ${ENABLE_ASAN}
     -fsanitize=address
