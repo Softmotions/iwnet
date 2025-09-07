@@ -10,6 +10,7 @@
 #include <curl/curl.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdarg.h>
 #include <errno.h>
 
 IW_EXTERN_C_START;
@@ -104,7 +105,7 @@ static size_t xcurl_hdr_write_iwlist(char *buffer, size_t size, size_t nmemb, vo
   if (strchr(buffer, ':') == 0) {
     return size * nmemb;
   }
-  IWLIST *headers = op;
+  struct iwlist *headers = op;
   size_t sz = size * nmemb;
   iwrc rc = iwlist_push(headers, buffer, sz);
   if (rc) {
@@ -200,6 +201,41 @@ static iwrc xcurlreq_query_add_i64(
   return xcurlreq_query_add(curl, data, name, name_len, buf, len);
 }
 
+static iwrc xcurlreq_query_add_printf_va(
+  CURL *curl, struct xcurlreq *data, const char *name, const char *format,
+  va_list ap) {
+  struct iwxstr *xstr;
+  RCRA(xstr = iwxstr_create_empty());
+  iwrc rc = iwxstr_printf_va(xstr, format, ap);
+  if (rc) {
+    iwxstr_destroy(xstr);
+    return rc;
+  }
+  rc = xcurlreq_query_add(curl, data, name, strlen(name), iwxstr_ptr(xstr), iwxstr_size(xstr));
+  iwxstr_destroy(xstr);
+  return rc;
+}
+
+static iwrc xcurlreq_query_add_printf(
+  CURL            *curl,
+  struct xcurlreq *data,
+  const char      *name,
+  const char      *format,
+  ...)  __attribute__((format(__printf__, 4, 5)));
+
+static iwrc xcurlreq_query_add_printf(
+  CURL            *curl,
+  struct xcurlreq *data,
+  const char      *name,
+  const char      *format,
+  ...) {
+  va_list ap;
+  va_start(ap, format);
+  iwrc rc = xcurlreq_query_add_printf_va(curl, data, name, format, ap);
+  va_end(ap);
+  return rc;
+}
+
 static iwrc xcurlreq_add(
   CURL *curl,
   struct xcurlreq *data, const char *name, size_t name_len,
@@ -234,6 +270,41 @@ finish:
   return rc;
 }
 
+static iwrc xcurlreq_add_printf_va(
+  CURL *curl, struct xcurlreq *data, const char *name, const char *format,
+  va_list ap) {
+  struct iwxstr *xstr;
+  RCRA(xstr = iwxstr_create_empty());
+  iwrc rc = iwxstr_printf_va(xstr, format, ap);
+  if (rc) {
+    iwxstr_destroy(xstr);
+    return rc;
+  }
+  rc = xcurlreq_add(curl, data, name, strlen(name), iwxstr_ptr(xstr), iwxstr_size(xstr));
+  iwxstr_destroy(xstr);
+  return rc;
+}
+
+static iwrc xcurlreq_add_printf(
+  CURL            *curl,
+  struct xcurlreq *data,
+  const char      *name,
+  const char      *format,
+  ...)  __attribute__((format(__printf__, 4, 5)));
+
+static iwrc xcurlreq_add_printf(
+  CURL            *curl,
+  struct xcurlreq *data,
+  const char      *name,
+  const char      *format,
+  ...) {
+  va_list ap;
+  va_start(ap, format);
+  iwrc rc = xcurlreq_add_printf_va(curl, data, name, format, ap);
+  va_end(ap);
+  return rc;
+}
+
 static iwrc xcurlreq_add_i64(
   CURL            *curl,
   struct xcurlreq *data,
@@ -260,6 +331,28 @@ static void xcurlreq_hdr_add(
   char buf[name_len + value_len + 1 /* : */ + 1 /* 0 */];
   snprintf(buf, sizeof(buf), "%.*s:%.*s", (int) name_len, name, (int) value_len, value);
   req->headers = curl_slist_append(req->headers, buf);
+}
+
+static void xcurlreq_hdr_add_printf_va(struct xcurlreq *req, const char *name, const char *format, va_list va) {
+  struct iwxstr *xstr = iwxstr_create_empty();
+  if (xstr) {
+    iwxstr_printf_va(xstr, format, va);
+    xcurlreq_hdr_add(req, name, strlen(name), iwxstr_ptr(xstr), iwxstr_size(xstr));
+    iwxstr_destroy(xstr);
+  }
+}
+
+static void xcurlreq_hdr_add_printf(
+  struct xcurlreq *req, const char *name, const char *format,
+  ...) __attribute__((format(__printf__, 3, 4)));
+
+static void xcurlreq_hdr_add_printf(
+  struct xcurlreq *req, const char *name, const char *format,
+  ...) {
+  va_list ap;
+  va_start(ap, format);
+  xcurlreq_hdr_add_printf_va(req, name, format, ap);
+  va_end(ap);
 }
 
 static void xcurlreq_destroy_keep(struct xcurlreq *req) {
