@@ -268,6 +268,8 @@ int iwn_base64_decode(
   const char* const b64, const size_t b64_len,
   const char* const ignore, size_t* const bin_len,
   const char** const b64_end, const int variant) {
+  errno = 0;
+
   size_t acc_len = (size_t) 0;
   size_t b64_pos = (size_t) 0;
   size_t bin_pos = (size_t) 0;
