@@ -1,5 +1,3 @@
-
-
 cc {
   set { _
     poller_pipe_test1.c

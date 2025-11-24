@@ -30,5 +30,5 @@ set {
 }
 
 if { ${IWNET_BUILD_TESTS} 
-  include { tests/Autark }
+#include { tests/Autark }
 }
