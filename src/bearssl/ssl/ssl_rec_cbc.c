@@ -70,7 +70,7 @@ cbc_check_length(const br_sslrec_in_cbc_context *cc, size_t rlen)
 		min_len += blen;
 		max_len += blen;
 	}
-	return min_len <= rlen && rlen <= max_len;
+  return min_len <= rlen && rlen <= max_len && (rlen & (blen - 1)) == 0;
 }
 
 /*
