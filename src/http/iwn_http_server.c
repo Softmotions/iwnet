@@ -146,13 +146,6 @@ struct client {
 // stream flags
 #define HS_SF_CONSUMED 0x01U
 
-// parser flags
-#define HS_PF_IN_CONTENT_LEN  0x01U
-#define HS_PF_IN_TRANSFER_ENC 0x02U
-#define HS_PF_CHUNKED         0x04U
-#define HS_PF_CKEND           0x08U
-#define HS_PF_REQ_END         0x10U
-
 // http session states
 #define HTTP_SESSION_INIT  0
 #define HTTP_SESSION_READ  1
