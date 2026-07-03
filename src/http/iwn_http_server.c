@@ -219,7 +219,7 @@ static const int8_t _transitions[] = {
 /* RR rl \r */ BR, RN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
 /* RN rl \n */ BR, BR, BR, BR, BR, BR, HK, HK, HK, HK, BR, BR,
 /* HK headkey */ BR, BR, BR, HS, BR, BR, HK, HK, HK, HK, BR, BR,
-/* HS headspc */ HS, HS, HS, HV, HS, HV, HV, HV, HV, HV, HV, BR,
+/* HS headspc */ HS, BR, HR, HV, HS, HV, HV, HV, HV, HV, HV, BR,
 /* HV headval */ HV, BR, HR, HV, HV, HV, HV, HV, HV, HV, HV, BR,
 /* HR head\r */ BR, HE, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
 /* HE head\n */ BR, BR, ER, BR, BR, BR, HK, HK, HK, HK, BR, BR,
@@ -582,6 +582,7 @@ static iwrc _client_init(struct client *client) {
   _client_reset(client);
   client->flags = HTTP_AUTOMATIC;
   memset(&client->parser, 0, sizeof(client->parser));
+  client->parser.meta = M_ANY;
   client->chunk_cb = 0;
   client->tokens.capacity = 32;
   client->tokens.size = 0;
@@ -752,6 +753,8 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
     } else if (to == HS) {
       _meta_trigger(parser, HS_META_END_KEY);
       emitted = _stream_emit(stream);
+    } else if (from == HS && to == HR) {
+      _stream_begin_token(stream, HS_TOK_HEADER_VAL);
     }
     parser->match_index = 0;
   }
@@ -786,6 +789,10 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
         MATCH("chunked", HS_META_NOT_CHUNKED);
         parser->match_index++;
       } else if (parser->meta == M_CLV) {
+        if (c < '0' || c > '9') {
+          emitted.type = HS_TOK_ERROR;
+          break;
+        }
         parser->content_length *= 10;
         parser->content_length += c - '0';
       }
@@ -856,11 +863,11 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
 
 static iwrc _fd_make_non_blocking(int fd) {
   int rci, flags;
-  while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR);
+  while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR) ;
   if (flags == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
-  while ((rci = fcntl(fd, F_SETFL, flags | O_NONBLOCK | O_CLOEXEC)) == -1 && errno == EINTR);
+  while ((rci = fcntl(fd, F_SETFL, flags | O_NONBLOCK | O_CLOEXEC)) == -1 && errno == EINTR) ;
   if (rci == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
@@ -2156,7 +2163,7 @@ void iwn_http_response_stream_write(
   struct iwn_http_req          *request,
   char                         *buf,
   ssize_t                       buf_len,
-  void (                       *buf_free )(void*),
+  void                        (*buf_free)(void*),
   iwn_http_server_chunk_handler chunk_cb,
   bool                         *again) {
   if (!buf_free) {

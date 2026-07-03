@@ -2,7 +2,7 @@
 
 /// High level HTTP web-framework.
 
-#include "iwnet.h"
+#include "iwnet.h" // IWYU pragma: export
 #include "iwn_http_server.h"
 #include <iowow/iwlog.h>
 #include <stdio.h>
