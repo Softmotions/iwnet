@@ -149,7 +149,7 @@ ssize_t wslay_frame_send(
           if (r > 0) {
             datamark += r;
             ctx->opayloadoff += (uint64_t) r;
-            totallen += (ssize_t) r;
+            totallen += r;
 
             ctx->opayloadmaskoff += r;
             if (ctx->hdrtow) {
@@ -172,7 +172,7 @@ ssize_t wslay_frame_send(
         ssize_t r = ctx->callbacks.send_callback(iocb->data, iocb->data_length, 0, ctx->user_data);
         if (r > 0) {
           ctx->opayloadoff += (uint64_t) r;
-          totallen = (ssize_t) r;
+          totallen = r;
           if (ctx->hdrtow) {
             uint64_t hp = wslay_min(ctx->hdrtow, r);
             ctx->hdrtow -= hp;
