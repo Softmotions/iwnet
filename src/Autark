@@ -43,6 +43,7 @@ include { utils/Autark }
 include { poller/Autark }
 include { http/Autark }
 include { ws/Autark }
+include { grpc/Autark }
 include { ssl/Autark }
 include { wslay/Autark }
 include { bearssl/Autark }

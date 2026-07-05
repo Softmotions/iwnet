@@ -3,8 +3,7 @@ set {
     SOURCES
   }
   ..${SOURCES}
-  ws/iwn_ws_client.c
-  ws/iwn_ws_server.c
+  grpc/iwn_grpc_client.c
 }
 
 set {
@@ -12,9 +11,7 @@ set {
     PUB_HDRS
   }
   ..${PUB_HDRS}
-  ws/iwn_ws_client.h
-  ws/iwn_ws.h
-  ws/iwn_ws_server.h
+  grpc/iwn_grpc_client.h
 }
 
 set {
@@ -25,6 +22,4 @@ set {
   -I SS{}
 }
 
-if { ${IWNET_BUILD_TESTS} 
-  include { tests/Autark }
-}
+

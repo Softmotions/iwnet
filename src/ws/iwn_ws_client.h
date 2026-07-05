@@ -2,7 +2,8 @@
 
 /// Websocket client.
 
-#include "iwn_ws.h"
+#include "iwn_ws.h" // IWYU pragma: export
+#include "iwn_poller.h"
 #include <iowow/iwjson.h>
 
 IW_EXTERN_C_START;
