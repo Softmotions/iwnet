@@ -2,7 +2,7 @@ meta {
   name { iwnet }
 
   version_major { 1 }
-  version_minor { 1 }
+  version_minor { 3 }
   version_patch { 0 }
 
   description { Pure C Asynchronous HTTP/IO framework with routing, websockets, SSL and reverse proxy. }
@@ -13,6 +13,7 @@ meta {
 }
 
 option { IOWOW_URL                IOWOW external project sources URL }
+option { LIBHIVE_URL              LibHive HTTP/2 client state machine external project source URL }
 option { IWNET_BUILD_SHARED_LIBS  Build shared libraries }
 option { IWNET_BUILD_TESTS        Build test cases }
 option { IWNET_RUN_TESTS          Build and run test cases }
@@ -76,6 +77,44 @@ run {
   }
 }
 
+if { !defined { LIBHIVE_URL }
+  set {
+    LIBHIVE_URL
+    https://github.com/pawelzelawski/libhive/archive/refs/heads/main.zip
+  }
+}
+
+check {
+  fetch_resource.sh { ${LIBHIVE_URL} C{extern_libhive} LIBHIVE_SRC_DIR }
+}
+
+set {
+  LIBHIVE_LIB 
+  ^{ C{${INSTALL_LIB_DIR}} /libhive.a }
+}
+
+set {
+  LIBHIVE_HEADERS
+  ^{ C{${INSTALL_INCLUDE_DIR}} /hive.h }
+}
+
+run {
+  shell { ^{PREFIX= C{}} ^{LIBDIR= C{${INSTALL_LIB_DIR}}} make -C ${LIBHIVE_SRC_DIR} 
+    if { eq { ${BUILD_TYPE} Release }
+      set { _ release install } 
+    } else {
+      set { _ dev install }
+    }
+  }
+  consumes {
+    ${LIBHIVE_SRC_DIR}
+  }
+  produces {
+    ${LIBHIVE_LIB}
+    ${LIBHIVE_HEADERS}
+  }
+}
+
 run-on-install {
   shell { 
     autark -J1 --prefix ${INSTALL_PREFIX} 
@@ -104,6 +143,7 @@ set {
   ..${LDFLAGS}
   ..@@{${PKGCONF} --libs --static libiowow}
   ..${LDFLAGS_PKGCONF}
+  ${LIBHIVE_LIB}
 }
 
 set {
@@ -191,6 +231,7 @@ set {
   -DHAVE_CONFIG_H
 
   -I C{src}
+  -I C{${INSTALL_INCLUDE_DIR}}
   -I S{src}
 }
 

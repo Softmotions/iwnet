@@ -4,6 +4,7 @@ set {
   }
   ..${SOURCES}
   grpc/iwn_grpc_client.c
+  grpc/iwn_grpc.c
 }
 
 set {
@@ -21,5 +22,4 @@ set {
   ..${CFLAGS}
   -I SS{}
 }
-
 
