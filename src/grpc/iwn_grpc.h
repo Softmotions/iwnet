@@ -4,9 +4,14 @@
 
 IW_EXTERN_C_START;
 
+#define GRPC_TLS_VERIFY_PEER 0x01U ///< Verify peer on TLS connection.
+#define GRPC_TLS_VERIFY_HOST 0x02U ///< Verify host on TLS vonnection.
+#define GRPC_LOG_QUIET       0x04U ///< Let connections logging be less verbose
+
 typedef enum {
   _GRPC_ERROR_START = (IW_ERROR_START + 206000UL),
   GRPC_ERROR,                     ///< Unknown/generic gRPC error.
+  GRPC_ERROR_PEER_CONNECT,        ///< Peer connection failed (WS_ERROR_PEER_CONNECT)
   GRPC_ERROR_CANCELLED,           ///< The operation was cancelled.
   GRPC_ERROR_INVALID_ARGUMENT,    ///< The client specified an invalid argument.
   GRPC_ERROR_DEADLINE_EXCEEDED,   ///< The deadline expired before the operation could complete.

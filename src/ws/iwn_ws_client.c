@@ -96,11 +96,11 @@ static void _ws_destroy(struct iwn_ws_client *ws) {
 
 static iwrc _fd_make_non_blocking(int fd) {
   int rci, flags;
-  while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR);
+  while ((flags = fcntl(fd, F_GETFL, 0)) == -1 && errno == EINTR) ;
   if (flags == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
-  while ((rci = fcntl(fd, F_SETFL, flags | O_NONBLOCK)) == -1 && errno == EINTR);
+  while ((rci = fcntl(fd, F_SETFL, flags | O_NONBLOCK)) == -1 && errno == EINTR) ;
   if (rci == -1) {
     return iwrc_set_errno(IW_ERROR_ERRNO, errno);
   }
@@ -184,23 +184,21 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
 
     if (strlen(ws->host) >= sizeof(saddr.sun_path)) {
       rc = IW_ERROR_INVALID_ARGS;
-      iwlog_ecode_error(rc, "Unix socket path exceeds its maximum length: %zd", sizeof(saddr.sun_path) - 1);
+      iwlog_ecode_error(rc, "ws | Unix socket path exceeds its maximum length: %zd", sizeof(saddr.sun_path) - 1);
       goto finish;
     }
-    strncpy(saddr.sun_path, ws->host, sizeof(saddr.sun_path) - 1);
+    iwu_strncpy(saddr.sun_path, ws->host, sizeof(saddr.sun_path) - 1);
 
     do {
       rci = connect(fd, (void*) &saddr, sizeof(saddr));
     } while (errno == EINTR);
 
     if (rci == -1) {
-      if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
-        if (!ws->quiet) {
-          iwlog_warn("ws | Error Unix socket connecting  %s %s", ws->host, strerror(errno));
-        }
-        close(fd), fd = -1;
-        goto finish;
+      if (!ws->quiet) {
+        iwlog_warn("ws | Error Unix socket connecting  %s %s", ws->host, strerror(errno));
       }
+      close(fd), fd = -1;
+      goto finish;
     }
   }
 
