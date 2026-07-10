@@ -11,6 +11,7 @@ IW_EXTERN_C_START;
 typedef enum {
   _GRPC_ERROR_START = (IW_ERROR_START + 206000UL),
   GRPC_ERROR,                     ///< Unknown/generic gRPC error.
+  GRPC_ERROR_CONFIG,              ///< gRPC transport configuration error (GRPC_ERROR_CONFIG).
   GRPC_ERROR_PEER_CONNECT,        ///< Peer connection failed (WS_ERROR_PEER_CONNECT)
   GRPC_ERROR_CANCELLED,           ///< The operation was cancelled.
   GRPC_ERROR_INVALID_ARGUMENT,    ///< The client specified an invalid argument.

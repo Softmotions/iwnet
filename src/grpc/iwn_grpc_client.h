@@ -11,9 +11,6 @@ IW_EXTERN_C_START;
 struct iwn_grpc_client;
 struct iwn_grpc_req_ctx;
 
-/// Protobuf Raw
-typedef struct iwn_val iwn_protobuf_bin_t;
-
 /// Context passed into client callback functions.
 struct iwn_grpc_client_ctx {
   struct iwn_poller_adapter *pa;
@@ -22,16 +19,19 @@ struct iwn_grpc_client_ctx {
 };
 
 struct iwn_grpc_req_spec {
-  struct iwn_grpc_client *grpc; ///< gRPC Client connection
-  const char *service;          ///< Service name
-  const char *method;           ///< Service method
+  struct iwn_grpc_client *client; ///< gRPC Client connection
+  const char *service;            ///< Service name
+  const char *method;             ///< Service method
   void       *user_data;
 
   /// Callback to get next message to be send to remote peer.
   void (*on_message_sent)(struct iwn_grpc_req_ctx*);
 
   /// When server message arrived to client.
-  bool (*on_message)(struct iwn_grpc_req_ctx*, iwn_protobuf_bin_t *msg);
+  bool (*on_message)(struct iwn_grpc_req_ctx*, struct iwn_val *msg);
+
+  /// When opened stream is closed.
+  void (*on_close)(struct iwn_grpc_req_ctx*);
 
   /// Called on destroy client request and its resources.
   /// All handles to `struct iwn_grpc_req_ctx` will be invalid after call of this handle.
@@ -39,17 +39,24 @@ struct iwn_grpc_req_spec {
 };
 
 struct iwn_grpc_req_ctx {
-  struct iwn_grpc_client_ctx     *client_ctx;
-  const struct iwn_grpc_req_spec *req_spec;
+  struct iwn_grpc_client_ctx client_ctx;
+  struct iwn_grpc_req_spec   req_spec;
   uint32_t req_id;                             ///< Aka stream-id.
+  void    *impl;
 };
 
 /// gRPC client configuration.
 struct iwn_grpc_client_spec {
   /// Connection url. Required.
+  /// Available url schemes:
+  ///   grpc://<host>[:port]  Standard secured gRPC connection.
+  ///   grpc+plaintext://...  Non TLS plain text gRPC connection.
+  ///   grpc+socket://...     gRPC connection over UNIX socket file.
+  ///
   const char *url;
-  struct iwn_poller *poller; ///< Poller instance. Required.
-  void *user_data;
+  struct iwn_poller *poller;    ///< Poller instance. Required.
+  void *user_data;              ///< User data for callbacks.
+  long  inactivity_timeout_sec; ///< Connection data inactivity timeout in seconds.
 
   /// gRPC specific settings.
   struct {
@@ -78,14 +85,17 @@ IW_EXPORT iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec, str
 
 IW_EXPORT void iwn_grpc_client_close(struct iwn_grpc_client*);
 
-IW_EXPORT iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec*, uint32_t **out_req_id);
+IW_EXPORT iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec*, struct iwn_val *msg, uint32_t *out_req_id);
 
-IW_EXPORT iwrc iwn_grpc_client_request_close(uint32_t req_id);
+IW_EXPORT void iwn_grpc_client_request_close(struct iwn_grpc_req_ctx*);
 
-IW_EXPORT iwrc iwn_grpc_client_acquire_request_ctx(uint32_t req_id, struct iwn_grpc_req_ctx **out_ctx);
+IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
+  struct iwn_grpc_client  *client,
+  uint32_t                 req_id,
+  struct iwn_grpc_req_ctx *out_ctx);
 
-IW_EXPORT iwrc iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx*);
+IW_EXPORT void iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx*);
 
-IW_EXPORT iwrc iwn_grpc_client_send_message(struct iwn_grpc_req_ctx*, iwn_protobuf_bin_t *msg);
+IW_EXPORT iwrc iwn_grpc_client_send_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg);
 
 IW_EXTERN_C_END;

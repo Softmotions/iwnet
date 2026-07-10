@@ -3,7 +3,7 @@ option { LIBHIVE_URL              LibHive HTTP/2 client state machine external p
 if { !defined { LIBHIVE_URL }
   set {
     LIBHIVE_URL
-    https://github.com/pawelzelawski/libhive/archive/refs/heads/main.zip
+    https://github.com/Softmotions/libhive/archive/refs/heads/main.zip
   }
 }
 

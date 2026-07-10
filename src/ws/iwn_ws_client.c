@@ -578,6 +578,7 @@ finish:
     if (ws->fd > -1) {
       shutdown(ws->fd, SHUT_RDWR);
       close(ws->fd);
+      ws->fd = -1;
     }
   }
   return rc;
@@ -625,7 +626,7 @@ static void _ws_reconnect_cancel(void *d) {
 
 static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
   struct iwn_ws_client *ws = user_data;
-  pthread_mutex_unlock(&ws->mtx);
+  pthread_mutex_lock(&ws->mtx);
   ws->pa = 0;
   pthread_mutex_unlock(&ws->mtx);
   if (  ws->close_cas

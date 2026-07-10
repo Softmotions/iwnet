@@ -9,6 +9,8 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
   switch (ecode) {
     case GRPC_ERROR:
       return "Unknown/generic gRPC error (GRPC_ERROR)";
+    case GRPC_ERROR_CONFIG:
+      return "gRPC transport configuration error (GRPC_ERROR_CONFIG)";
     case GRPC_ERROR_PEER_CONNECT:
       return "Peer connection failed (GRPC_ERROR_PEER_CONNECT)";
     case GRPC_ERROR_CANCELLED:
