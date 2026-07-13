@@ -92,7 +92,7 @@ struct iwn_grpc_client {
   volatile bool io_stop;
 };
 
-static iwrc _grpc_error2rc(int err) {
+static iwrc _grc2rc(int err) {
   if (!err) {
     return 0;
   }
@@ -121,7 +121,7 @@ static iwrc _grpc_error2rc(int err) {
   }
 }
 
-static iwrc _hive_error2rc(int err) {
+static iwrc _hrc2rc(int err) {
   if (!err) {
     return 0;
   }
@@ -982,7 +982,12 @@ iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec *spec_, struct 
   _hive_nv_set(&headers[n++], "grpc-accept-encoding", "identity", 0);
   _hive_nv_set(&headers[n++], "user-agent", client->spec.user_agent, 0);
 
-  rc = _hive_error2rc(hive_submit_request(client->sess, headers, n, &ds, &req->stream_id));
+  rc = _hrc2rc(hive_submit_request(client->sess, headers, n, &ds, &req->stream_id));
+  if (!rc) {
+    pthread_mutex_lock(&client->mtx);
+    rc = iwhmap_put_u32(client->requests_map, req->stream_id, req);
+    pthread_mutex_unlock(&client->mtx);
+  }
 
 finish:
   if (rc) {
@@ -993,9 +998,6 @@ finish:
       iwpool_destroy(pool);
     }
   } else {
-    pthread_mutex_lock(&client->mtx);
-    iwhmap_put_u32(client->requests_map, req->stream_id, req);
-    pthread_mutex_unlock(&client->mtx);
     if (out_req_id) {
       *out_req_id = req->stream_id;
     }
