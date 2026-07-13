@@ -19,9 +19,9 @@ struct iwn_grpc_client_ctx {
 };
 
 struct iwn_grpc_req_spec {
-  struct iwn_grpc_client *client; ///< gRPC Client connection
-  const char *service;            ///< Service name
-  const char *method;             ///< Service method
+  struct iwn_grpc_client *client; ///< gRPC Client connection. Required.
+  const char *service;            ///< Service name. Required.
+  const char *method;             ///< Service method. Required.
   void       *user_data;
 
   /// Callback to get next message to be send to remote peer.
@@ -54,13 +54,15 @@ struct iwn_grpc_client_spec {
   ///   grpc+socket://...     gRPC connection over UNIX socket file.
   ///
   const char *url;
+  const char *authority;
+  const char *user_agent;
   struct iwn_poller *poller;    ///< Poller instance. Required.
   void *user_data;              ///< User data for callbacks.
   long  inactivity_timeout_sec; ///< Connection data inactivity timeout in seconds.
 
   /// gRPC specific settings.
   struct {
-    uint32_t timeout_sec;       ///< grpc-timeout in seconds
+    uint32_t timeout_sec;       ///< grpc-timeout in seconds. Default: 30
     uint32_t max_message_bytes; ///< Max bytes of signle gRPC message. Default: 1048576
   } grpc_defaults;
 

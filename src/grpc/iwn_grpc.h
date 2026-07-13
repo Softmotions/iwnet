@@ -29,6 +29,16 @@ typedef enum {
   GRPC_ERROR_UNAVAILABLE,         ///< The service is currently unavailable. Try again later.
   GRPC_ERROR_DATA_LOSS,           ///< Unrecoverable data loss or corruption.
   GRPC_ERROR_UNAUTHENTICATED,     ///< The request does not have valid authentication credentials for the operation.
+
+  GRPC_ERROR_H2,                ///< HTTP2 Unknown/generic error. (GRPC_ERROR_H2)
+  GRPC_ERROR_H2_PROTOCOL,       ///< HTTP2 Protocol error. (GRPC_ERROR_H2_PROTOCOL)
+  GRPC_ERROR_H2_COMPRESSION,    ///< HTTP2 Protocol comression error. (GRPC_ERROR_H2_COMPRESSION)
+  GRPC_ERROR_H2_FLOW_CONTROL,   ///< HTTP2 Flow control error. (GRPC_ERROR_H2_FLOW_CONTROL)
+  GRPC_ERROR_H2_REFUSED_STREAM, ///< HTTP2 Refused stream. (GRPC_ERROR_H2_REFUSED_STREAM)
+  GRPC_ERROR_H2_STREAM_CLOSED,  ///< HTTP2 Stream closed. (GRPC_ERROR_H2_STREAM_CLOSED)
+  GRPC_ERROR_H2_GOAWAY,         ///< HTTP2 Go away (GRPC_ERROR_H2_GOAWAY)
+  GRPC_ERROR_H2_CANCEL,         ///< HTTP2 Cancel (GRPC_ERROR_H2_CANCEL)
+
   _GRPC_ERROR_END,
 } iwn_grpc_ecode_e;
 

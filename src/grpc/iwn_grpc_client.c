@@ -1,5 +1,6 @@
 #include "iwn_grpc_client.h"
 #include "iwn_url.h"
+#include "iwn_pairs.h"
 #include "ssl/iwn_brssl_poller_adapter.h"
 #include "poller/iwn_direct_poller_adapter.h"
 
@@ -45,10 +46,12 @@ struct _rx {
 };
 
 struct _request {
-  struct iwref_holder      ref;
-  struct iwn_grpc_client  *client;
+  struct iwref_holder     ref;
+  struct iwn_grpc_client *client;
+  struct iwpool *pool;
   struct iwn_grpc_req_spec spec;
-  struct _rx    rx;
+  struct _rx      rx;
+  pthread_mutex_t mtx;
   uint32_t      stream_id;
   uint32_t      error_code;
   volatile bool close_pending;
@@ -89,10 +92,122 @@ struct iwn_grpc_client {
   volatile bool io_stop;
 };
 
+static iwrc _grpc_error2rc(int err) {
+  if (!err) {
+    return 0;
+  }
+  static iwrc _codes[16] = {
+    GRPC_ERROR_CANCELLED,
+    GRPC_ERROR,
+    GRPC_ERROR_INVALID_ARGUMENT,
+    GRPC_ERROR_DEADLINE_EXCEEDED,
+    GRPC_ERROR_NOT_FOUND,
+    GRPC_ERROR_ALREADY_EXISTS,
+    GRPC_ERROR_PERMISSION_DENIED,
+    GRPC_ERROR_RESOURCE_EXHAUSTED,
+    GRPC_ERROR_FAILED_PRECONDITION,
+    GRPC_ERROR_ABORTED,
+    GRPC_ERROR_OUT_OF_RANGE,
+    GRPC_ERROR_UNIMPLEMENTED,
+    GRPC_ERROR_INTERNAL,
+    GRPC_ERROR_UNAVAILABLE,
+    GRPC_ERROR_DATA_LOSS,
+    GRPC_ERROR_UNAUTHENTICATED,
+  };
+  if (err > 0 && err < 17) {
+    return _codes[err];
+  } else {
+    return GRPC_ERROR;
+  }
+}
+
+static iwrc _hive_error2rc(int err) {
+  if (!err) {
+    return 0;
+  }
+  switch (err) {
+    case HIVE_ERR_NOMEM:
+      return IW_ERROR_ALLOC;
+    case HIVE_ERR_INVALID_ARG:
+      return IW_ERROR_INVALID_ARGS;
+    case HIVE_ERR_PROTOCOL:
+    case HIVE_H2_PROTOCOL_ERROR:
+      return GRPC_ERROR_H2_PROTOCOL;
+    case HIVE_ERR_COMPRESSION:
+    case HIVE_H2_COMPRESSION_ERROR:
+      return GRPC_ERROR_H2_COMPRESSION;
+    case HIVE_ERR_FLOW_CONTROL:
+    case HIVE_H2_REFUSED_STREAM:
+      return GRPC_ERROR_H2_REFUSED_STREAM;
+    case HIVE_ERR_STREAM_CLOSED:
+    case HIVE_H2_STREAM_CLOSED:
+      return GRPC_ERROR_H2_STREAM_CLOSED;
+    case HIVE_ERR_SESSION_CLOSED:
+      return IW_ERROR_INVALID_STATE;
+    case HIVE_H2_CANCEL:
+      return GRPC_ERROR_H2_CANCEL;
+    default:
+      if (err < 0) {
+        return GRPC_ERROR;
+      } else {
+        return GRPC_ERROR_H2;
+      }
+  }
+}
+
 struct _io_writev_state {
   struct iovec *iov;
   int iovcnt;
 };
+
+struct _msg_slot {
+  struct iwpool  *pool;
+  struct iwn_vals vals;
+};
+
+static void _msg_slot_destroy(struct _msg_slot *slot) {
+  if (slot && slot->pool) {
+    iwpool_destroy(slot->pool);
+  }
+}
+
+static struct _msg_slot* _msg_slot_create(struct _request *req, struct _msg_slot *slot_, struct iwn_val *msg) {
+  struct _msg_slot *slot = slot_;
+  struct iwpool *pool = slot ? slot->pool : 0;
+
+  if (!pool) {
+    size_t mlen = 0;
+    for (struct iwn_val *v = msg; v; v = v->next) {
+      mlen += sizeof(*v) + v->len;
+    }
+    pool = iwpool_create_attach(req->pool, sizeof(*slot) + mlen);
+    if (!pool) {
+      return 0;
+    }
+    slot = iwpool_alloc(sizeof(*slot), pool);
+    if (!slot) {
+      iwpool_destroy(pool);
+      return 0;
+    }
+    slot->pool = pool;
+  }
+  for (struct iwn_val *v = msg; v; v = v->next) {
+    if (!iwn_vals_add_val(pool, &slot->vals, v, true)) {
+      if (slot != slot_) { // we own slot
+        iwpool_destroy(pool);
+      }
+    }
+  }
+  return slot;
+}
+
+static inline void _hive_nv_set(hive_nv_t *nv, const char *name, const char *value, uint8_t flags) {
+  nv->name = (const uint8_t*) name;
+  nv->value = (const uint8_t*) value;
+  nv->name_len = strlen(name);
+  nv->value_len = strlen(value);
+  nv->flags = flags;
+}
 
 static void _io_session_goaway(struct iwn_grpc_client *client) {
   if (client->sess) {
@@ -240,14 +355,17 @@ IW_INLINE void _request_release_unref(struct _request *req) {
 
 static void _request_destroy(void *d) {
   struct _request *req = d;
-  struct iwn_grpc_client *client = req->client;
   if (req->spec.on_destroy) {
     struct iwn_grpc_req_ctx ctx;
     _request_ctx_init(req, &ctx);
     req->spec.on_destroy(&ctx);
   }
-  iwref_unref(&client->ref);
-  free(req);
+  if (req->client) {
+    iwref_unref(&req->client->ref);
+  }
+  // TODO: Free rx request part
+  pthread_mutex_destroy(&req->mtx);
+  iwpool_destroy(req->pool);
 }
 
 static iwrc _connect(struct iwn_grpc_client *client, int *out_fd) {
@@ -502,11 +620,11 @@ static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void
     return -1;
   }
 
-  struct hive_session *sess = client->sess;
   iwrc rc = 0;
   int64_t ret = 0;
   int hrc = HIVE_OK;
   uint8_t buf[8192];
+  struct hive_session *sess = client->sess;
 
   pthread_mutex_lock(&client->mtx);
 
@@ -707,6 +825,9 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
 
   iwref_init(&client->ref, client, _client_destroy);
   RCB(finish, client->spec.url = iwpool_strdup2(pool, client->spec.url));
+  if (client->spec.authority) {
+    RCB(finish, client->spec.authority = iwpool_strdup2(pool, client->spec.authority));
+  }
   RCB(finish, client->requests_map = iwhmap_create_u32(0));
 
   char *urlbuf = iwpool_strdup2(pool, client->spec.url);
@@ -738,6 +859,16 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
     } else {
       client->url.port = 80;
     }
+  }
+
+  if (!client->spec.authority) {
+    RCB(finish, client->spec.authority = iwpool_printf(pool, "%s:%d", client->url.host, client->url.port));
+  }
+
+  if (!client->spec.user_agent) {
+    client->spec.user_agent = "iwn-grpc-client/1.0";
+  } else {
+    RCB(finish, client->spec.user_agent = iwpool_strdup2(pool, client->spec.user_agent));
   }
 
   _hive_pre_init(client);
@@ -775,9 +906,100 @@ static struct _request* _request_acquire_ref(struct iwn_grpc_client *client, uin
   return req;
 }
 
-iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec *spec, struct iwn_val *msg, uint32_t *out_req_id) {
+static void _hive_data_source_destroy_keep(struct hive_data_source *ds) {
+  struct _msg_slot *m = ds->ptr;
+  if (m) {
+    iwpool_destroy(m->pool);
+    ds->ptr = 0;
+  }
+  ds->read_callback = 0;
+}
+
+static ssize_t _request_msg_read_callback(
+  hive_session_t     *session,
+  uint32_t            stream_id,
+  uint8_t           **buf,
+  size_t              length,
+  uint32_t           *data_flags,
+  hive_data_source_t *source,
+  void               *user_data) {
+  struct _request *req = user_data;
+  //source->ptr;
+
+
+  return 0;
+}
+
+iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec *spec_, struct iwn_val *msg, uint32_t *out_req_id) {
+  if (!spec_ || !spec_->client || !spec_->service || !spec_->method || !msg) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+
   iwrc rc = 0;
-  // TODO:
+  struct _request *req = 0;
+  struct iwn_grpc_client *client = spec_->client;
+  struct hive_data_source ds = {
+    .read_callback = _request_msg_read_callback,
+  };
+  char grpc_timeout[64];
+
+  struct iwpool *pool = iwpool_create_empty();
+  if (!pool) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  RCB(finish, req = iwpool_calloc(sizeof(*req), pool));
+
+  req->pool = pool;
+  req->client = spec_->client;
+  iwref_ref(&req->client->ref);
+  iwref_init(&req->ref, req, _request_destroy);
+  memcpy(&req->spec, spec_, sizeof(*spec_));
+
+  RCT(finish, pthread_mutex_init(&req->mtx, 0));
+  RCB(finish, req->spec.service = iwpool_strdup2(pool, spec_->service));
+  RCB(finish, req->spec.method = iwpool_strdup2(pool, spec_->method));
+  RCB(finish, ds.ptr = _msg_slot_create(req, 0, msg));
+
+  size_t n = 0;
+  struct hive_nv headers[9];
+  _hive_nv_set(&headers[n++], ":method", "POST", 0);
+  if (client->flags & _FLAG_SECURE) {
+    _hive_nv_set(&headers[n++], ":scheme", "https", 0);
+  } else {
+    _hive_nv_set(&headers[n++], ":scheme", "http", 0);
+  }
+  _hive_nv_set(&headers[n++], ":authority", client->spec.authority, 0);
+  // gRPC specific headers
+  _hive_nv_set(&headers[n++], "te", "trailers", 0);
+  _hive_nv_set(&headers[n++], "content-type", "application/grpc+proto", 0);
+  if (client->spec.grpc_defaults.timeout_sec) {
+    snprintf(grpc_timeout, sizeof(grpc_timeout), "%uS", client->spec.grpc_defaults.timeout_sec);
+    _hive_nv_set(&headers[n++], "grpc-timeout", grpc_timeout, 0);
+  } else {
+    _hive_nv_set(&headers[n++], "grpc-timeout", "30S", 0);
+  }
+  // TODO: Compression support
+  _hive_nv_set(&headers[n++], "grpc-accept-encoding", "identity", 0);
+  _hive_nv_set(&headers[n++], "user-agent", client->spec.user_agent, 0);
+
+  rc = _hive_error2rc(hive_submit_request(client->sess, headers, n, &ds, &req->stream_id));
+
+finish:
+  if (rc) {
+    if (req) {
+      _request_destroy(req);
+    } else {
+      _hive_data_source_destroy_keep(&ds);
+      iwpool_destroy(pool);
+    }
+  } else {
+    pthread_mutex_lock(&client->mtx);
+    iwhmap_put_u32(client->requests_map, req->stream_id, req);
+    pthread_mutex_unlock(&client->mtx);
+    if (out_req_id) {
+      *out_req_id = req->stream_id;
+    }
+  }
   return rc;
 }
 

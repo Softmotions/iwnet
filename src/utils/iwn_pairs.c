@@ -7,6 +7,40 @@
 #include <string.h>
 #include <stdlib.h>
 
+
+struct iwn_vals* iwn_vals_add_val(
+  struct iwpool *pool, struct iwn_vals *vals_, const struct iwn_val *val_,
+  bool copy_val_buf) {
+  struct iwn_vals *vals = vals_;
+  if (!vals) {
+    vals = iwpool_alloc(sizeof(*vals), pool);
+    if (!vals) {
+      return 0;
+    }
+    vals->first = vals->last = 0;
+  }
+  struct iwn_val *val = iwpool_alloc(sizeof(*val), pool);
+  if (!val) {
+    return 0;
+  }
+  memcpy(val, val_, sizeof(*val));
+  if (copy_val_buf && val->buf && val->len) {
+    val->buf = iwpool_alloc(val->len, pool);
+    if (!val->buf) {
+      return 0;
+    }
+    memcpy(val->buf, val_->buf, val->len);
+  }
+  val->next = 0;
+  if (vals->last) {
+    vals->last->next = val;
+    vals->last = val;
+  } else {
+    vals->first = vals->last = val;
+  }
+  return vals;
+}
+
 void iwn_val_buf_free(struct iwn_val *val) {
   if (val) {
     free(val->buf);
@@ -14,7 +48,13 @@ void iwn_val_buf_free(struct iwn_val *val) {
   }
 }
 
-void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v) {
+struct iwn_vals* iwn_vals_add(struct iwn_vals *vals, struct iwn_val *v) {
+  if (!vals) {
+    vals = malloc(sizeof(*vals));
+    if (!vals) {
+      return 0;
+    }
+  }
   v->next = 0;
   if (vals->last) {
     vals->last->next = v;
@@ -22,17 +62,14 @@ void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v) {
   } else {
     vals->first = vals->last = v;
   }
+  return vals;
 }
 
-iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len) {
+struct iwn_vals* iwn_vals_add_new(struct iwn_vals *vals, char *buf, size_t len) {
   struct iwn_val *v = malloc(sizeof(*v));
-  if (!v) {
-    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
-  }
   v->buf = buf;
   v->len = len;
-  iwn_val_add(vals, v);
-  return 0;
+  return iwn_vals_add(vals, v);
 }
 
 void iwn_pair_add(struct iwn_pairs *pairs, struct iwn_pair *p) {

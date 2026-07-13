@@ -9,9 +9,11 @@ struct iwn_pairs;
 
 /// A Data buffer container.
 struct iwn_val {
-  size_t len;           ///< Length of the buffer.
   char  *buf;           ///< Pointer to the buffer data.
+  size_t len;           ///< Length of the buffer.
   struct iwn_val *next; ///< Optional pointer to the next container in chain. Used in various scenarios.
+  ssize_t  cnt;         ///< Arbitrary counter. Eg: remaining length.
+  unsigned flags;       ///< Flags associated with value.
 };
 
 /// A chain of iwn_val containers.
@@ -36,17 +38,26 @@ struct iwn_pairs {
   struct iwn_pair *last;
 };
 
-/// Applies `free()` to the `val` buffer and rest val length to zero.
+/// Applies `free()` to the `val` buffer then reset val length to zero.
 IW_EXPORT void iwn_val_buf_free(struct iwn_val *val);
 
 /// Adds a value specified by `v` into chain of `vals`.
-IW_EXPORT void iwn_val_add(struct iwn_vals *vals, struct iwn_val *v);
+/// @param vals to attach. If NULL new iwn_vals will be allocated.
+/// @returns vals or NULL if memory allocation failed.
+IW_EXPORT struct iwn_vals* iwn_vals_add(struct iwn_vals *vals, struct iwn_val *v);
 
 /// Allocates new `iwn_val` instance and adds it to the and of `vals` list.
 /// @param vals Values list
 /// @param buf Data wrapped by new `iwn_val`
 /// @param len Length of `buf` data
-IW_EXPORT iwrc iwn_val_add_new(struct iwn_vals *vals, char *buf, size_t len);
+/// @returns vals or NULL if memory allocaton failed.
+IW_EXPORT struct iwn_vals* iwn_vals_add_new(struct iwn_vals *vals, char *buf, size_t len);
+
+IW_EXPORT struct iwn_vals* iwn_vals_add_val(
+  struct iwpool*,
+  struct iwn_vals      *vals,
+  const struct iwn_val *val,
+  bool                  copy_val_buf);
 
 /// Converts a provided `vals` to array form, where a `pool` used for array allocation.
 IW_EXPORT struct iwn_val** iwn_vals_to_array(struct iwpool *pool, const struct iwn_vals *vals, size_t *out_size);
@@ -75,7 +86,6 @@ IW_EXPORT iwrc iwn_pair_add_pool(
   ssize_t           key_len,
   char             *val,
   ssize_t           val_len);
-
 
 /// Add a new `iwn_pair` with all of data including key and value allocated in given `pool`.
 IW_EXPORT iwrc iwn_pair_add_pool_all(
