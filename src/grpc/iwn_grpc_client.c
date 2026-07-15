@@ -924,10 +924,35 @@ static ssize_t _request_msg_read_callback(
   hive_data_source_t *source,
   void               *user_data) {
   struct _request *req = user_data;
-  //source->ptr;
+  struct _msg_slot *ms = source->ptr;
+  assert(req && ms);
 
+  struct iwn_val *v = ms->vals.first;
+  while (v && v->cnt == v->len) {
+    v = v->next;
+    ms->vals.first = v;
+  }
 
-  return 0;
+  if (!v) {
+    *data_flags = *data_flags | HIVE_DATA_FLAG_EOF;
+    return 0;
+  }
+
+  uint8_t *ptr = (uint8_t*) v->buf + v->cnt;
+  ssize_t m = v->len - v->cnt;
+  ssize_t n = MIN(m, length);
+  v->cnt += n;
+
+  if (v->cnt < v->len || v->next) {
+    *data_flags = *data_flags | HIVE_DATA_FLAG_NO_COPY;
+    *buf = ptr;
+  } else {
+    *data_flags = *data_flags | HIVE_DATA_FLAG_EOF;
+    memcpy(*buf, ptr, n);
+    _msg_slot_destroy(ms);
+  }
+
+  return n;
 }
 
 iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec *spec_, struct iwn_val *msg, uint32_t *out_req_id) {
