@@ -45,6 +45,8 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
     case GRPC_ERROR_UNAUTHENTICATED:
       return
         "The request does not have valid authentication credentials for the operation. (GRPC_ERROR_UNAUTHENTICATED)";
+    case GRPC_ERROR_STREAM_CLOSED:
+      return "Stream closed. (GRPC_ERROR_STREAM_CLOSED)";
     case GRPC_ERROR_H2:
       return "HTTP2 Unknown/generic error. (GRPC_ERROR_H2)";
     case GRPC_ERROR_H2_PROTOCOL:

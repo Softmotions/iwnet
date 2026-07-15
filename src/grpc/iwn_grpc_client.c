@@ -45,15 +45,27 @@ struct _rx {
   uint8_t  compressed;
 };
 
+struct _io_writev_state {
+  struct iovec *iov;
+  int iovcnt;
+};
+
+struct _msg_slot {
+  struct iwpool    *pool;
+  struct iwn_vals   vals;
+  struct _msg_slot *next;
+};
+
 struct _request {
   struct iwref_holder     ref;
   struct iwn_grpc_client *client;
   struct iwpool *pool;
   struct iwn_grpc_req_spec spec;
-  struct _rx      rx;
-  pthread_mutex_t mtx;
-  uint32_t      stream_id;
-  uint32_t      error_code;
+  struct _rx rx;
+  struct _msg_slot *mslots;
+  uint32_t stream_id;
+  uint32_t error_code;
+  bool     client_streaming; ///< Continous streaming of client messages
   volatile bool close_pending;
 };
 
@@ -91,6 +103,20 @@ struct iwn_grpc_client {
   volatile bool close_pending;
   volatile bool io_stop;
 };
+
+static inline bool _hive_is_stream_closed(int stream_state) {
+  // From hive_internal.h
+  // HIVE_STREAM_HALF_CLOSED_LOCAL = 2,  /* we sent END_STREAM        */
+  // HIVE_STREAM_HALF_CLOSED_REMOTE = 3, /* peer sent END_STREAM       */
+  // HIVE_STREAM_CLOSED = 4,
+  return (stream_state >= 2 && stream_state <= 4);
+}
+
+static void _msg_slot_destroy(struct _msg_slot *slot) {
+  if (slot && slot->pool) {
+    iwpool_destroy(slot->pool);
+  }
+}
 
 static iwrc _grc2rc(int err) {
   if (!err) {
@@ -155,47 +181,26 @@ static iwrc _hrc2rc(int err) {
   }
 }
 
-struct _io_writev_state {
-  struct iovec *iov;
-  int iovcnt;
-};
-
-struct _msg_slot {
-  struct iwpool  *pool;
-  struct iwn_vals vals;
-};
-
-static void _msg_slot_destroy(struct _msg_slot *slot) {
-  if (slot && slot->pool) {
-    iwpool_destroy(slot->pool);
+static struct _msg_slot* _msg_slot_create(struct _request *req, struct iwn_val *msg) {
+  struct iwpool *pool;
+  struct _msg_slot *slot;
+  size_t mlen = 0;
+  for (struct iwn_val *v = msg; v; v = v->next) {
+    mlen += sizeof(*v) + v->len;
   }
-}
-
-static struct _msg_slot* _msg_slot_create(struct _request *req, struct _msg_slot *slot_, struct iwn_val *msg) {
-  struct _msg_slot *slot = slot_;
-  struct iwpool *pool = slot ? slot->pool : 0;
-
+  pool = iwpool_create_attach(req->pool, sizeof(*slot) + mlen);
   if (!pool) {
-    size_t mlen = 0;
-    for (struct iwn_val *v = msg; v; v = v->next) {
-      mlen += sizeof(*v) + v->len;
-    }
-    pool = iwpool_create_attach(req->pool, sizeof(*slot) + mlen);
-    if (!pool) {
-      return 0;
-    }
-    slot = iwpool_alloc(sizeof(*slot), pool);
-    if (!slot) {
-      iwpool_destroy(pool);
-      return 0;
-    }
-    slot->pool = pool;
+    return 0;
   }
+  slot = iwpool_alloc(sizeof(*slot), pool);
+  if (!slot) {
+    iwpool_destroy(pool);
+    return 0;
+  }
+  slot->pool = pool;
   for (struct iwn_val *v = msg; v; v = v->next) {
     if (!iwn_vals_add_val(pool, &slot->vals, v, true)) {
-      if (slot != slot_) { // we own slot
-        iwpool_destroy(pool);
-      }
+      iwpool_destroy(pool);
     }
   }
   return slot;
@@ -364,7 +369,6 @@ static void _request_destroy(void *d) {
     iwref_unref(&req->client->ref);
   }
   // TODO: Free rx request part
-  pthread_mutex_destroy(&req->mtx);
   iwpool_destroy(req->pool);
 }
 
@@ -924,17 +928,23 @@ static ssize_t _request_msg_read_callback(
   hive_data_source_t *source,
   void               *user_data) {
   struct _request *req = user_data;
-  struct _msg_slot *ms = source->ptr;
-  assert(req && ms);
+  assert(req);
+  struct iwn_val *v = 0;
 
-  struct iwn_val *v = ms->vals.first;
+  v = req->mslots->vals.first;
   while (v && v->cnt == v->len) {
     v = v->next;
-    ms->vals.first = v;
+    req->mslots->vals.first = v;
   }
 
-  if (!v) {
-    *data_flags = *data_flags | HIVE_DATA_FLAG_EOF;
+  while (!v) {
+    req->mslots = req->mslots->next;
+    if (req->mslots) {
+      break;
+    }
+    if (!req->client_streaming) {
+      *data_flags |= HIVE_DATA_FLAG_EOF;
+    }
     return 0;
   }
 
@@ -943,15 +953,18 @@ static ssize_t _request_msg_read_callback(
   ssize_t n = MIN(m, length);
   v->cnt += n;
 
-  if (v->cnt < v->len || v->next) {
+  if (v->cnt < v->len || v->next || req->mslots->next) {
     *data_flags = *data_flags | HIVE_DATA_FLAG_NO_COPY;
     *buf = ptr;
   } else {
-    *data_flags = *data_flags | HIVE_DATA_FLAG_EOF;
+    struct _msg_slot *m = req->mslots;
+    req->mslots = m->next;
     memcpy(*buf, ptr, n);
-    _msg_slot_destroy(ms);
+    _msg_slot_destroy(m);
+    if (!req->client_streaming) {
+      *data_flags |= HIVE_DATA_FLAG_EOF;
+    }
   }
-
   return n;
 }
 
@@ -976,14 +989,14 @@ iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec *spec_, struct 
 
   req->pool = pool;
   req->client = spec_->client;
+  req->client_streaming = spec_->client_streaming;
   iwref_ref(&req->client->ref);
   iwref_init(&req->ref, req, _request_destroy);
   memcpy(&req->spec, spec_, sizeof(*spec_));
 
-  RCT(finish, pthread_mutex_init(&req->mtx, 0));
   RCB(finish, req->spec.service = iwpool_strdup2(pool, spec_->service));
   RCB(finish, req->spec.method = iwpool_strdup2(pool, spec_->method));
-  RCB(finish, ds.ptr = _msg_slot_create(req, 0, msg));
+  RCB(finish, req->mslots = _msg_slot_create(req, msg));
 
   size_t n = 0;
   struct hive_nv headers[9];
@@ -1007,12 +1020,12 @@ iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec *spec_, struct 
   _hive_nv_set(&headers[n++], "grpc-accept-encoding", "identity", 0);
   _hive_nv_set(&headers[n++], "user-agent", client->spec.user_agent, 0);
 
+  pthread_mutex_lock(&client->mtx);
   rc = _hrc2rc(hive_submit_request(client->sess, headers, n, &ds, &req->stream_id));
   if (!rc) {
-    pthread_mutex_lock(&client->mtx);
     rc = iwhmap_put_u32(client->requests_map, req->stream_id, req);
-    pthread_mutex_unlock(&client->mtx);
   }
+  pthread_mutex_unlock(&client->mtx);
 
 finish:
   if (rc) {
@@ -1057,4 +1070,56 @@ void iwn_grpc_client_request_close(struct iwn_grpc_req_ctx *rctx) {
     pthread_mutex_unlock(&client->mtx);
     iwref_unref(&req->ref);
   }
+}
+
+void iwn_grpc_client_streaming_stop(struct iwn_grpc_req_ctx *rctx) {
+  if (rctx && rctx->impl) {
+    struct _request *req = rctx->impl;
+    pthread_mutex_lock(&req->client->mtx);
+    req->client_streaming = false;
+    pthread_mutex_unlock(&req->client->mtx);
+  }
+}
+
+iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx *rctx, struct iwn_val *msg, bool stop_streaming) {
+  if (!rctx || !rctx->impl) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  iwrc rc = 0;
+  struct _request *req = rctx->impl;
+  struct iwn_grpc_client *client = req->client;
+  assert(req);
+
+  pthread_mutex_lock(&client->mtx);
+  int hst = hive_stream_get_state(client->sess, req->stream_id);
+  if (!req->client_streaming || _hive_is_stream_closed(hst)) {
+    pthread_mutex_unlock(&client->mtx);
+    return GRPC_ERROR_STREAM_CLOSED;
+  }
+
+  if (msg) {
+    struct _msg_slot *ms = _msg_slot_create(req, msg);
+    if (!ms) {
+      rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
+      goto finish;
+    }
+    struct _msg_slot *rs = req->mslots;
+    if (rs) {
+      while (rs->next) {
+        rs = rs->next;
+      }
+      rs->next = ms;
+    } else {
+      req->mslots = ms;
+    }
+  }
+
+  req->client_streaming = !stop_streaming;
+
+finish:
+  pthread_mutex_unlock(&client->mtx);
+  if (!rc) {
+    rc = client->pa->arm(client->pa, IWN_POLLOUT);
+  }
+  return rc;
 }

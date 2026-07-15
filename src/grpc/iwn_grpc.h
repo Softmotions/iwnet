@@ -30,6 +30,8 @@ typedef enum {
   GRPC_ERROR_DATA_LOSS,           ///< Unrecoverable data loss or corruption.
   GRPC_ERROR_UNAUTHENTICATED,     ///< The request does not have valid authentication credentials for the operation.
 
+  GRPC_ERROR_STREAM_CLOSED,       ///< Stream closed. (GRPC_ERROR_STREAM_CLOSED)
+
   GRPC_ERROR_H2,                ///< HTTP2 Unknown/generic error. (GRPC_ERROR_H2)
   GRPC_ERROR_H2_PROTOCOL,       ///< HTTP2 Protocol error. (GRPC_ERROR_H2_PROTOCOL)
   GRPC_ERROR_H2_COMPRESSION,    ///< HTTP2 Protocol comression error. (GRPC_ERROR_H2_COMPRESSION)

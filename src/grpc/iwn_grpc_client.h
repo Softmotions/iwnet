@@ -22,7 +22,8 @@ struct iwn_grpc_req_spec {
   struct iwn_grpc_client *client; ///< gRPC Client connection. Required.
   const char *service;            ///< Service name. Required.
   const char *method;             ///< Service method. Required.
-  void       *user_data;
+  bool  client_streaming;                ///<  Client streaming is allowed
+  void *user_data;
 
   /// Callback to get next message to be send to remote peer.
   void (*on_message_sent)(struct iwn_grpc_req_ctx*);
@@ -98,6 +99,6 @@ IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
 
 IW_EXPORT void iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx*);
 
-IW_EXPORT iwrc iwn_grpc_client_send_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg);
+IW_EXPORT iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg, bool stop_streaming);
 
 IW_EXTERN_C_END;
