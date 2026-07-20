@@ -35,8 +35,11 @@ struct iwn_grpc_req_spec {
   /// void (*on_message_sent)(struct iwn_grpc_req_ctx*);
 
   /// When server message arrived to client.
-  /// Returns true if reciever wants to close current request.
+  /// Set `out_continue` to true if reciever wants to close the current request.
   iwrc (*on_message)(const struct iwn_grpc_req_message*, bool *out_continue);
+
+  /// Called when all outgoing messages sent to the reciever.
+  void (*on_messages_sent)(const struct iwn_grpc_req_ctx *ctx);
 
   /// When opened stream is closed.
   void (*on_close)(const struct iwn_grpc_req_ctx*);

@@ -544,11 +544,13 @@ static iwrc _on_stream_close_deferred(const struct _deferred_callback *cb) {
       if (cb->error_code) {
         req->rc = _hrc2rc(cb->error_code);
       }
+      if (req->spec.on_close) {
+        req->spec.on_close(&rctx);
+      }
       if (req->rc && req->spec.on_error) {
         req->spec.on_error(&rctx);
       }
     }
-
     pthread_mutex_lock(&cb->client->mtx);
     iwhmap_remove_u32(cb->client->requests_map, req->stream_id);
     pthread_mutex_unlock(&cb->client->mtx);
@@ -1161,6 +1163,18 @@ static void _hive_data_source_destroy_keep(struct hive_data_source *ds) {
   ds->read_callback = 0;
 }
 
+static iwrc _on_messages_sent_deferred(const struct _deferred_callback *cb) {
+  struct iwn_grpc_req_ctx rctx;
+  if (iwn_grpc_client_acquire_request_ctx(cb->client, cb->stream_id, &rctx)) {
+    struct _request *req = rctx.impl;
+    if (req->spec.on_messages_sent) {
+      req->spec.on_messages_sent(&rctx);
+    }
+    iwn_grpc_client_release_request_ctx(&rctx);
+  }
+  return 0;
+}
+
 static ssize_t _request_msg_read_callback(
   hive_session_t     *session,
   uint32_t            stream_id,
@@ -1195,6 +1209,13 @@ static ssize_t _request_msg_read_callback(
     if (!req->client_streaming) {
       *data_flags |= HIVE_DATA_FLAG_EOF;
     }
+    if (req->spec.on_messages_sent) {
+      _deferred_callback_register(&(struct _deferred_callback) {
+        .client = req->client,
+        .stream_id = req->stream_id,
+        .execute = _on_messages_sent_deferred,
+      });
+    }
     return 0;
   }
 
@@ -1211,8 +1232,17 @@ static ssize_t _request_msg_read_callback(
     req->mslots = m->next;
     memcpy(*buf, ptr, n);
     _msg_slot_destroy(m);
-    if (!req->mslots && !req->client_streaming) {
-      *data_flags |= HIVE_DATA_FLAG_EOF;
+    if (!req->mslots) {
+      if (!req->client_streaming) {
+        *data_flags |= HIVE_DATA_FLAG_EOF;
+      }
+      if (req->spec.on_messages_sent) {
+        _deferred_callback_register(&(struct _deferred_callback) {
+          .client = req->client,
+          .stream_id = req->stream_id,
+          .execute = _on_messages_sent_deferred,
+        });
+      }
     }
   }
   return n;
