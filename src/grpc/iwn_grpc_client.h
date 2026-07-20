@@ -76,7 +76,6 @@ struct iwn_grpc_client_spec {
   const char *url;
   const char *authority;
   const char *authorization;   ///< Optional authorization gRPC header.
-  const char *accept_encoding; ///< Comma separated compression encoding algos. Default: identity.
   const char *user_agent;      ///< Override user-agent gRPC header. Default: "iwn-grpc-client/1"
 
   struct iwn_poller *poller;    ///< Poller instance. Required.
@@ -85,9 +84,10 @@ struct iwn_grpc_client_spec {
 
   /// gRPC specific settings.
   struct {
-    uint32_t timeout_sec;       ///< grpc-timeout in seconds. Default: 30
-    uint32_t max_message_bytes; ///< Max bytes of signle gRPC message. Default: 1048576
-  } grpc_defaults;
+    uint32_t    timeout_sec;       ///< grpc-timeout in seconds. Default: 30
+    uint32_t    max_message_bytes; ///< Max bytes of signle gRPC message. Default: 1048576
+    const char *accept_encoding;   ///< Comma separated compression encoding algos. Default: identity.
+  } grpc;
 
   /// Client operation flags.
   /// @see GRPC_TLS_VERIFY_PEER

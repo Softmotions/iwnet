@@ -706,7 +706,7 @@ static int _hcb_on_data_chunk(
 #ifndef IW_BIGENDIAN
       rx->body_len = IW_SWAB32(rx->body_len);
 #endif
-      if (rx->body_len < client->spec.grpc_defaults.max_message_bytes) {
+      if (rx->body_len < client->spec.grpc.max_message_bytes) {
         req->rc = GRPC_ERROR_MSG_TOO_LARGE;
         return HIVE_ERR;
       }
@@ -1044,8 +1044,8 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
   client->fd = -1;
   client->spec = *spec_;
 
-  if (!client->spec.grpc_defaults.max_message_bytes) {
-    client->spec.grpc_defaults.max_message_bytes = 1024 * 1024; // 1Mb
+  if (!client->spec.grpc.max_message_bytes) {
+    client->spec.grpc.max_message_bytes = 1024 * 1024; // 1Mb
   }
 
   pthread_mutexattr_t attr;
@@ -1104,10 +1104,10 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
     RCB(finish, client->spec.user_agent = iwpool_strdup2(pool, client->spec.user_agent));
   }
 
-  if (!client->spec.accept_encoding) {
-    client->spec.accept_encoding = "identity";
+  if (!client->spec.grpc.accept_encoding) {
+    client->spec.grpc.accept_encoding = "identity";
   } else {
-    RCB(finish, client->spec.accept_encoding = iwpool_strdup2(pool, client->spec.accept_encoding));
+    RCB(finish, client->spec.grpc.accept_encoding = iwpool_strdup2(pool, client->spec.grpc.accept_encoding));
   }
 
   if (client->spec.authorization) {
@@ -1290,14 +1290,17 @@ iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec *spec_, struct 
   // gRPC specific headers
   _hive_nv_set(&headers[n++], "te", "trailers", 0);
   _hive_nv_set(&headers[n++], "content-type", "application/grpc+proto", 0);
-  if (client->spec.grpc_defaults.timeout_sec) {
-    snprintf(grpc_timeout, sizeof(grpc_timeout), "%uS", client->spec.grpc_defaults.timeout_sec);
+  if (client->spec.grpc.timeout_sec) {
+    snprintf(grpc_timeout, sizeof(grpc_timeout), "%uS", client->spec.grpc.timeout_sec);
     _hive_nv_set(&headers[n++], "grpc-timeout", grpc_timeout, 0);
   } else {
     _hive_nv_set(&headers[n++], "grpc-timeout", "30S", 0);
   }
-  // TODO: Compression support
-  _hive_nv_set(&headers[n++], "grpc-accept-encoding", "identity", 0);
+  if (client->spec.grpc.accept_encoding) {
+    _hive_nv_set(&headers[n++], "grpc-accept-encoding", client->spec.grpc.accept_encoding, 0);
+  } else {
+    _hive_nv_set(&headers[n++], "grpc-accept-encoding", "identity", 0);
+  }
   _hive_nv_set(&headers[n++], "user-agent", client->spec.user_agent, 0);
 
   pthread_mutex_lock(&client->mtx);
