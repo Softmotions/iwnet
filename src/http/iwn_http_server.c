@@ -1080,7 +1080,7 @@ static iwrc _proxy_endpoint_connect(struct client *client) {
 
     do {
       rci = connect(fd, p->ai_addr, p->ai_addrlen);
-    } while (errno == EINTR);
+    } while (rci == -1 && errno == EINTR);
 
     if (rci == -1 && errno != EAGAIN && errno != EINPROGRESS) {
       iwlog_warn("Proxy | Error connecting %s %s %s", proxy->url_raw, saddr, strerror(errno));

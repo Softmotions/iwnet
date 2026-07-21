@@ -8,6 +8,8 @@
 
 IW_EXTERN_C_START;
 
+#define IWN_GRPC_VAL_COMPRESSED_FLG 0x04
+
 struct iwn_grpc_client;
 struct iwn_grpc_req_ctx;
 struct iwn_grpc_req_spec;
@@ -23,8 +25,7 @@ struct iwn_grpc_client_ctx {
 
 struct iwn_grpc_req_spec {
   struct iwn_grpc_client *client; ///< gRPC Client connection. Required.
-  const char *service;            ///< Service name. Required.
-  const char *method;             ///< Service method. Required.
+  const char *path;               ///< Service path. Required.
   bool  client_streaming;         ///<  Client streaming is allowed
   void *user_data;
 
@@ -35,8 +36,8 @@ struct iwn_grpc_req_spec {
   /// void (*on_message_sent)(struct iwn_grpc_req_ctx*);
 
   /// When server message arrived to client.
-  /// Set `out_continue` to true if reciever wants to close the current request.
-  iwrc (*on_message)(const struct iwn_grpc_req_message*, bool *out_continue);
+  /// Set `out_continue` to false if reciever wants to close the current request.
+  void (*on_message)(const struct iwn_grpc_req_message*, bool *out_continue);
 
   /// Called when all outgoing messages sent to the reciever.
   void (*on_messages_sent)(const struct iwn_grpc_req_ctx *ctx);
@@ -113,6 +114,8 @@ IW_EXPORT iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec*, struct i
 
 IW_EXPORT bool iwn_grpc_client_close(struct iwn_grpc_client*);
 
+/// Open gRPC request.
+/// Set `IWN_GRPC_VAL_COMPRESSED_FLG` to msg in order to mark compressed protobuf message.
 IW_EXPORT iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec*, struct iwn_val *msg, uint32_t *out_req_id);
 
 IW_EXPORT void iwn_grpc_client_request_close(struct iwn_grpc_req_ctx*);
@@ -124,6 +127,8 @@ IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
 
 IW_EXPORT void iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx*);
 
+/// Continue sending message to server in streaming mode.
+/// Set `IWN_GRPC_VAL_COMPRESSED_FLG` to msg in order to mark compressed protobuf message.
 IW_EXPORT iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg, bool stop_streaming);
 
 IW_EXTERN_C_END;

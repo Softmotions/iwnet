@@ -162,7 +162,7 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
 
       do {
         rci = connect(fd, p->ai_addr, p->ai_addrlen);
-      } while (errno == EINTR);
+      } while (rci == -1 && errno == EINTR);
 
       if (rci == -1) {
         if (!(async && (errno == EAGAIN || errno == EINPROGRESS))) {
@@ -191,7 +191,7 @@ static iwrc _connect(struct iwn_ws_client *ws, bool async, int *out_fd) {
 
     do {
       rci = connect(fd, (void*) &saddr, sizeof(saddr));
-    } while (errno == EINTR);
+    } while (rci == -1 && errno == EINTR);
 
     if (rci == -1) {
       if (!ws->quiet) {

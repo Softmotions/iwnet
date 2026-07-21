@@ -4,9 +4,9 @@
 
 IW_EXTERN_C_START;
 
-#define GRPC_TLS_VERIFY_PEER 0x01U ///< Verify peer on TLS connection.
-#define GRPC_TLS_VERIFY_HOST 0x02U ///< Verify host on TLS vonnection.
-#define GRPC_LOG_QUIET       0x04U ///< Let connections logging be less verbose
+#define IWN_GRPC_TLS_VERIFY_PEER 0x01U ///< Verify peer on TLS connection.
+#define IWN_GRPC_TLS_VERIFY_HOST 0x02U ///< Verify host on TLS vonnection.
+#define IWN_GRPC_LOG_QUIET       0x04U ///< Let connections logging be less verbose
 
 typedef enum {
   _GRPC_ERROR_START = (IW_ERROR_START + 206000UL),
