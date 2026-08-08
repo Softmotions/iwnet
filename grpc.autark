@@ -8,7 +8,7 @@ if { !defined { LIBHIVE_URL }
 }
 
 check {
-  fetch_resource.sh { ${LIBHIVE_URL} C{extern_libhive} LIBHIVE_SRC_DIR }
+  fetch_resource.sh { fetch-url{${LIBHIVE_URL}} C{extern_libhive} LIBHIVE_SRC_DIR }
 }
 
 set {
