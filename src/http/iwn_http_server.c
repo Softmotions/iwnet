@@ -1515,7 +1515,6 @@ again:
 
 static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   struct client *client = user_data;
-
   if (client->request.poller_adapter != pa) {
     client->request.poller_adapter = pa;
   }

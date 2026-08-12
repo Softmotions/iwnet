@@ -8,8 +8,6 @@
 
 IW_EXTERN_C_START;
 
-#define IWN_GRPC_VAL_COMPRESSED_FLG 0x04
-
 struct iwn_grpc_client;
 struct iwn_grpc_req_ctx;
 struct iwn_grpc_req_spec;
@@ -32,11 +30,10 @@ struct iwn_grpc_req_spec {
   /// Called when HTTP2/gRPC errors recieved by response headers.
   void (*on_error)(const struct iwn_grpc_req_ctx*);
 
-  /// Callback to get next message to be send to remote peer.
-  /// void (*on_message_sent)(struct iwn_grpc_req_ctx*);
-
   /// When server message arrived to client.
-  /// Set `out_continue` to false if reciever wants to close the current request.
+  /// Set `out_continue` to false to stop delivering further messages to this callback.
+  /// This does not close the HTTP/2 stream.
+  /// This callback recieves compressed messages as is in original compressed form.
   void (*on_message)(const struct iwn_grpc_req_message*, bool *out_continue);
 
   /// Called when all outgoing messages sent to the reciever.
@@ -56,6 +53,7 @@ struct iwn_grpc_req_ctx {
   struct iwn_grpc_req_spec   req_spec;
   const char *error_explained;
   const char *data_encoding;
+  const char *output_data_encoding;
   uint32_t    req_id;                          ///< Aka stream-id.
   void       *impl;
 };
@@ -96,8 +94,8 @@ struct iwn_grpc_client_spec {
   /// @see GRPC_LOG_QUIET
   uint32_t flags;
 
-  /// When network client connection opened.
-  iwrc (*on_connected)(struct iwn_grpc_client_ctx*);
+  /// When client recieved first response gRPC headers.
+  iwrc (*on_handshake)(struct iwn_grpc_client_ctx*);
 
   /// When network client connection closed.
   void (*on_closed)(struct iwn_grpc_client_ctx*);
@@ -115,8 +113,12 @@ IW_EXPORT iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec*, struct i
 IW_EXPORT bool iwn_grpc_client_close(struct iwn_grpc_client*);
 
 /// Open gRPC request.
-/// Set `IWN_GRPC_VAL_COMPRESSED_FLG` to msg in order to mark compressed protobuf message.
-IW_EXPORT iwrc iwn_grpc_client_request_open(const struct iwn_grpc_req_spec*, struct iwn_val *msg, uint32_t *out_req_id);
+/// encoding - compression encoding used for message. Zero when identity.
+IW_EXPORT iwrc iwn_grpc_client_request_open(
+  const struct iwn_grpc_req_spec*,
+  struct iwn_val *msg,
+  const char     *encoding,
+  uint32_t       *out_req_id);
 
 IW_EXPORT void iwn_grpc_client_request_close(struct iwn_grpc_req_ctx*);
 
@@ -128,7 +130,6 @@ IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
 IW_EXPORT void iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx*);
 
 /// Continue sending message to server in streaming mode.
-/// Set `IWN_GRPC_VAL_COMPRESSED_FLG` to msg in order to mark compressed protobuf message.
-IW_EXPORT iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg, bool stop_streaming);
+IW_EXPORT iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg, bool            stop_streaming);
 
 IW_EXTERN_C_END;
