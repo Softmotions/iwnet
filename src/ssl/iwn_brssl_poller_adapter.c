@@ -497,7 +497,8 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
     .timeout = spec->timeout_sec,
-    .events = spec->events
+    .events = spec->events,
+    .events_mod = spec->events_mod,
   });
 
 finish:
@@ -581,7 +582,8 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
     .timeout = spec->timeout_sec,
-    .events = spec->events
+    .events = spec->events,
+    .events_mod = spec->events_mod,
   });
 
 finish:
