@@ -6,7 +6,7 @@
 # https://github.com/Softmotions/autark
 
 META_VERSION=0.9.8
-META_REVISION=b6f13a0
+META_REVISION=742341d
 cd "$(cd "$(dirname "$0")"; pwd -P)"
 
 prev_arg=""
@@ -62,7 +62,7 @@ cat <<'a292effa503b' > ${AUTARK_HOME}/autark.c
 #ifndef CONFIG_H
 #define CONFIG_H
 #define META_VERSION "0.9.8"
-#define META_REVISION "b6f13a0"
+#define META_REVISION "742341d"
 #define MACRO_MAX_RECURSIVE_CALLS 128
 #endif
 #define _AMALGAMATE_
@@ -7005,11 +7005,12 @@ static int _usage_va(
   fprintf(stderr,
           "    -k, --compile-commands      Generates compile_commands.json database. Sets -c option implicitly.\n");
   fprintf(stderr,
-          "    -I, --install               Install all built artifacts\n");
+          "    -I, --install               Installs all built artifacts\n");
   fprintf(stderr,
           "    -R, --prefix=<>             Install prefix. Default: $HOME/.local\n");
   fprintf(stderr,
-          "    -S, --install-source-deps   Build autonomous source distribution package dir with all external project dependencies packed.\n");
+          "    -S, --install-source-deps   Builds autonomous source distribution package dir with all external project dependencies packed.\n"
+          "                                Sets -c option implicitly.\n");
   fprintf(stderr,
           "        --bindir=<>             Path to 'bin' dir relative to a `prefix` dir. Default: bin\n");
   fprintf(stderr,
@@ -7531,7 +7532,7 @@ void autark_run(int argc, const char **argv) {
       g_env.verbose = true;
     }
   }
-  if (g_env.project.compile_commands) {
+  if (g_env.project.compile_commands || (g_env.install.flags & INSTALL_FLG_SRC_WITH_DEPS)) {
     g_env.project.cleanup = true;
   }
   char buf[PATH_MAX];
