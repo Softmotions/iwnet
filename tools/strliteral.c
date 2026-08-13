@@ -20,8 +20,10 @@ static void make_identifier(char *str) {
 static char *dupstr(char *str) {
   size_t len = strlen(str);
   char *dup = malloc(len + 1);
-  strcpy(dup, str);
-  dup[len] = '\0';
+  if (dup == NULL) {
+    return NULL;
+  }
+  memcpy(dup, str, len + 1);
   return dup;
 }
 
