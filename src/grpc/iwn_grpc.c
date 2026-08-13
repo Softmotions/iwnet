@@ -56,7 +56,7 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
     case GRPC_ERROR_H2_PROTOCOL:
       return "HTTP2 Protocol error. (GRPC_ERROR_H2_PROTOCOL)";
     case GRPC_ERROR_H2_COMPRESSION:
-      return "HTTP2 Protocol comression error. (GRPC_ERROR_H2_COMPRESSION)";
+      return "HTTP2 Protocol compression error. (GRPC_ERROR_H2_COMPRESSION)";
     case GRPC_ERROR_H2_FLOW_CONTROL:
       return "HTTP2 Flow control error. (GRPC_ERROR_H2_FLOW_CONTROL)";
     case GRPC_ERROR_H2_REFUSED_STREAM:

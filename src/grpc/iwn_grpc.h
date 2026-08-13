@@ -5,7 +5,7 @@
 IW_EXTERN_C_START;
 
 #define IWN_GRPC_TLS_VERIFY_PEER 0x01U ///< Verify peer on TLS connection.
-#define IWN_GRPC_TLS_VERIFY_HOST 0x02U ///< Verify host on TLS vonnection.
+#define IWN_GRPC_TLS_VERIFY_HOST 0x02U ///< Verify host on TLS connection.
 #define IWN_GRPC_LOG_QUIET       0x04U ///< Let connections logging be less verbose
 
 typedef enum {
@@ -36,7 +36,7 @@ typedef enum {
   GRPC_ERROR_H2,                   ///< HTTP2 Unknown/generic error. (GRPC_ERROR_H2)
   GRPC_ERROR_H2_UNEXPECTED_STATUS, ///< HTTP2  Unexpected HTTP status code. (GRPC_ERROR_H2_STATUS)
   GRPC_ERROR_H2_PROTOCOL,          ///< HTTP2 Protocol error. (GRPC_ERROR_H2_PROTOCOL)
-  GRPC_ERROR_H2_COMPRESSION,       ///< HTTP2 Protocol comression error. (GRPC_ERROR_H2_COMPRESSION)
+  GRPC_ERROR_H2_COMPRESSION,       ///< HTTP2 Protocol compression error. (GRPC_ERROR_H2_COMPRESSION)
   GRPC_ERROR_H2_FLOW_CONTROL,      ///< HTTP2 Flow control error. (GRPC_ERROR_H2_FLOW_CONTROL)
   GRPC_ERROR_H2_REFUSED_STREAM,    ///< HTTP2 Refused stream. (GRPC_ERROR_H2_REFUSED_STREAM)
   GRPC_ERROR_H2_STREAM_CLOSED,     ///< HTTP2 Stream closed. (GRPC_ERROR_H2_STREAM_CLOSED)

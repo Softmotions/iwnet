@@ -27,7 +27,7 @@ struct iwn_grpc_req_spec {
   bool  client_streaming;         ///<  Client streaming is allowed
   void *user_data;
 
-  /// Called when HTTP2/gRPC errors recieved by response headers.
+  /// Called when HTTP2/gRPC errors received by response headers.
   void (*on_error)(const struct iwn_grpc_req_ctx*);
 
   /// When server message arrived to client.
@@ -36,11 +36,11 @@ struct iwn_grpc_req_spec {
   /// This callback recieves compressed messages as is in original compressed form.
   void (*on_message)(const struct iwn_grpc_req_message*, bool *out_continue);
 
-  /// Called when all outgoing messages sent to the reciever.
-  void (*on_messages_sent)(const struct iwn_grpc_req_ctx *ctx);
+  /// Called when outgoing messages queue is drained.
+  void (*on_outgoing_messages_queue_drained)(const struct iwn_grpc_req_ctx *ctx);
 
   /// When opened stream is closed.
-  void (*on_close)(const struct iwn_grpc_req_ctx*);
+  void (*on_closed)(const struct iwn_grpc_req_ctx*);
 
   /// Called on destroy client request and its resources.
   /// All handles to `struct iwn_grpc_req_ctx` will be invalid after call of this handle.
@@ -84,7 +84,7 @@ struct iwn_grpc_client_spec {
   /// gRPC specific settings.
   struct {
     uint32_t    timeout_sec;       ///< grpc-timeout in seconds. Default: 30
-    uint32_t    max_message_bytes; ///< Max bytes of signle gRPC message. Default: 1048576
+    uint32_t    max_message_bytes; ///< Max bytes of single gRPC message. Default: 1048576
     const char *accept_encoding;   ///< Comma separated compression encoding algos. Default: identity.
   } grpc;
 
@@ -94,7 +94,7 @@ struct iwn_grpc_client_spec {
   /// @see GRPC_LOG_QUIET
   uint32_t flags;
 
-  /// When client recieved first response gRPC headers.
+  /// When client received first response gRPC headers.
   iwrc (*on_handshake)(struct iwn_grpc_client_ctx*);
 
   /// When network client connection closed.
@@ -120,6 +120,7 @@ IW_EXPORT iwrc iwn_grpc_client_request_open(
   const char     *encoding,
   uint32_t       *out_req_id);
 
+/// Closes gRPC request.
 IW_EXPORT void iwn_grpc_client_request_close(struct iwn_grpc_req_ctx*);
 
 IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
@@ -130,6 +131,6 @@ IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
 IW_EXPORT void iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx*);
 
 /// Continue sending message to server in streaming mode.
-IW_EXPORT iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg, bool            stop_streaming);
+IW_EXPORT iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg, bool stop_streaming);
 
 IW_EXTERN_C_END;

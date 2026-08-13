@@ -28,6 +28,10 @@ static ssize_t _write(struct iwn_poller_adapter *a, const uint8_t *buf, size_t l
   return write(a->fd, buf, len);
 }
 
+static const char* _get_protocol_name(struct iwn_poller_adapter *a) {
+  return 0;
+}
+
 IW_INLINE void _destroy(struct pa *a) {
   free(a);
 }
@@ -63,6 +67,7 @@ iwrc iwn_direct_poller_adapter(
   a->b.read = _read;
   a->b.write = _write;
   a->b.arm = _arm;
+  a->b.get_protocol_name = _get_protocol_name;
   a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = on_event;
   a->on_dispose = on_dispose;
