@@ -1,5 +1,6 @@
 #include "iwn_tests.h"
 #include "iwn_grpc_client.h"
+#include "iwn_poller.h"
 
 #include <iowow/iwarr.h>
 #include <iowow/iwconv.h>
@@ -7,20 +8,59 @@
 #include <getopt.h>
 #include <string.h>
 
+
+#define STATE_ON_HANDSHAKE 0x01U
+#define STATE_ON_ERROR     0x02U
+#define STATE_ON_CLOSED    0x04U
+#define STATE_ON_DESTROY   0x08U
+
 static struct _ctx {
-  struct iwpool *pool;
+  struct iwn_grpc_client *client;
+  struct iwn_poller *poller;
+  struct iwpool     *pool;
   char *connect_url;
   struct iwulist messages; /// struct iwn_val
+  uint32_t       state;
+  iwrc rc;
+  const char *error_explained;
 } ctx;
 
+static void _on_signal(int signo) {
+  if (ctx.poller) {
+    iwn_poller_shutdown_request(ctx.poller);
+  }
+}
+
 static void _ctx_destroy(void) {
+  iwn_grpc_client_close(ctx.client);
+  iwn_poller_destroy(&ctx.poller);
   iwulist_destroy_keep(&ctx.messages);
   iwpool_destroy(ctx.pool);
 }
 
+static iwrc _on_handshake(struct iwn_grpc_client_ctx *cc) {
+  ctx.state |= STATE_ON_HANDSHAKE;
+  return 0;
+}
+
+static void _on_closed(struct iwn_grpc_client_ctx *cc) {
+  ctx.state |= STATE_ON_CLOSED;
+}
+
+static void _on_error(struct iwn_grpc_client_ctx *cc) {
+  ctx.state |= STATE_ON_ERROR;
+}
+
+static void _on_destroy(struct iwn_grpc_client_ctx *cc) {
+  ctx.state |= STATE_ON_DESTROY;
+}
+
 int main(int argc, char *argv[]) {
-  iwrc rc = 0;
   ssize_t len;
+
+  iwrc rc = iwn_grpc_init();
+  RCRET(rc);
+
   struct iwpool *pool = iwpool_create_empty();
   RCB(finish, pool);
 
@@ -57,6 +97,19 @@ int main(int argc, char *argv[]) {
         goto finish;
     }
   }
+  struct iwn_grpc_client_spec spec = {
+    .url = "grpc+plaintext://localhost:50051",
+    .poller = ctx.poller,
+    .on_handshake = _on_handshake,
+    .on_closed = _on_closed,
+    .on_error = _on_error,
+    .on_destroy = _on_destroy,
+  };
+
+  RCC(rc, finish, iwn_poller_create(3, 1, &ctx.poller));
+  RCC(rc, finish, iwn_grpc_client_open(&spec, &ctx.client));
+
+  iwn_poller_poll(ctx.poller);
 
 
 finish:
@@ -64,6 +117,6 @@ finish:
     iwlog_ecode_error3(rc);
   }
   IWN_ASSERT(rc == 0);
-  iwpool_destroy(pool);
+  _ctx_destroy();
   return iwn_assertions_failed > 0 ? 1 : 0;
 }

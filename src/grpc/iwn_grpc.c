@@ -79,7 +79,7 @@ iwrc iwn_grpc_init(void) {
   return 0;
 }
 
-IW_CONSTRUCTOR void _init(void) {
+IW_CONSTRUCTOR void _iwn_grpc_init(void) {
   if (iwn_grpc_init()) {
     fputs("iwn_grpc_init() failed", stderr);
     abort();

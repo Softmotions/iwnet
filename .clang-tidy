@@ -14,6 +14,7 @@ Checks:    >
   -bugprone-not-null-terminated-result,
   -bugprone-reserved-identifier,
   -bugprone-sizeof-expression,
+  -bugprone-multi-level-implicit-pointer-conversion,
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
   -clang-analyzer-security.insecureAPI.strcpy,
   -google-readability-todo,

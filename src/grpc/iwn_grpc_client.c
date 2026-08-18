@@ -115,7 +115,8 @@ struct iwn_grpc_client {
   volatile bool goaway_submitted;
   volatile bool closed_by_api;
   volatile bool connected;
-  volatile bool in_loop; ///< True if we are inside event loop callbacks;
+  volatile bool pa_closed; ///< Poller adapter is not operable it this state.
+  volatile bool in_loop;   ///< True if we are inside event loop callbacks;
 };
 
 static inline bool _hive_is_stream_closed(int stream_state) {
@@ -354,6 +355,9 @@ static iwrc _deferred_callbacks_execute(struct iwn_grpc_client *client) {
 
 static int _deferred_callback_register(const struct _deferred_callback *cb) {
   struct iwn_grpc_client *client = cb->client;
+  if (client->pa_closed) {
+    return 0; // Client disposed
+  }
   if (cb->immediate && !client->in_loop) {
     iwrc rc = cb->execute(cb);
     if (rc) {
@@ -402,8 +406,6 @@ static void _request_ctx_init(struct _request *req, struct iwn_grpc_req_ctx *ctx
 
 static void _client_destroy(void *d) {
   struct iwn_grpc_client *client = d;
-
-  _deferred_callbacks_execute(client);
 
   if (client->spec.on_destroy) {
     struct iwn_grpc_client_ctx ctx;
@@ -1071,8 +1073,9 @@ static int64_t _on_poller_adapter_event(struct iwn_poller_adapter *pa, void *use
 
 static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user_data) {
   struct iwn_grpc_client *client = user_data;
-  struct iwulist rlist = { .usize = sizeof(struct _request*) };
+  client->pa_closed = true;
 
+  struct iwulist rlist = { .usize = sizeof(struct _request*) };
   pthread_mutex_lock(&client->mtx);
   struct iwhmap_iter it;
   iwhmap_iter_init(client->requests_map, &it);
@@ -1109,6 +1112,7 @@ static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user
     _client_ctx_init(client, &ctx);
     client->spec.on_closed(&ctx);
   }
+
   client->pa = 0;
   iwref_unref(&client->ref);
 }
@@ -1282,6 +1286,9 @@ finish:
 }
 
 bool iwn_grpc_client_close(struct iwn_grpc_client *client) {
+  if (!client) {
+    return false;
+  }
   if (!__sync_bool_compare_and_swap(&client->closed_by_api, false, true)) {
     return false;
   }
@@ -1603,7 +1610,7 @@ finish:
   if (!rc) {
     if (!client->pa) {
       rc = GRPC_ERROR_STREAM_CLOSED;
-    } else {
+    } else if (client->pa) {
       rc = client->pa->arm(client->pa, IWN_POLLOUT);
     }
   }

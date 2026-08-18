@@ -12,7 +12,7 @@ foreach {
     exec { ${CC} ${OBJ} ${LDFLAGS_TEST} -o %{${OBJ}} }
     consumes { ${LIBIWNET_A} ${OBJ} }
     produces { %{${OBJ}} }
-  }
+    }
 }
 
 if { ${IWNET_RUN_TESTS}
