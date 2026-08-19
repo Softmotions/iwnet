@@ -34,10 +34,10 @@ struct iwn_grpc_req_spec {
   /// Set `out_continue` to false to stop delivering further messages to this callback.
   /// This does not close the HTTP/2 stream.
   /// This callback recieves compressed messages as is in original compressed form.
-  void (*on_message)(const struct iwn_grpc_req_message*, bool *out_continue);
+  void (*on_message)(struct iwn_grpc_req_message*, bool *out_continue);
 
   /// Called when outgoing messages queue is drained.
-  void (*on_outgoing_messages_queue_drained)(const struct iwn_grpc_req_ctx *ctx);
+  void (*on_outgoing_messages_queue_drained)(struct iwn_grpc_req_ctx *ctx);
 
   /// When opened stream is closed.
   void (*on_closed)(const struct iwn_grpc_req_ctx*);
@@ -50,7 +50,7 @@ struct iwn_grpc_req_spec {
 struct iwn_grpc_req_ctx {
   iwrc rc;
   struct iwn_grpc_client_ctx client_ctx;
-  struct iwn_grpc_req_spec   req_spec;
+  struct iwn_grpc_req_spec   spec;
   const char *error_explained;
   const char *data_encoding;
   const char *output_data_encoding;
@@ -114,6 +114,7 @@ IW_EXPORT bool iwn_grpc_client_close(struct iwn_grpc_client*);
 
 /// Open gRPC request.
 /// encoding - compression encoding used for message. Zero when identity.
+/// NOTE: If non zero error code returned `iwn_grpc_client_spec#on_destroy()` callback is not called on provided spec.
 IW_EXPORT iwrc iwn_grpc_client_request_open(
   const struct iwn_grpc_req_spec*,
   struct iwn_val *msg,

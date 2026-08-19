@@ -395,7 +395,7 @@ static void _rx_init(struct _rx *rx) {
 static void _request_ctx_init(struct _request *req, struct iwn_grpc_req_ctx *ctx) {
   memset(ctx, 0, sizeof(*ctx));
   _client_ctx_init(req->client, &ctx->client_ctx);
-  ctx->req_spec = req->spec;
+  ctx->spec = req->spec;
   ctx->req_id = req->stream_id;
   ctx->rc = req->rc;
   ctx->error_explained = req->error_explained;
@@ -436,10 +436,12 @@ IW_INLINE void _request_release_unref(struct _request *req) {
 
 static void _request_destroy(void *d) {
   struct _request *req = d;
-  if (req->spec.on_destroy) {
+  void (*on_destroy)(const struct iwn_grpc_req_ctx*) = req->spec.on_destroy;
+  if (on_destroy) {
+    req->spec.on_destroy = 0;
     struct iwn_grpc_req_ctx ctx;
     _request_ctx_init(req, &ctx);
-    req->spec.on_destroy(&ctx);
+    on_destroy(&ctx);
   }
   if (req->client) {
     iwref_unref(&req->client->ref);
@@ -1530,6 +1532,9 @@ finish:
   if (rc) {
     if (req) {
       req->rc = rc;
+      // In the case of fail openening request
+      // destroying should be handled by caller.
+      req->spec.on_destroy = 0;
       _request_destroy(req);
     } else {
       iwpool_destroy(pool);

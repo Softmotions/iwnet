@@ -1,3 +1,4 @@
+__pycache__/
 /autark-cache*
 .breakpoints
 *.tar.gz
