@@ -43,7 +43,7 @@ run() {
   sleep 1
 
   BASE="${PROTO}://localhost:${PORT}"
-  FILTER='sed -r /(date|user-agent|trying|tcp)|^\*/Id'
+  FILTER='sed -E /(date|user-agent|trying|tcp)|^\*/Id'
 
   printf "\n\nSmall response body:\n"
   curl -isk ${BASE}/ | ${FILTER}

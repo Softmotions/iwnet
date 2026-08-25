@@ -45,7 +45,7 @@ run() {
   sleep 1
 
   BASE="${PROTO}://localhost:${PORT}"
-  FILTER='sed -r /(date|user-agent|trying|tcp|sessionid|etag|boundary|--)|^\*/Id'
+  FILTER='sed -E /(date|user-agent|trying|tcp|sessionid|etag|boundary|--)|^\*/Id'
 
   printf "\n\nGet empty:\n"
   curl -isk ${BASE}/get/empty | ${FILTER}
