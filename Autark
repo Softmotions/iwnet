@@ -50,11 +50,6 @@ if { !defined { IOWOW_URL }
   }
 }
 
-if { !defined { ENABLE_GRPC } 
-  # FIXME: Set to 0 by default
-  set { ENABLE_GRPC 1 }
-}
-
 env {
   PKG_CONFIG_PATH
   C{${INSTALL_PKGCONFIG_DIR}}

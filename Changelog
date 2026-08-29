@@ -2,6 +2,7 @@ UNRELEASED	Anton Adamansky  <adamansky@gmail.com>  [v1.3.0-dev]
 	* fix: HTTP/1 state parser fixed
 	* fix: Backported recent BearSSL fixes 
 	* impl: Migration on Autark build system
+	* impl: Experimental version of grpc client (iwn_grpc_client.h) 
 
 2025-07-19  Anton Adamansky  <adamansky@gmail.com>  [v1.2.0]
 	* impl: Added printf helpers to iwn_curl.h

@@ -2,7 +2,6 @@
 import argparse
 import socket
 import struct
-import sys
 import time
 from h2.config import H2Configuration
 from h2.connection import H2Connection

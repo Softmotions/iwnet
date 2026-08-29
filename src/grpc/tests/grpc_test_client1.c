@@ -1,7 +1,7 @@
 #include "iwn_tests.h"
 #include "iwn_grpc_client.h"
 #include "iwn_poller.h"
-#include "iw_stepbox.h"
+#include "iwstepbox.h"
 
 #include <iowow/iwarr.h>
 #include <iowow/iwconv.h>
@@ -10,7 +10,7 @@
 #include <string.h>
 #include <pthread.h>
 
-static struct iw_stepbox sbox;
+static struct iw_stepbox sbox[1];
 
 #define STEP_ON_HANDSHAKE   (uint8_t) 1
 #define STEP_REQ_ON_DRAINED (uint8_t) 2
@@ -49,6 +49,7 @@ static const char* _step_name(uint8_t s) {
 
 static void _sbox_lsnr(struct iw_stepbox *sb, uint8_t idx, int inc) {
   fprintf(stderr, "Step: %s %d\n", _step_name(idx), sb->steps[idx]);
+  return;
 }
 
 static struct _ctx {
@@ -73,20 +74,26 @@ static void _ctx_destroy(void) {
 }
 
 static iwrc _on_handshake(struct iwn_grpc_client_ctx *cc) {
-  iw_stepbox_on(&sbox, STEP_ON_HANDSHAKE, 1);
+  iw_stepbox_on(&sbox[0], STEP_ON_HANDSHAKE, 1);
   return 0;
 }
 
 static void _on_closed(struct iwn_grpc_client_ctx *cc) {
-  iw_stepbox_on(&sbox, STEP_ON_CLOSED, 1);
+  iw_stepbox_on(&sbox[0], STEP_ON_CLOSED, 1);
 }
 
 static void _on_error(struct iwn_grpc_client_ctx *cc) {
-  iw_stepbox_on(&sbox, STEP_ON_ERROR, 1);
+  iw_stepbox_on(&sbox[0], STEP_ON_ERROR, 1);
+  IWN_ASSERT(cc->rc);
+  if (cc->rc) {
+    iwlog_ecode_error2(cc->rc, "on_error");
+  }
 }
 
 static void _on_destroy(struct iwn_grpc_client_ctx *cc) {
-  iw_stepbox_on(&sbox, STEP_ON_DESTROY, 1);
+  IWN_ASSERT(_ctx.client == cc->client);
+  _ctx.client = 0;
+  iw_stepbox_on(&sbox[0], STEP_ON_DESTROY, 1);
 }
 
 static iwrc _iwn_val_init(struct iwn_val *val, const char *hex) {
@@ -141,7 +148,7 @@ static void _req_on_closed1(const struct iwn_grpc_req_ctx *rctx) {
 }
 
 static void _req_on_error1(const struct iwn_grpc_req_ctx *ctx) {
-  iw_stepbox_on(&sbox, STEP_REQ_ON_ERROR, 1);
+  iw_stepbox_on(&sbox[0], STEP_REQ_ON_ERROR, 1);
   struct _req_test_ctx1 *tctx = ctx->spec.user_data;
   IWN_ASSERT(!tctx->rc);
   IWN_ASSERT(!tctx->error);
@@ -154,22 +161,24 @@ static void _req_on_error1(const struct iwn_grpc_req_ctx *ctx) {
 }
 
 static void _req_on_outgoing_messages_queue_drained1(struct iwn_grpc_req_ctx *rctx) {
-  iw_stepbox_on(&sbox, STEP_REQ_ON_DRAINED, 1);
+  iw_stepbox_on(&sbox[0], STEP_REQ_ON_DRAINED, 1);
   struct _req_test_ctx1 *tctx = rctx->spec.user_data;
   ++tctx->num_drains;
 }
 
 static void _req_on_message1(struct iwn_grpc_req_message *msg, bool *cont) {
-  iw_stepbox_on(&sbox, STEP_REQ_ON_MESSAGE, 1);
+  iw_stepbox_on(&sbox[0], STEP_REQ_ON_MESSAGE, 1);
   struct _req_test_ctx1 *tctx = msg->ctx.spec.user_data;
   IWN_ASSERT_FATAL(iwn_vals_add_val(tctx->pool, &tctx->vals, &msg->msg, true));
-  // Got it now close the request
-  iwn_grpc_client_request_close(&msg->ctx);
+
+  char buf[255];
+  iwbin2hex(buf, sizeof(buf), (void*) msg->msg.buf, msg->msg.len);
+  IWN_ASSERT(strcmp("0a2e31623336626565342d653564342d343035372d613964352d6130613334336161333663613a20416e746f6e2023311001", buf) == 0);
 }
 
 static iwrc _run_test1(void) {
   iwrc rc = 0;
-  iw_stepbox_reset(&sbox, _sbox_lsnr);
+  iw_stepbox_reset(&sbox[0], _sbox_lsnr);
 
   // grpcurl -plaintext -import-path . -proto ./helloworld.proto -d '{"name":"Anton"}'  localhost:50051
   // helloworld.Greeter/SayHello
@@ -177,13 +186,14 @@ static iwrc _run_test1(void) {
 
   struct iwn_grpc_req_spec spec = {
     .client = _ctx.client,
-    .path = "helloworld.Greeter/SayHello",
+    .path = "/helloworld.Greeter/SayHello",
     .on_error = _req_on_error1,
     .on_message = _req_on_message1,
     .on_outgoing_messages_queue_drained = _req_on_outgoing_messages_queue_drained1,
     .on_closed = _req_on_closed1,
     .on_destroy = _req_on_destroy1,
   };
+
   struct iwn_val val;
   RCC(rc, finish, _iwn_val_init(&val, "0a05416e746f6e"));
 
@@ -247,6 +257,11 @@ int main(int argc, char *argv[]) {
   pthread_join(poll_thread, 0);
 
 finish:
+  IWN_ASSERT(sbox[0].steps[STEP_ON_DESTROY] == 1);
+  IWN_ASSERT(sbox[0].steps[STEP_ON_CLOSED] == 1);
+  IWN_ASSERT(sbox[0].steps[STEP_ON_HANDSHAKE] == 1);
+  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_MESSAGE] == 1);
+  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_DRAINED] == 1);
   if (rc) {
     iwlog_ecode_error3(rc);
   }

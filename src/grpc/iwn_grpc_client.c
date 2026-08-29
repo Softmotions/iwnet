@@ -227,9 +227,8 @@ static iwrc _msg_slot_create(
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
 
-  RCB(finish, slot = iwpool_alloc(sizeof(*slot), pool));
+  RCB(finish, slot = iwpool_calloc(sizeof(*slot), pool));
   slot->pool = pool;
-  slot->next = 0;
 
   for (const struct iwn_val *v = msg; v; v = v->next) {
     struct iwn_val *nv;
@@ -477,6 +476,10 @@ static iwrc _connect(struct iwn_grpc_client *client, int *out_fd) {
       iwlog_ecode_error(GRPC_ERROR_PEER_CONNECT, "grpc | %s", gai_strerror(rci));
       return GRPC_ERROR_PEER_CONNECT;
     }
+
+    int last_errno = 0;
+    char last_addr[INET6_ADDRSTRLEN + 50] = { 0 };
+
     for (p = si; p; p = p->ai_next) {
       char saddr[INET6_ADDRSTRLEN + 50];
       struct sockaddr *sa = p->ai_addr;
@@ -487,9 +490,7 @@ static iwrc _connect(struct iwn_grpc_client *client, int *out_fd) {
       } else if (sa->sa_family == AF_INET6) {
         addr = &((struct sockaddr_in6*) sa)->sin6_addr;
       } else {
-        iwlog_ecode_error(GRPC_ERROR_PEER_CONNECT, "grpc | Unsupported address family: 0x%x", (int) sa->sa_family);
-        rc = GRPC_ERROR_PEER_CONNECT;
-        goto finish;
+        continue;
       }
 
       if (!inet_ntop(p->ai_family, addr, saddr, sizeof(saddr))) {
@@ -499,7 +500,8 @@ static iwrc _connect(struct iwn_grpc_client *client, int *out_fd) {
 
       fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
       if (fd < 0) {
-        iwlog_warn("grpc | Error opening socket %s:%s %s %s", client->url.host, port, saddr, strerror(errno));
+        last_errno = errno;
+        iwu_strncpy(last_addr, saddr, sizeof(last_addr));
         continue;
       }
 
@@ -514,14 +516,23 @@ static iwrc _connect(struct iwn_grpc_client *client, int *out_fd) {
         rci = connect(fd, p->ai_addr, p->ai_addrlen);
       } while (rci == -1 && errno == EINTR);
 
-      if (rci == -1) {
-        if (!(client->flags & IWN_GRPC_LOG_QUIET)) {
-          iwlog_warn("grpc | Error connecting %s %s %s", client->url.host, saddr, strerror(errno));
-        }
-        close(fd), fd = -1;
-        continue;
+      if (rci == 0) {
+        break;
       }
-      break;
+
+      last_errno = errno;
+      iwu_strncpy(last_addr, saddr, sizeof(last_addr));
+
+      close(fd);
+      fd = -1;
+    }
+
+    if (fd < 0) {
+      if (!(client->flags & IWN_GRPC_LOG_QUIET)) {
+        iwlog_warn("grpc | Error connecting %s:%s %s %s", client->url.host, port, last_addr, strerror(last_errno));
+      }
+      rc = GRPC_ERROR_PEER_CONNECT;
+      goto finish;
     }
   } else {
     RCN(finish, fd = socket(AF_UNIX, SOCK_STREAM, 0));
@@ -640,7 +651,7 @@ static iwrc _on_goaway_deferred(const struct _deferred_callback *cb) {
   if (__sync_bool_compare_and_swap(&client->goaway_submitted, false, true)) {
     pthread_mutex_lock(&client->mtx);
     // Intentionally ignore error code below. Since correct delivering of GOAWAY is not critical.
-    hive_submit_goaway_final(client->sess, HIVE_H2_CANCEL, 0, 0);
+    hive_submit_goaway_final(client->sess, HIVE_H2_NO_ERROR, 0, 0);
     pthread_mutex_unlock(&client->mtx);
     if (client->pa) {
       client->pa->arm(client->pa, IWN_POLLOUT);
@@ -1151,8 +1162,6 @@ static iwrc _client_connect(struct iwn_grpc_client *client) {
     goto finish;
   }
 
-  iwref_ref(&client->ref);
-
   if (client->flags & _FLAG_SECURE) {
     RCC(rc, finish, iwn_brssl_client_poller_adapter(&(struct iwn_brssl_client_poller_adapter_spec) {
       .poller = client->poller,
@@ -1187,7 +1196,6 @@ finish:
       client->fd = -1;
     }
   }
-  iwref_unref(&client->ref);
   return rc;
 }
 
@@ -1225,6 +1233,7 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
   RCC(rc, finish, iwulist_init(&client->deferred_callbacks, 8, sizeof(struct _deferred_callback)));
   RCB(finish, client->input_buf = iwxstr_create_empty());
 
+  // Initial reference is owned by the API caller and released by iwn_grpc_client_close().
   iwref_init(&client->ref, client, _client_destroy);
   RCB(finish, client->spec.url = iwpool_strdup2(pool, client->spec.url));
   if (client->spec.authority) {
@@ -1240,8 +1249,6 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
     rc = IW_ERROR_INVALID_ARGS;
     goto finish;
   }
-
-  client->flags |= _FLAG_SECURE;
 
   if (client->url.scheme) {
     if (strcmp("grpc+plaintext", client->url.scheme) == 0) {
@@ -1285,7 +1292,7 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
   }
 
   RCC(rc, finish, _hive_pre_init(client));
-  rc = _client_connect(client);
+  RCC(rc, finish, _client_connect(client));
 
 finish:
   if (rc) {
@@ -1340,7 +1347,7 @@ static iwrc _on_messages_sent_deferred(const struct _deferred_callback *cb) {
   return 0;
 }
 
-static iwrc _on_request_close_deferred(const struct _deferred_callback *cb) {
+static iwrc _on_request_cancel_deferred(const struct _deferred_callback *cb) {
   struct iwn_grpc_req_ctx rctx;
   if (iwn_grpc_client_acquire_request_ctx(cb->client, cb->stream_id, &rctx)) {
     struct _request *req = rctx.impl;
@@ -1578,13 +1585,13 @@ void iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx *rctx) {
   _request_release_unref(rctx->impl);
 }
 
-void iwn_grpc_client_request_close(struct iwn_grpc_req_ctx *rctx) {
+void iwn_grpc_client_request_cancel(struct iwn_grpc_req_ctx *rctx) {
   struct _request *req = rctx->impl;
   if (__sync_bool_compare_and_swap(&req->close_pending, false, true)) {
     _deferred_callback_register(&(struct _deferred_callback) {
       .client = req->client,
       .stream_id = req->stream_id,
-      .execute = _on_request_close_deferred,
+      .execute = _on_request_cancel_deferred,
       .immediate = true,
     });
   }

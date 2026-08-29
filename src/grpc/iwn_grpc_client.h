@@ -122,8 +122,8 @@ IW_EXPORT iwrc iwn_grpc_client_request_open(
   const char     *encoding,
   uint32_t       *out_req_id);
 
-/// Closes gRPC request.
-IW_EXPORT void iwn_grpc_client_request_close(struct iwn_grpc_req_ctx*);
+/// Cancels gRPC request.
+IW_EXPORT void iwn_grpc_client_request_cancel(struct iwn_grpc_req_ctx*);
 
 IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
   struct iwn_grpc_client  *client,

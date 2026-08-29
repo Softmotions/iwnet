@@ -34,3 +34,5 @@ sources:
 	tar -C "$$base_dir" -czf "$(CURDIR)/$$name.tar.gz" "$$name"; \
 	echo "Created: $(CURDIR)/$$name.tar.gz"
 
+clean:
+	rm -rf ./autark-cache

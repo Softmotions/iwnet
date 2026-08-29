@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+#  ./protohex.py ./helloworld.proto HelloRequest 'name:"Anton"'
+
 import argparse
 import pathlib
 import struct
