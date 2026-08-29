@@ -1080,7 +1080,7 @@ static iwrc _proxy_endpoint_connect(struct client *client) {
 
     do {
       rci = connect(fd, p->ai_addr, p->ai_addrlen);
-    } while (errno == EINTR);
+    } while (rci == -1 && errno == EINTR);
 
     if (rci == -1 && errno != EAGAIN && errno != EINPROGRESS) {
       iwlog_warn("Proxy | Error connecting %s %s %s", proxy->url_raw, saddr, strerror(errno));
@@ -1515,7 +1515,6 @@ again:
 
 static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   struct client *client = user_data;
-
   if (client->request.poller_adapter != pa) {
     client->request.poller_adapter = pa;
   }

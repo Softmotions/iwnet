@@ -1,8 +1,8 @@
 meta {
   name { iwnet }
-
+ 
   version_major { 1 }
-  version_minor { 1 }
+  version_minor { 3 }
   version_patch { 0 }
 
   description { Pure C Asynchronous HTTP/IO framework with routing, websockets, SSL and reverse proxy. }
@@ -16,6 +16,7 @@ option { IOWOW_URL                IOWOW external project sources URL }
 option { IWNET_BUILD_SHARED_LIBS  Build shared libraries }
 option { IWNET_BUILD_TESTS        Build test cases }
 option { IWNET_RUN_TESTS          Build and run test cases }
+option { ENABLE_GRPC              Enable gRPC client. Default: 0  }
 option { ENABLE_ASAN              Turn on address sanitizer }
 option { ENABLE_UBSAN             Turn on UB sanitizer }
 option { ENABLE_DEBINFO           Generate debuginfo even in release mode }
@@ -63,11 +64,11 @@ check {
 }
 
 check {
-  fetch_resource.sh { ${IOWOW_URL} C{extern_iowow} IOWOW_SRC_DIR }
+  fetch_resource.sh { fetch-url{${IOWOW_URL}} C{extern_iowow} IOWOW_SRC_DIR }
 }
 
 run {
-  shell { ^{BUILD_TYPE= ${BUILD_TYPE}}  autark --prefix C{} ${IOWOW_SRC_DIR} }
+  shell { ^{BUILD_TYPE= ${BUILD_TYPE}} autark --prefix C{} ${IOWOW_SRC_DIR} }
   consumes {
     ${IOWOW_SRC_DIR}
   }
@@ -191,9 +192,15 @@ set {
   -DHAVE_CONFIG_H
 
   -I C{src}
+  -I C{${INSTALL_INCLUDE_DIR}}
   -I S{src}
 }
 
+if { ${ENABLE_GRPC} 
+  include { grpc.autark }
+}
+
+include { distr.autark }
 include { tools/Autark }
 include { src/Autark }
 

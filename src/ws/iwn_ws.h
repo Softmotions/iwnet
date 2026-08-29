@@ -1,6 +1,6 @@
 #pragma once
 
-#include "iwn_poller.h"
+#include "iwn_poller.h" // IWYU pragma: export
 
 IW_EXTERN_C_START;
 

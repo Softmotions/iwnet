@@ -1,5 +1,7 @@
+__pycache__/
 /autark-cache*
 .breakpoints
+*.tar.gz
 
 ### CMake ###
 CMakeLists.txt.user

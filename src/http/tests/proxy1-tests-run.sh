@@ -39,7 +39,7 @@ run() {
   
   ARGS="-H Host:endpoint"
   BASE="${PROTO}://localhost:${PORT}"
-  FILTER='sed -r /(date|user-agent|trying|tcp|sessionid|etag|boundary|--)|^\*/Id'
+  FILTER='sed -E /(date|user-agent|trying|tcp|sessionid|etag|boundary|--)|^\*/Id'
 
   printf "\n\nEcho:\n"
   curl -isk ${ARGS} ${BASE}/echo | ${FILTER}

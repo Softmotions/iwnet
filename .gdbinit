@@ -1,6 +1,6 @@
-cd ./build/src/ws/tests
-file ./ws_client_test1
-set args --listen socket:///tmp/ws_server1.socket
+cd ./autark-cache/src/grpc/tests
+file ./grpc_test_client1
+#set args --listen socket:///tmp/ws_server1.socket
 #set args --ssl
 
 set confirm off

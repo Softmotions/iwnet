@@ -3,6 +3,7 @@
 
 #include "bearssl/brssl.h"
 #include <iowow/iwlog.h>
+#include <iowow/iwpool.h>
 
 #include <stdlib.h>
 #include <errno.h>
@@ -20,10 +21,12 @@ struct pa {
   struct iwn_poller_adapter     b;
   iwn_on_poller_adapter_event   on_event;
   iwn_on_poller_adapter_dispose on_dispose;
+  struct iwpool *pool;
   br_ssl_engine_context *eng;
   pthread_mutex_t mtx;
   pthread_key_t   ready_fd_tl;
-
+  const char    **alpn_protocol_names;
+  ssize_t alpn_protocol_names_len;
   union {
     struct  {
       br_ssl_client_context      cc;
@@ -122,7 +125,7 @@ IW_INLINE void _destroy(struct pa *a) {
   }
   pthread_key_delete(a->ready_fd_tl);
   pthread_mutex_destroy(&a->mtx);
-  free(a);
+  iwpool_destroy(a->pool);
 }
 
 static void _on_dispose(const struct iwn_poller_task *t) {
@@ -203,6 +206,12 @@ iwrc _arm(struct iwn_poller_adapter *a, uint32_t events) {
     return iwn_poller_arm_events(a->poller, a->fd, events);
   }
   return 0;
+}
+
+static const char* _get_protocol_name(struct iwn_poller_adapter *pa) {
+  struct pa *a = (void*) pa;
+  br_ssl_engine_context *cc = a->eng;
+  return br_ssl_engine_get_selected_protocol(cc);
 }
 
 static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
@@ -407,15 +416,20 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
 
   _init();
 
-  struct pa *a = calloc(1, sizeof(*a));
-  if (!a) {
+  struct iwpool *pool = iwpool_create_empty();
+  if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
+  struct pa *a = iwpool_calloc(sizeof(*a), pool);
+  RCB(finish, a);
+  a->pool = pool;
+
   a->b.fd = spec->fd;
   a->b.poller = p;
   a->b.read = _read;
   a->b.write = _write;
   a->b.arm = _arm;
+  a->b.get_protocol_name = _get_protocol_name;
   a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->b.user_data = spec->user_data;
   a->on_event = spec->on_event;
@@ -429,6 +443,14 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
 
   pthread_key_create(&a->ready_fd_tl, 0);
 
+  if (spec->alpn_protocol_names) {
+    const char **pnames = iwpool_split_string(pool, spec->alpn_protocol_names, ",", true);
+    RCB(finish, pnames);
+    a->alpn_protocol_names = pnames;
+    for (const char **pn = pnames; *pn; ++pn) {
+      a->alpn_protocol_names_len++;
+    }
+  }
   if (spec->certs_in_buffer) {
     a->server.certs = read_certificates_data(spec->certs, certs_len, &a->server.certs_num);
     if (!a->server.certs) {
@@ -438,7 +460,7 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     }
   } else {
     char *buf = malloc(certs_len + 1);
-    RCA(buf, finish);
+    RCB(finish, buf);
     memcpy(buf, spec->certs, certs_len);
     buf[certs_len] = '\0';
     a->server.certs = read_certificates(buf, &a->server.certs_num);
@@ -486,6 +508,10 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
 
   br_ssl_engine_set_buffer(&a->server.sc.eng, a->iobuf, sizeof(a->iobuf), 1);
   br_ssl_engine_set_versions(&a->server.sc.eng, BR_TLS11, BR_TLS12);
+  if (a->alpn_protocol_names_len > 0) {
+    br_ssl_engine_set_protocol_names(&a->server.sc.eng, a->alpn_protocol_names, a->alpn_protocol_names_len);
+    br_ssl_engine_add_flags(&a->server.sc.eng, BR_OPT_FAIL_ON_ALPN_MISMATCH);
+  }
   br_ssl_server_reset(&a->server.sc);
 
   a->eng = &a->server.sc.eng;
@@ -503,7 +529,11 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
 
 finish:
   if (rc) {
-    _destroy(a);
+    if (a) {
+      _destroy(a);
+    } else {
+      iwpool_destroy(pool);
+    }
   }
   return rc;
 }
@@ -526,16 +556,20 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
 
   _init();
 
-  struct pa *a = calloc(1, sizeof(*a));
-  if (!a) {
+  struct iwpool *pool = iwpool_create_empty();
+  if (!pool) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
+  struct pa *a = iwpool_calloc(sizeof(*a), pool);
+  RCB(finish, a);
+
   a->is_client = true;
   a->b.fd = spec->fd;
   a->b.poller = p;
   a->b.read = _read;
   a->b.write = _write;
   a->b.arm = _arm;
+  a->b.get_protocol_name = _get_protocol_name;
   a->b.user_data = spec->user_data;
   a->b.has_pending_write_bytes = _has_pending_write_bytes;
   a->on_event = spec->on_event;
@@ -548,6 +582,15 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
   pthread_mutexattr_destroy(&attr);
 
   pthread_key_create(&a->ready_fd_tl, 0);
+
+  if (spec->alpn_protocol_names) {
+    const char **pnames = iwpool_split_string(pool, spec->alpn_protocol_names, ",", true);
+    RCB(finish, pnames);
+    a->alpn_protocol_names = pnames;
+    for (const char **pn = pnames; *pn; ++pn) {
+      a->alpn_protocol_names_len++;
+    }
+  }
 
   const char *cacerts_data = spec->cacerts_data;
   size_t cacerts_data_len = spec->cacerts_data_len;
@@ -566,7 +609,10 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
   br_ssl_client_init_full(&a->client.cc, &a->client.x509.minimal, a->client.anchors.buf, a->client.anchors.ptr);
   br_ssl_engine_set_buffer(&a->client.cc.eng, a->iobuf, sizeof(a->iobuf), 1);
   br_ssl_engine_set_versions(&a->client.cc.eng, BR_TLS11, BR_TLS12);
-
+  if (a->alpn_protocol_names_len > 0) {
+    br_ssl_engine_set_protocol_names(&a->client.cc.eng, a->alpn_protocol_names, a->alpn_protocol_names_len);
+    br_ssl_engine_add_flags(&a->client.cc.eng, BR_OPT_FAIL_ON_ALPN_MISMATCH);
+  }
   a->client.x509.vtable = &x509_vtable;
   a->client.x509.verifyhost = spec->verify_host;
   a->client.x509.verifypeer = spec->verify_peer;

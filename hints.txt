@@ -1,0 +1,6 @@
+- https://datatracker.ietf.org/doc/html/rfc7540
+- https://datatracker.ietf.org/doc/html/rfc7541
+- https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
+- https://grpc.io/docs/guides/status-codes/
+- https://github.com/pawelzelawski/libhive
+

@@ -1,0 +1,19 @@
+install-sources {
+  ^{${INSTALL_DATA_DIR} / ${META_NAME} / ${META_NAME} -sources- ${META_VERSION}}
+ .autark/
+ .clang-tidy
+ .ignore
+ .lvimrc
+ Autark
+ BASE.md
+ Changelog
+ LICENSE
+ Makefile
+ README.md
+ build.sh
+ distr.autark
+ grpc.autark
+ src/
+ tools/
+ uncrustify.cfg
+}

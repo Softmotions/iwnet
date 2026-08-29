@@ -4,6 +4,7 @@
 #include <iowow/iwp.h>
 #include <iowow/iwlog.h>
 #include <iowow/iwxstr.h>
+#include <iowow/iwutils.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -415,7 +416,7 @@ static int _wf_file_serve(
   }
 
   if (ctype && *ctype != '\0') {
-    strncpy(ctx->ctype, ctype, sizeof(ctx->ctype));
+    iwu_strncpy(ctx->ctype, ctype, sizeof(ctx->ctype));
     ctx->ctype[sizeof(ctx->ctype) - 1] = '\0';
   } else {
     memcpy(ctx->ctype, "application/octet-stream", sizeof("application/octet-stream"));
