@@ -67,6 +67,8 @@ static const char* _ecodefn(locale_t locale, uint32_t ecode) {
       return "HTTP2 Go away. (GRPC_ERROR_H2_GOAWAY)";
     case GRPC_ERROR_H2_CANCEL:
       return "HTTP2 Cancel. (GRPC_ERROR_H2_CANCEL)";
+    case GRPC_ERROR_H2_TIMEOUT:
+      return "HTTP2 Timeout getting data or settings (GRPC_ERROR_H2_TIMEOT)";
   }
   return 0;
 }

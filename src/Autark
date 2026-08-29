@@ -46,7 +46,6 @@ include { ws/Autark }
 include { ssl/Autark }
 include { wslay/Autark }
 include { bearssl/Autark }
-
 if { ${ENABLE_GRPC} 
   include { grpc/Autark }
 }
@@ -61,6 +60,9 @@ cc {
     C{include/iowow/iowow.h}
     C{include/data_cacert.inc} 
     C{include/generated_mimegen.h} 
+    if { ${ENABLE_GRPC} 
+      ${LIBHIVE_HEADERS}
+    }
   }
 }
 

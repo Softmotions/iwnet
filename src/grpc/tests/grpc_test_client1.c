@@ -1,6 +1,7 @@
 #include "iwn_tests.h"
 #include "iwn_grpc_client.h"
 #include "iwn_poller.h"
+#include "iw_stepbox.h"
 
 #include <iowow/iwarr.h>
 #include <iowow/iwconv.h>
@@ -9,19 +10,53 @@
 #include <string.h>
 #include <pthread.h>
 
+static struct iw_stepbox sbox;
 
-#define STATE_ON_HANDSHAKE 0x01U
-#define STATE_ON_ERROR     0x02U
-#define STATE_ON_CLOSED    0x04U
-#define STATE_ON_DESTROY   0x08U
+#define STEP_ON_HANDSHAKE   (uint8_t) 1
+#define STEP_REQ_ON_DRAINED (uint8_t) 2
+#define STEP_REQ_ON_MESSAGE (uint8_t) 3
+#define STEP_REQ_ON_ERROR   (uint8_t) 4
+#define STEP_REQ_ON_CLOSED  (uint8_t) 5
+#define STEP_REQ_ON_DESTROY (uint8_t) 6
+#define STEP_ON_CLOSED      (uint8_t) 7
+#define STEP_ON_DESTROY     (uint8_t) 8
+#define STEP_ON_ERROR       (uint8_t) 9
+
+static const char* _step_name(uint8_t s) {
+  switch (s) {
+    case STEP_ON_HANDSHAKE:
+      return "on_handshake";
+    case STEP_REQ_ON_DRAINED:
+      return "req_on_drained";
+    case STEP_REQ_ON_MESSAGE:
+      return "req_on_message";
+    case STEP_REQ_ON_ERROR:
+      return "req_on_error";
+    case STEP_REQ_ON_CLOSED:
+      return "req_on_closed";
+    case STEP_REQ_ON_DESTROY:
+      return "req_on_destroy";
+    case STEP_ON_CLOSED:
+      return "on_closed";
+    case STEP_ON_DESTROY:
+      return "on_destroy";
+    case STEP_ON_ERROR:
+      return "on_error";
+    default:
+      return "unknown";
+  }
+}
+
+static void _sbox_lsnr(struct iw_stepbox *sb, uint8_t idx, int inc) {
+  fprintf(stderr, "Step: %s %d\n", _step_name(idx), sb->steps[idx]);
+}
 
 static struct _ctx {
   struct iwn_grpc_client *client;
   struct iwn_poller      *poller;
   struct iwpool *pool;
-  char    *connect_url;
-  uint32_t state;
-  iwrc     rc;
+  char *connect_url;
+  iwrc  rc;
   const char *error_explained;
 } _ctx;
 
@@ -38,20 +73,20 @@ static void _ctx_destroy(void) {
 }
 
 static iwrc _on_handshake(struct iwn_grpc_client_ctx *cc) {
-  _ctx.state |= STATE_ON_HANDSHAKE;
+  iw_stepbox_on(&sbox, STEP_ON_HANDSHAKE, 1);
   return 0;
 }
 
 static void _on_closed(struct iwn_grpc_client_ctx *cc) {
-  _ctx.state |= STATE_ON_CLOSED;
+  iw_stepbox_on(&sbox, STEP_ON_CLOSED, 1);
 }
 
 static void _on_error(struct iwn_grpc_client_ctx *cc) {
-  _ctx.state |= STATE_ON_ERROR;
+  iw_stepbox_on(&sbox, STEP_ON_ERROR, 1);
 }
 
 static void _on_destroy(struct iwn_grpc_client_ctx *cc) {
-  _ctx.state |= STATE_ON_DESTROY;
+  iw_stepbox_on(&sbox, STEP_ON_DESTROY, 1);
 }
 
 static iwrc _iwn_val_init(struct iwn_val *val, const char *hex) {
@@ -106,6 +141,7 @@ static void _req_on_closed1(const struct iwn_grpc_req_ctx *rctx) {
 }
 
 static void _req_on_error1(const struct iwn_grpc_req_ctx *ctx) {
+  iw_stepbox_on(&sbox, STEP_REQ_ON_ERROR, 1);
   struct _req_test_ctx1 *tctx = ctx->spec.user_data;
   IWN_ASSERT(!tctx->rc);
   IWN_ASSERT(!tctx->error);
@@ -118,11 +154,13 @@ static void _req_on_error1(const struct iwn_grpc_req_ctx *ctx) {
 }
 
 static void _req_on_outgoing_messages_queue_drained1(struct iwn_grpc_req_ctx *rctx) {
+  iw_stepbox_on(&sbox, STEP_REQ_ON_DRAINED, 1);
   struct _req_test_ctx1 *tctx = rctx->spec.user_data;
   ++tctx->num_drains;
 }
 
 static void _req_on_message1(struct iwn_grpc_req_message *msg, bool *cont) {
+  iw_stepbox_on(&sbox, STEP_REQ_ON_MESSAGE, 1);
   struct _req_test_ctx1 *tctx = msg->ctx.spec.user_data;
   IWN_ASSERT_FATAL(iwn_vals_add_val(tctx->pool, &tctx->vals, &msg->msg, true));
   // Got it now close the request
@@ -131,6 +169,7 @@ static void _req_on_message1(struct iwn_grpc_req_message *msg, bool *cont) {
 
 static iwrc _run_test1(void) {
   iwrc rc = 0;
+  iw_stepbox_reset(&sbox, _sbox_lsnr);
 
   // grpcurl -plaintext -import-path . -proto ./helloworld.proto -d '{"name":"Anton"}'  localhost:50051
   // helloworld.Greeter/SayHello
@@ -144,7 +183,6 @@ static iwrc _run_test1(void) {
     .on_outgoing_messages_queue_drained = _req_on_outgoing_messages_queue_drained1,
     .on_closed = _req_on_closed1,
     .on_destroy = _req_on_destroy1,
-    
   };
   struct iwn_val val;
   RCC(rc, finish, _iwn_val_init(&val, "0a05416e746f6e"));

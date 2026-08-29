@@ -37,14 +37,13 @@ enum _rx_state {
 
 struct _rx {
   enum _rx_state state;
-  /* gRPC message prefix: 1 byte compressed flag + 4 bytes big-endian length. */
+  /// gRPC message prefix: 1 byte compressed flag + 4 bytes big-endian length.
   uint8_t header[5];
   size_t  header_len;
 
-  uint32_t body_len;
-  size_t   body_off;
-  uint8_t *body;
-  uint8_t  compressed;
+  uint32_t       body_len;
+  struct iwxstr *body;
+  uint8_t compressed;
 };
 
 struct _io_writev_state {
@@ -114,7 +113,7 @@ struct iwn_grpc_client {
   volatile iwrc rc;
   volatile bool goaway_submitted;
   volatile bool closed_by_api;
-  volatile bool connected;
+  volatile bool got_handshake;
   volatile bool pa_closed; ///< Poller adapter is not operable it this state.
   volatile bool in_loop;   ///< True if we are inside event loop callbacks;
 };
@@ -191,6 +190,8 @@ static iwrc _hrc2rc(int err) {
       return GRPC_ERROR_H2_STREAM_CLOSED;
     case HIVE_ERR_SESSION_CLOSED:
       return IW_ERROR_INVALID_STATE;
+    case HIVE_H2_SETTINGS_TIMEOUT:
+      return GRPC_ERROR_H2_TIMEOUT;
     case HIVE_H2_CANCEL:
       return 0; // Do not treat stream cancellation as and error (GRPC_ERROR_H2_CANCEL)
     default:
@@ -218,7 +219,7 @@ static iwrc _msg_slot_create(
     if (v->len > req->client->spec.grpc.max_message_bytes) {
       return GRPC_ERROR_MSG_TOO_LARGE;
     }
-    mlen += sizeof(*v) + v->len + sizeof(uint32_t) /* gRPC message length prefix */ + 1 /*compressed*/;
+    mlen += sizeof(*v) + v->len + sizeof(uint32_t) + 1 /*compressed*/;
   }
 
   pool = iwpool_create_attach(req->pool, sizeof(*slot) + mlen);
@@ -233,7 +234,7 @@ static iwrc _msg_slot_create(
   for (const struct iwn_val *v = msg; v; v = v->next) {
     struct iwn_val *nv;
     RCB(finish, nv = iwpool_calloc(sizeof(*nv), pool));
-    nv->len = v->len + sizeof(uint32_t) /* gRPC message length prefix */ + 1 /* compressed */;
+    nv->len = v->len + sizeof(uint32_t) + 1 /* compressed */;
     RCB(finish, nv->buf = iwpool_alloc(nv->len, pool));
 
     char *wp = nv->buf;
@@ -257,6 +258,7 @@ static iwrc _msg_slot_create(
       slot->vals.last = nv;
     }
   }
+
 finish:
   if (rc) {
     iwpool_destroy(pool);
@@ -281,8 +283,7 @@ static void _io_consume_iov(struct _io_writev_state *st, size_t written) {
       st->iov++;
       st->iovcnt--;
     } else {
-      st->iov[0].iov_base
-        = (char*) st->iov[0].iov_base + written;
+      st->iov[0].iov_base = (char*) st->iov[0].iov_base + written;
       st->iov[0].iov_len -= written;
       written = 0;
     }
@@ -383,9 +384,15 @@ static void _client_ctx_init(struct iwn_grpc_client *client, struct iwn_grpc_cli
 }
 
 static void _rx_destroy(struct _rx *rx) {
-  free(rx->body);
+  iwxstr_destroy(rx->body);
   memset(rx, 0, sizeof(*rx));
 };
+
+static void _rx_reset(struct _rx *rx) {
+  struct iwxstr *body = rx->body;
+  memset(rx, 0, sizeof(*rx));
+  rx->body = body;
+}
 
 static void _rx_init(struct _rx *rx) {
   memset(rx, 0, sizeof(*rx));
@@ -564,7 +571,7 @@ finish:
   return rc;
 }
 
-static iwrc _on_connected_deferred(const struct _deferred_callback *cb) {
+static iwrc _on_handshake_deferred(const struct _deferred_callback *cb) {
   if (cb->client->spec.on_handshake) {
     struct iwn_grpc_client_ctx ctx;
     _client_ctx_init(cb->client, &ctx);
@@ -604,7 +611,6 @@ static iwrc _on_stream_close_deferred(const struct _deferred_callback *cb) {
   struct iwn_grpc_req_ctx rctx;
   if (iwn_grpc_client_acquire_request_ctx(cb->client, cb->stream_id, &rctx)) {
     struct _request *req = rctx.impl;
-
     if (cb->error_code && !req->rc) {
       req->rc = _hrc2rc(cb->error_code);
       rctx.rc = req->rc;
@@ -645,10 +651,10 @@ static iwrc _on_goaway_deferred(const struct _deferred_callback *cb) {
 
 static int _hcb_on_begin_headers(hive_session_t *session, uint32_t stream_id, void *user_data) {
   struct iwn_grpc_client *client = user_data;
-  if (__sync_bool_compare_and_swap(&client->connected, false, true) && client->spec.on_handshake) {
+  if (__sync_bool_compare_and_swap(&client->got_handshake, false, true) && client->spec.on_handshake) {
     return _deferred_callback_register(&(struct _deferred_callback) {
       .client = client,
-      .execute = _on_connected_deferred,
+      .execute = _on_handshake_deferred,
       .stream_id = stream_id,
     });
   }
@@ -752,6 +758,16 @@ static int _hcb_on_goaway(
   size_t          debug_len,
   void           *user_data) {
   struct iwn_grpc_client *client = user_data;
+  if (error_code && !client->rc) {
+    client->rc = _hrc2rc(error_code);
+    if (client->rc && client->spec.on_error) {
+      _deferred_callback_register(&(struct _deferred_callback) {
+        .client = client,
+        .execute = _on_client_error_deferred,
+        .error_code = client->rc,
+      });
+    }
+  }
   __sync_bool_compare_and_swap(&client->goaway_submitted, false, true);
   return 0;
 }
@@ -772,6 +788,14 @@ static int _hcb_on_data_chunk(
 
   if (req->rc || !req->spec.on_message || rx->state == _RX_STOP) {
     return 0;
+  }
+
+  if (rx->body == 0) {
+    rx->body = iwxstr_create_empty();
+    if (!rx->body) {
+      req->rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
+      return HIVE_ERR_NOMEM;
+    }
   }
 
   size_t off = 0;
@@ -799,49 +823,37 @@ static int _hcb_on_data_chunk(
         req->rc = GRPC_ERROR_MSG_TOO_LARGE;
         return HIVE_ERR;
       }
-      rx->body_off = 0;
-      free(rx->body);
-      rx->body = 0;
-
-      if (rx->body_len > 0) {
-        rx->body = malloc(rx->body_len);
-        if (!rx->body) {
-          req->rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
-          return HIVE_ERR_NOMEM;
-        }
-      }
-
+      iwxstr_clear(rx->body);
       rx->state = _RX_BODY;
     }
+
     // BODY
     if (rx->state == _RX_BODY) {
-      size_t need = rx->body_len - rx->body_off;
+      size_t need = rx->body_len - iwxstr_size(rx->body);
       size_t take = need < (len - off) ? need : (len - off);
 
       if (take > 0) {
-        memcpy(rx->body + rx->body_off, data + off, take);
-        rx->body_off += take;
+        iwxstr_cat(rx->body, data + off, take);
         off += take;
       }
 
-      if (rx->body_off < rx->body_len) {
+      if (iwxstr_size(rx->body) < rx->body_len) {
         continue;
       }
 
-      {
+      { // Call on_message() callback
         struct iwn_grpc_req_message msg = {
           .msg = {
-            .buf = (char*) rx->body,
+            .buf = iwxstr_ptr(rx->body),
             .len = rx->body_len,
           },
           .compressed = rx->compressed
         };
         _request_ctx_init(req, &msg.ctx);
-        bool cont = true;
-        req->spec.on_message(&msg, &cont);
-        free(rx->body);
-        memset(rx, 0, sizeof(*rx));
-        if (!cont) {
+        bool keep_going = true;
+        req->spec.on_message(&msg, &keep_going);
+        _rx_reset(rx);
+        if (!keep_going) {
           rx->state = _RX_STOP;
           break;
         } else {
@@ -890,8 +902,8 @@ static iwrc _hive_pre_init(struct iwn_grpc_client *client) {
   cbs->on_header = _hcb_on_header;
   cbs->on_headers_complete = _hcb_on_headers_complete;
   cbs->on_connection_error = _hcb_on_connection_error;
-  cbs->on_stream_close = _hcb_on_stream_close;
   cbs->on_goaway = _hcb_on_goaway;
+  cbs->on_stream_close = _hcb_on_stream_close;
   cbs->send = _hcb_io_send;
   cbs->on_data_chunk = _hcb_on_data_chunk;
 
@@ -927,7 +939,7 @@ static bool _client_want_write(struct iwn_grpc_client *client) {
 
 static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   struct iwn_grpc_client *client = user_data;
-  if (client->pa != pa) {
+  if (IW_UNLIKELY(client->pa != pa)) {
     client->pa = pa;
   }
 
@@ -938,15 +950,15 @@ static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void
   struct hive_session *sess = client->sess;
 
   pthread_mutex_lock(&client->mtx);
-  client->in_loop = true;
 
   if (IW_UNLIKELY(hive_session_closed(sess))) {
-    client->in_loop = false;
     pthread_mutex_unlock(&client->mtx);
     return -1;
   }
 
+  client->in_loop = true;
   client->io_wouldblock = false;
+
   while (hrc == HIVE_OK && !client->io_wouldblock && _client_want_write(client)) {
     hrc = hive_session_send(sess);
   }
@@ -1079,6 +1091,7 @@ static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user
 
   struct iwulist rlist = { .usize = sizeof(struct _request*) };
   pthread_mutex_lock(&client->mtx);
+
   struct iwhmap_iter it;
   iwhmap_iter_init(client->requests_map, &it);
   while (iwhmap_iter_next(&it)) {
@@ -1219,10 +1232,10 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
   }
   RCB(finish, client->requests_map = iwhmap_create_u32(0));
 
-  char *urlbuf = iwpool_strdup2(pool, client->spec.url);
-  RCB(finish, urlbuf);
+  char *ubuf = iwpool_strdup2(pool, client->spec.url);
+  RCB(finish, ubuf);
 
-  if (iwn_url_parse(&client->url, urlbuf) == -1) {
+  if (iwn_url_parse(&client->url, ubuf) == -1) {
     iwlog_error("grpc | Failed to parse url: %s", client->spec.url);
     rc = IW_ERROR_INVALID_ARGS;
     goto finish;
@@ -1232,13 +1245,14 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
 
   if (client->url.scheme) {
     if (strcmp("grpc+plaintext", client->url.scheme) == 0) {
-      client->flags &= ~_FLAG_SECURE;
+      ;
     } else if (strcmp("grpc+socket", client->url.scheme) == 0) {
-      client->flags &= ~_FLAG_SECURE;
       client->flags |= _FLAG_NO_NETWORK;
       if (client->url.host == client->url.path - 1) {
         *(client->url.path - 1) = '/';   // WARNING: Dependent on iwn_url_parse implementation
       }
+    } else {
+      client->flags |= _FLAG_SECURE;
     }
   }
 
@@ -1398,7 +1412,6 @@ static ssize_t _request_msg_read_callback(
       });
     }
     return _request_no_more_outgoing(req, data_flags);
-    ;
   }
 
   uint8_t *ptr = (uint8_t*) v->buf + v->cnt;
@@ -1449,12 +1462,12 @@ iwrc iwn_grpc_client_request_open(
   }
 
   iwrc rc = 0;
+  char grpc_timeout[64];
   struct _request *req = 0;
   struct iwn_grpc_client *client = spec_->client;
   struct hive_data_source ds = {
     .read_callback = _request_msg_read_callback,
   };
-  char grpc_timeout[64];
 
   struct iwpool *pool = iwpool_create_empty();
   if (!pool) {

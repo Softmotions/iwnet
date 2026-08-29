@@ -28,6 +28,7 @@ struct iwn_grpc_req_spec {
   void *user_data;
 
   /// Called when HTTP2/gRPC errors received by response headers.
+  /// In the case of errors, this callback is called only once.
   void (*on_error)(const struct iwn_grpc_req_ctx*);
 
   /// When server message arrived to client.

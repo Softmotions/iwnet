@@ -42,6 +42,7 @@ typedef enum {
   GRPC_ERROR_H2_STREAM_CLOSED,     ///< HTTP2 Stream closed. (GRPC_ERROR_H2_STREAM_CLOSED)
   GRPC_ERROR_H2_GOAWAY,            ///< HTTP2 Go away (GRPC_ERROR_H2_GOAWAY)
   GRPC_ERROR_H2_CANCEL,            ///< HTTP2 Cancel (GRPC_ERROR_H2_CANCEL)
+  GRPC_ERROR_H2_TIMEOUT,            ///< HTTP2 Timeout getting data or settings (GRPC_ERROR_H2_TIMEOUT)            
 
   _GRPC_ERROR_END,
 } iwn_grpc_ecode_e;
