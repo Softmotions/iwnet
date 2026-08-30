@@ -14,6 +14,8 @@ readme() {
   cat "./BASE.md" > "./README.md"
   echo -e "\n\n" >> "./README.md"
   cat "./src/http/README.md" >> "./README.md"
+  echo -e "\n\n" >> "./README.md"
+  cat "./src/grpc/README.md" >> "./README.md"
   echo -e '\n# License\n\n```\n' >> "./README.md"
   cat "./LICENSE" >> "./README.md"
   echo -e '\n```\n' >> "./README.md"

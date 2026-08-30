@@ -1453,7 +1453,7 @@ static ssize_t _request_msg_read_callback(
 
 iwrc iwn_grpc_client_request_open(
   const struct iwn_grpc_req_spec *spec_,
-  struct iwn_val                 *msg,
+  const struct iwn_val           *msg,
   const char                     *encoding,
   uint32_t                       *out_req_id) {
   if (!spec_ || !spec_->client || !spec_->path) {
@@ -1597,7 +1597,9 @@ void iwn_grpc_client_request_cancel(struct iwn_grpc_req_ctx *rctx) {
   }
 }
 
-iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx *rctx, struct iwn_val *msg, bool stop_streaming) {
+iwrc iwn_grpc_client_stream_next_message(
+  struct iwn_grpc_req_ctx *rctx, const struct iwn_val *msg,
+  bool stop_streaming) {
   if (!rctx || !rctx->impl) {
     return IW_ERROR_INVALID_ARGS;
   }

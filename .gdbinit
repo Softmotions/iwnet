@@ -1,5 +1,5 @@
 cd ./autark-cache/src/grpc/tests
-file ./grpc_test_client1
+file ./grpc_test_client3
 #set args --listen socket:///tmp/ws_server1.socket
 #set args --ssl
 

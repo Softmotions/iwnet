@@ -109,30 +109,43 @@ struct iwn_grpc_client_spec {
   void (*on_destroy)(struct iwn_grpc_client_ctx*);
 };
 
+/// Creates and connects a gRPC client according to the given specification.
+/// On success, stores the client handle in out_client.
 IW_EXPORT iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec*, struct iwn_grpc_client **out_client);
 
+/// Initiates client shutdown and releases caller ownership of the client handle.
+/// Returns false if the client was already closed.
 IW_EXPORT bool iwn_grpc_client_close(struct iwn_grpc_client*);
 
 /// Open gRPC request.
-/// encoding - compression encoding used for message. Zero when identity.
+/// Optional `msg` is copied before this function returns.
+/// encoding - compression encoding used for message. Zero means 'identity'.
 /// NOTE: If non zero error code returned `iwn_grpc_client_spec#on_destroy()` callback is not called on provided spec.
 IW_EXPORT iwrc iwn_grpc_client_request_open(
   const struct iwn_grpc_req_spec*,
-  struct iwn_val *msg,
-  const char     *encoding,
-  uint32_t       *out_req_id);
+  const struct iwn_val *msg,
+  const char           *encoding,
+  uint32_t             *out_req_id);
 
 /// Cancels gRPC request.
 IW_EXPORT void iwn_grpc_client_request_cancel(struct iwn_grpc_req_ctx*);
 
+/// Acquires a request context by request ID.
+/// The returned context must be released with iwn_grpc_client_release_request_ctx().
 IW_EXPORT struct iwn_grpc_req_ctx* iwn_grpc_client_acquire_request_ctx(
   struct iwn_grpc_client  *client,
   uint32_t                 req_id,
   struct iwn_grpc_req_ctx *out_ctx);
 
+/// Releases a request context previously acquired with iwn_grpc_client_acquire_request_ctx().
 IW_EXPORT void iwn_grpc_client_release_request_ctx(struct iwn_grpc_req_ctx*);
 
-/// Continue sending message to server in streaming mode.
-IW_EXPORT iwrc iwn_grpc_client_stream_next_message(struct iwn_grpc_req_ctx*, struct iwn_val *msg, bool stop_streaming);
+/// Queues the next outgoing message.
+/// `msg` is copied before this function returns.
+/// Ownership of `msg` and its buffers remains with the caller.
+IW_EXPORT iwrc iwn_grpc_client_stream_next_message(
+  struct iwn_grpc_req_ctx*,
+  const struct iwn_val *msg,
+  bool                  stop_streaming);
 
 IW_EXTERN_C_END;

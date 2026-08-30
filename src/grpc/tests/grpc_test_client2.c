@@ -2,27 +2,21 @@
 
 static void _req_on_message1(struct iwn_grpc_req_message *msg, bool *cont) {
   iw_stepbox_on(&sbox[0], STEP_REQ_ON_MESSAGE, 1);
-  struct _req_test_ctx *tctx = msg->ctx.spec.user_data;
-  IWN_ASSERT_FATAL(iwn_vals_add_val(tctx->pool, &tctx->vals, &msg->msg, true));
-
-  char buf[255];
-  iwbin2hex(buf, sizeof(buf), (void*) msg->msg.buf, msg->msg.len);
-  IWN_ASSERT(strcmp(
-               "0a2e31623336626565342d653564342d343035372d613964352d6130613334336161333663613a20416e746f6e2023311001",
-               buf) == 0);
+  //struct _req_test_ctx *tctx = msg->ctx.spec.user_data;
+  //IWN_ASSERT_FATAL(iwn_vals_add_val(tctx->pool, &tctx->vals, &msg->msg, true));
 }
 
 static iwrc _run_tests(void) {
   iwrc rc = 0;
   iw_stepbox_reset(&sbox[0], _sbox_lsnr);
-
-  // grpcurl -plaintext -import-path . -proto ./helloworld.proto -d '{"name":"Anton"}'  localhost:50051
+  // grpcurl -plaintext -import-path . -proto ./helloworld.proto -d '{"name":"Anton","num":100}'  localhost:50051
+  // helloworld.Greeter/SayHelloStreamReply
   // helloworld.Greeter/SayHello
   // Message: name:"Anton": 0a05416e746f6e
 
   struct iwn_grpc_req_spec spec = {
     .client = _ctx.client,
-    .path = "/helloworld.Greeter/SayHello",
+    .path = "/helloworld.Greeter/SayHelloStreamReply",
     .on_error = _req_on_error,
     .on_message = _req_on_message1,
     .on_outgoing_messages_queue_drained = _req_on_outgoing_messages_queue_drained,
@@ -31,7 +25,8 @@ static iwrc _run_tests(void) {
   };
 
   struct iwn_val val;
-  _iwn_val_init(&val, "0a05416e746f6e");
+  // name:"Anton",num:100
+  _iwn_val_init(&val, "0a05416e746f6e1064");
 
   struct _req_test_ctx *rctx = _req_test_ctx_create();
   IWN_ASSERT_FATAL(rctx);
@@ -83,7 +78,7 @@ finish:
   IWN_ASSERT(sbox[0].steps[STEP_ON_DESTROY] == 1);
   IWN_ASSERT(sbox[0].steps[STEP_ON_CLOSED] == 1);
   IWN_ASSERT(sbox[0].steps[STEP_ON_HANDSHAKE] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_MESSAGE] == 1);
+  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_MESSAGE] == 100);
   IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_DRAINED] == 1);
   IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_CLOSED] == 1);
   if (rc) {

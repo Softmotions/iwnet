@@ -1,6 +1,8 @@
 cc {
   set { _
     grpc_test_client1.c
+    grpc_test_client2.c
+    grpc_test_client3.c
   }
   ${CFLAGS_TESTS}
 }
