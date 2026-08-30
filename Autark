@@ -12,7 +12,6 @@ meta {
   license { MIT }
 }
 
-option { IOWOW_URL                IOWOW external project sources URL }
 option { IWNET_BUILD_SHARED_LIBS  Build shared libraries }
 option { IWNET_BUILD_TESTS        Build test cases }
 option { IWNET_RUN_TESTS          Build and run test cases }
@@ -43,13 +42,6 @@ if { eq { ${BUILD_TYPE} Release }
   }
 }
 
-if { !defined { IOWOW_URL } 
-  set {
-    IOWOW_URL
-    https://github.com/Softmotions/iowow/archive/refs/heads/master.zip
-  }
-}
-
 env {
   PKG_CONFIG_PATH
   C{${INSTALL_PKGCONFIG_DIR}}
@@ -63,34 +55,15 @@ check {
   test_header.sh { winsock2.h HAVE_WINSOCK2_H }
 }
 
-check {
-  fetch_resource.sh { fetch-url{${IOWOW_URL}} C{extern_iowow} IOWOW_SRC_DIR }
-}
+include { iowow.autark }
 
-run {
-  shell { ^{BUILD_TYPE= ${BUILD_TYPE}} autark --prefix C{} ${IOWOW_SRC_DIR} }
-  consumes {
-    ${IOWOW_SRC_DIR}
-  }
-  produces {
-    C{include/iowow/iowow.h}
-  }
-}
-
-run-on-install {
-  shell { 
-    autark -J1 --prefix ${INSTALL_PREFIX} 
-    set { _ 
-      if { ${IWNET_BUILD_SHARED_LIBS}
-        -DIOWOW_BUILD_SHARED_LIBS=1
-      }
-    }
-    ${IOWOW_SRC_DIR} 
-  }
+if { ${ENABLE_GRPC} 
+  include { grpc.autark }
 }
 
 set {
   LDFLAGS_PKGCONF
+  ..${LDFLAGS_PKGCONF}
   if { defined { SYSTEM_WINDOWS }
     -static-libgcc 
     -static-libstdc++
@@ -196,9 +169,6 @@ set {
   -I S{src}
 }
 
-if { ${ENABLE_GRPC} 
-  include { grpc.autark }
-}
 
 include { distr.autark }
 include { tools/Autark }

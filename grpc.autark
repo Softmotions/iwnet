@@ -39,10 +39,12 @@ run {
 }
 
 set {
-  root {
-    LDFLAGS
+  parent {
+    LDFLAGS_PKGCONF
   }
-  ..${LDFLAGS}
-  ${LIBHIVE_LIB}
+  ..${LDFLAGS_PKGCONF}
+ -lhive
 }
+
+install { ${INSTALL_LIB_DIR} ${LIBHIVE_LIB} }
 
