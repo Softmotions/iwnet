@@ -23,6 +23,8 @@ readme() {
 
 release_tag() {
   echo "Creating IWNET release"
+  readme
+
   git pull origin master
 
   CHANGELOG=./Changelog
