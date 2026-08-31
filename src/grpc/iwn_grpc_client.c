@@ -26,6 +26,10 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#ifdef IW_BLOCKS
+#include <Block.h>
+#endif
+
 #define _FLAG_SECURE     0x100U
 #define _FLAG_NO_NETWORK 0x200U
 
@@ -413,6 +417,13 @@ static void _request_ctx_init(struct _request *req, struct iwn_grpc_req_ctx *ctx
 static void _client_destroy(void *d) {
   struct iwn_grpc_client *client = d;
 
+#ifdef IW_BLOCKS
+  if (client->spec.on_destroy_block) {
+    struct iwn_grpc_client_ctx ctx;
+    _client_ctx_init(client, &ctx);
+    client->spec.on_destroy_block(&ctx);
+  } else
+#endif
   if (client->spec.on_destroy) {
     struct iwn_grpc_client_ctx ctx;
     _client_ctx_init(client, &ctx);
@@ -431,6 +442,14 @@ static void _client_destroy(void *d) {
   if (client->hive_options) {
     hive_options_free(client->hive_options);
   }
+
+#ifdef IW_BLOCKS
+  Block_release(client->spec.on_handshake_block);
+  Block_release(client->spec.on_closed_block);
+  Block_release(client->spec.on_error_block);
+  Block_release(client->spec.on_destroy_block);
+#endif
+
   iwpool_destroy(client->pool);
 }
 
@@ -443,6 +462,16 @@ IW_INLINE void _request_release_unref(struct _request *req) {
 static void _request_destroy(void *d) {
   struct _request *req = d;
   void (*on_destroy)(const struct iwn_grpc_req_ctx*) = req->spec.on_destroy;
+#ifdef IW_BLOCKS
+  if (req->spec.on_destroy_block) {
+    void (^on_destroy_block)(const struct iwn_grpc_req_ctx*) = req->spec.on_destroy_block;
+    req->spec.on_destroy_block = 0;
+    struct iwn_grpc_req_ctx ctx;
+    _request_ctx_init(req, &ctx);
+    on_destroy_block(&ctx);
+    Block_release(on_destroy_block);
+  } else
+#endif
   if (on_destroy) {
     req->spec.on_destroy = 0;
     struct iwn_grpc_req_ctx ctx;
@@ -453,6 +482,15 @@ static void _request_destroy(void *d) {
     iwref_unref(&req->client->ref);
   }
   _rx_destroy(&req->rx);
+
+#ifdef IW_BLOCKS
+  Block_release(req->spec.on_error_block);
+  Block_release(req->spec.on_message_block);
+  Block_release(req->spec.on_outgoing_messages_queue_drained_block);
+  Block_release(req->spec.on_closed_block);
+  Block_release(req->spec.on_destroy_block);
+#endif
+
   iwpool_destroy(req->pool);
 }
 
@@ -583,6 +621,13 @@ finish:
 }
 
 static iwrc _on_handshake_deferred(const struct _deferred_callback *cb) {
+#ifdef IW_BLOCKS
+  if (cb->client->spec.on_handshake_block) {
+    struct iwn_grpc_client_ctx ctx;
+    _client_ctx_init(cb->client, &ctx);
+    return cb->client->spec.on_handshake_block(&ctx);
+  } else
+#endif
   if (cb->client->spec.on_handshake) {
     struct iwn_grpc_client_ctx ctx;
     _client_ctx_init(cb->client, &ctx);
@@ -595,6 +640,16 @@ static iwrc _on_handshake_deferred(const struct _deferred_callback *cb) {
 static iwrc _on_client_error_deferred(const struct _deferred_callback *cb) {
   struct iwn_grpc_client *client = cb->client;
   void (*on_error)(struct iwn_grpc_client_ctx*) = client->spec.on_error;
+ #ifdef IW_BLOCKS
+  if (client->spec.on_error_block) {
+    void (^on_error_block)(struct iwn_grpc_client_ctx*) = client->spec.on_error_block;
+    client->spec.on_error_block = 0;
+    struct iwn_grpc_client_ctx ctx;
+    _client_ctx_init(client, &ctx);
+    on_error_block(&ctx);
+    Block_release(on_error_block);
+  } else
+#endif
   if (on_error) {
     client->spec.on_error = 0;
     struct iwn_grpc_client_ctx ctx;
@@ -609,6 +664,14 @@ static iwrc _on_request_error_deferred(const struct _deferred_callback *cb) {
   if (iwn_grpc_client_acquire_request_ctx(cb->client, cb->stream_id, &rctx)) {
     struct _request *req = rctx.impl;
     void (*on_error)(const struct iwn_grpc_req_ctx*) = req->spec.on_error;
+#ifdef IW_BLOCKS
+    if (req->spec.on_error_block) {
+      void (^on_error_block)(const struct iwn_grpc_req_ctx*) = req->spec.on_error_block;
+      req->spec.on_error_block = 0;
+      on_error_block(&rctx);
+      Block_release(on_error_block);
+    } else
+#endif
     if (on_error) {
       req->spec.on_error = 0;
       on_error(&rctx);
@@ -626,13 +689,29 @@ static iwrc _on_stream_close_deferred(const struct _deferred_callback *cb) {
       req->rc = _hrc2rc(cb->error_code);
       rctx.rc = req->rc;
     }
+#ifdef IW_BLOCKS
+    if (req->spec.on_closed_block) {
+      req->spec.on_closed_block(&rctx);
+    } else
+#endif
     if (req->spec.on_closed) {
       req->spec.on_closed(&rctx);
     }
+
     void (*on_error)(const struct iwn_grpc_req_ctx*) = req->spec.on_error;
-    if (req->rc && on_error) {
-      req->spec.on_error = 0;
-      on_error(&rctx);
+    if (req->rc) {
+#ifdef IW_BLOCKS
+      if (req->spec.on_error_block) {
+        void (^on_error_block)(const struct iwn_grpc_req_ctx*) = req->spec.on_error_block;
+        req->spec.on_error_block = 0;
+        on_error_block(&rctx);
+        Block_release(on_error_block);
+      } else
+#endif
+      if (on_error) {
+        req->spec.on_error = 0;
+        on_error(&rctx);
+      }
     }
 
     pthread_mutex_lock(&cb->client->mtx);
@@ -662,7 +741,12 @@ static iwrc _on_goaway_deferred(const struct _deferred_callback *cb) {
 
 static int _hcb_on_begin_headers(hive_session_t *session, uint32_t stream_id, void *user_data) {
   struct iwn_grpc_client *client = user_data;
-  if (__sync_bool_compare_and_swap(&client->got_handshake, false, true) && client->spec.on_handshake) {
+  if (  __sync_bool_compare_and_swap(&client->got_handshake, false, true)
+     && (  client->spec.on_handshake
+#ifdef IW_BLOCKS
+        || client->spec.on_handshake_block
+#endif
+           )) {
     return _deferred_callback_register(&(struct _deferred_callback) {
       .client = client,
       .execute = _on_handshake_deferred,
@@ -719,7 +803,12 @@ static int _hcb_on_headers_complete(
   } else if (req->grpc_status) {
     req->rc = _grpc2rc(req->grpc_status);
   }
-  if (req->rc && req->spec.on_error) {
+  if (  req->rc
+     && (  req->spec.on_error
+#ifdef IW_BLOCKS
+        || req->spec.on_error_block
+#endif
+           )) {
     _deferred_callback_register(&(struct _deferred_callback) {
       .client = client,
       .execute = _on_request_error_deferred,
@@ -750,7 +839,12 @@ int _hcb_on_connection_error(
   struct iwn_grpc_client *client = user_data;
   if (!client->rc) {
     client->rc = _hrc2rc(hive_err ? hive_err : h2_error_code);
-    if (client->rc && client->spec.on_error) {
+    if (  client->rc
+       && (  client->spec.on_error
+#ifdef IW_BLOCKS
+          || client->spec.on_error_block
+#endif
+             )) {
       return _deferred_callback_register(&(struct _deferred_callback) {
         .client = client,
         .error_code = client->rc,
@@ -771,7 +865,12 @@ static int _hcb_on_goaway(
   struct iwn_grpc_client *client = user_data;
   if (error_code && !client->rc) {
     client->rc = _hrc2rc(error_code);
-    if (client->rc && client->spec.on_error) {
+    if (  client->rc
+       && (  client->spec.on_error
+#ifdef IW_BLOCKS
+          || client->spec.on_error_block
+#endif
+             )) {
       _deferred_callback_register(&(struct _deferred_callback) {
         .client = client,
         .execute = _on_client_error_deferred,
@@ -797,7 +896,12 @@ static int _hcb_on_data_chunk(
   }
   struct _rx *rx = &req->rx;
 
-  if (req->rc || !req->spec.on_message || rx->state == _RX_STOP) {
+  if (  req->rc || rx->state == _RX_STOP
+     || !(  req->spec.on_message
+#ifdef IW_BLOCKS
+         || req->spec.on_message_block
+#endif
+            )) {
     return 0;
   }
 
@@ -862,7 +966,16 @@ static int _hcb_on_data_chunk(
         };
         _request_ctx_init(req, &msg.ctx);
         bool keep_going = true;
-        req->spec.on_message(&msg, &keep_going);
+
+#ifdef IW_BLOCKS
+        if (req->spec.on_message_block) {
+          req->spec.on_message_block(&msg, &keep_going);
+        } else
+#endif
+        {
+          req->spec.on_message(&msg, &keep_going);
+        }
+
         _rx_reset(rx);
         if (!keep_going) {
           rx->state = _RX_STOP;
@@ -1070,7 +1183,11 @@ unlock:
     }
     if (!client->rc) {
       client->rc = rc;
-      if (client->spec.on_error) {
+      if (  client->spec.on_error
+#ifdef IW_BLOCKS
+         || client->spec.on_error_block
+#endif
+            ) {
         _deferred_callback_register(&(struct _deferred_callback) {
           .client = client,
           .execute = _on_client_error_deferred,
@@ -1115,13 +1232,24 @@ static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user
 
   for (size_t i = 0; i < rlist.num; ++i) {
     struct _request *req = *(struct _request**) iwulist_get(&rlist, i);
-    if (req->spec.on_closed) {
+    if (  req->spec.on_closed
+#ifdef IW_BLOCKS
+       || req->spec.on_closed_block
+#endif
+          ) {
       struct iwn_grpc_req_ctx rctx;
       if (!req->rc) {
         req->rc = client->rc ? client->rc : GRPC_ERROR_UNAVAILABLE;
       }
       _request_ctx_init(req, &rctx);
-      req->spec.on_closed(&rctx);
+  #ifdef IW_BLOCKS
+      if (req->spec.on_closed_block) {
+        req->spec.on_closed_block(&rctx);
+      } else
+#endif
+      {
+        req->spec.on_closed(&rctx);
+      }
     }
   }
 
@@ -1133,6 +1261,13 @@ static void _on_poller_adapter_dispose(struct iwn_poller_adapter *pa, void *user
 
   iwulist_destroy_keep(&rlist);
 
+#if IW_BLOCKS
+  if (client->spec.on_closed_block) {
+    struct iwn_grpc_client_ctx ctx;
+    _client_ctx_init(client, &ctx);
+    client->spec.on_closed_block(&ctx);
+  } else
+#endif
   if (client->spec.on_closed) {
     struct iwn_grpc_client_ctx ctx;
     _client_ctx_init(client, &ctx);
@@ -1218,7 +1353,15 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
   client->poller = spec_->poller;
   client->flags = spec_->flags;
   client->fd = -1;
+
   client->spec = *spec_;
+
+#ifdef IW_BLOCKS
+  client->spec.on_handshake_block = 0;
+  client->spec.on_closed_block = 0;
+  client->spec.on_error_block = 0;
+  client->spec.on_destroy_block = 0;
+#endif
 
   if (!client->spec.grpc.max_message_bytes) {
     client->spec.grpc.max_message_bytes = 1024 * 1024; // 1Mb
@@ -1230,11 +1373,29 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
   pthread_mutex_init(&client->mtx, &attr);
   pthread_mutexattr_destroy(&attr);
 
+#ifdef IW_BLOCKS
+  if (spec_->on_handshake_block) {
+    RCB(finish, client->spec.on_handshake_block = Block_copy(spec_->on_handshake_block));
+  }
+  if (spec_->on_closed_block) {
+    RCB(finish, client->spec.on_closed_block = Block_copy(spec_->on_closed_block));
+  }
+  if (spec_->on_error_block) {
+    RCB(finish, client->spec.on_error_block = Block_copy(spec_->on_error_block))
+  }
+  if (spec_->on_destroy_block) {
+    RCB(finish, client->spec.on_destroy_block = Block_copy(spec_->on_destroy_block));
+  }
+#endif
+
+
   RCC(rc, finish, iwulist_init(&client->deferred_callbacks, 8, sizeof(struct _deferred_callback)));
   RCB(finish, client->input_buf = iwxstr_create_empty());
 
   // Initial reference is owned by the API caller and released by iwn_grpc_client_close().
   iwref_init(&client->ref, client, _client_destroy);
+
+
   RCB(finish, client->spec.url = iwpool_strdup2(pool, client->spec.url));
   if (client->spec.authority) {
     RCB(finish, client->spec.authority = iwpool_strdup2(pool, client->spec.authority));
@@ -1339,6 +1500,11 @@ static iwrc _on_messages_sent_deferred(const struct _deferred_callback *cb) {
   struct iwn_grpc_req_ctx rctx;
   if (iwn_grpc_client_acquire_request_ctx(cb->client, cb->stream_id, &rctx)) {
     struct _request *req = rctx.impl;
+#ifdef IW_BLOCKS
+    if (req->spec.on_outgoing_messages_queue_drained_block) {
+      req->spec.on_outgoing_messages_queue_drained_block(&rctx);
+    } else
+#endif
     if (req->spec.on_outgoing_messages_queue_drained) {
       req->spec.on_outgoing_messages_queue_drained(&rctx);
     }
@@ -1351,9 +1517,16 @@ static iwrc _on_request_cancel_deferred(const struct _deferred_callback *cb) {
   struct iwn_grpc_req_ctx rctx;
   if (iwn_grpc_client_acquire_request_ctx(cb->client, cb->stream_id, &rctx)) {
     struct _request *req = rctx.impl;
+
+#ifdef IW_BLOCKS
+    if (req->spec.on_closed_block) {
+      req->spec.on_closed_block(&rctx);
+    } else
+#endif
     if (req->spec.on_closed) {
       req->spec.on_closed(&rctx);
     }
+
     pthread_mutex_lock(&req->client->mtx);
     hive_submit_rst_stream(req->client->sess, rctx.req_id, HIVE_H2_CANCEL);
     iwhmap_remove_u32(req->client->requests_map, req->stream_id);
@@ -1411,7 +1584,11 @@ static ssize_t _request_msg_read_callback(
       v = req->mslots->vals.first;
       continue;
     }
-    if (req->spec.on_outgoing_messages_queue_drained) {
+    if (  req->spec.on_outgoing_messages_queue_drained
+#ifdef IW_BLOCKS
+       || req->spec.on_outgoing_messages_queue_drained_block
+#endif
+          ) {
       _deferred_callback_register(&(struct _deferred_callback) {
         .client = req->client,
         .stream_id = req->stream_id,
@@ -1439,7 +1616,11 @@ static ssize_t _request_msg_read_callback(
         *data_flags |= HIVE_DATA_FLAG_EOF;
         req->half_close_pending = false;
       }
-      if (req->spec.on_outgoing_messages_queue_drained) {
+      if (  req->spec.on_outgoing_messages_queue_drained
+#ifdef IW_BLOCKS
+         || req->spec.on_outgoing_messages_queue_drained_block
+#endif
+            ) {
         _deferred_callback_register(&(struct _deferred_callback) {
           .client = req->client,
           .stream_id = req->stream_id,
@@ -1487,7 +1668,16 @@ iwrc iwn_grpc_client_request_open(
   req->client_streaming = spec_->client_streaming;
   iwref_ref(&req->client->ref);
   iwref_init(&req->ref, req, _request_destroy);
+
   memcpy(&req->spec, spec_, sizeof(*spec_));
+
+#ifdef IW_BLOCKS
+  req->spec.on_closed_block = 0;
+  req->spec.on_message_block = 0;
+  req->spec.on_outgoing_messages_queue_drained_block = 0;
+  req->spec.on_closed_block = 0;
+  req->spec.on_destroy_block = 0;
+#endif
 
   if (encoding) {
     RCB(finish, req->output_data_encoding = iwpool_strdup2(pool, encoding));
@@ -1545,8 +1735,27 @@ iwrc iwn_grpc_client_request_open(
   pthread_mutex_unlock(&client->mtx);
 
   if (!rc && client->pa) {
-    rc = client->pa->arm(client->pa, IWN_POLLOUT);
+    RCC(rc, finish, client->pa->arm(client->pa, IWN_POLLOUT));
   }
+
+#ifdef IW_BLOCKS
+  if (spec_->on_error_block) {
+    RCB(finish, req->spec.on_error_block = Block_copy(spec_->on_error_block));
+  }
+  if (spec_->on_message_block) {
+    RCB(finish, req->spec.on_message_block = Block_copy(spec_->on_message_block));
+  }
+  if (spec_->on_outgoing_messages_queue_drained_block) {
+    RCB(finish, req->spec.on_outgoing_messages_queue_drained_block
+          = Block_copy(spec_->on_outgoing_messages_queue_drained_block));
+  }
+  if (spec_->on_closed_block) {
+    RCB(finish, req->spec.on_closed_block = Block_copy(spec_->on_closed_block));
+  }
+  if (spec_->on_destroy_block) {
+    RCB(finish, req->spec.on_destroy_block = Block_copy(spec_->on_destroy_block));
+  }
+#endif
 
 finish:
   if (rc) {
