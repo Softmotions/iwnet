@@ -12,6 +12,7 @@ set {
     PUB_HDRS
   }
   ..${PUB_HDRS}
+  grpc/iwn_grpc.h
   grpc/iwn_grpc_client.h
 }
 
