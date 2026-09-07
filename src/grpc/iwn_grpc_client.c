@@ -797,23 +797,26 @@ static int _hcb_on_headers_complete(
   if (!req->data_encoding) {
     req->data_encoding = "identity";
   }
-  if (req->http_status != 200) {
-    req->rc = GRPC_ERROR_H2_UNEXPECTED_STATUS;
-    req->error_explained = iwpool_printf(req->pool, "Unexpected HTTP2 status code: %d Expected: 200", req->http_status);
-  } else if (req->grpc_status) {
-    req->rc = _grpc2rc(req->grpc_status);
-  }
-  if (  req->rc
-     && (  req->spec.on_error
+  if (!req->rc) {
+    if (req->http_status != 200) {
+      req->rc = GRPC_ERROR_H2_UNEXPECTED_STATUS;
+      req->error_explained = iwpool_printf(req->pool, "Unexpected HTTP2 status code: %d Expected: 200",
+                                           req->http_status);
+    } else if (req->grpc_status) {
+      req->rc = _grpc2rc(req->grpc_status);
+    }
+    if (  req->rc
+       && (  req->spec.on_error
 #ifdef IW_BLOCKS
-        || req->spec.on_error_block
+          || req->spec.on_error_block
 #endif
-           )) {
-    _deferred_callback_register(&(struct _deferred_callback) {
-      .client = client,
-      .execute = _on_request_error_deferred,
-      .stream_id = stream_id,
-    });
+             )) {
+      _deferred_callback_register(&(struct _deferred_callback) {
+        .client = client,
+        .execute = _on_request_error_deferred,
+        .stream_id = stream_id,
+      });
+    }
   }
   return 0;
 }
