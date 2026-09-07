@@ -5,8 +5,8 @@
 # Autark: aec5320de2e44ef5a0338f9ea990ed2a
 # https://github.com/Softmotions/autark
 
-META_VERSION=0.9.9
-META_REVISION=54f7b3b
+META_VERSION=0.9.10
+META_REVISION=625b751
 cd "$(cd "$(dirname "$0")"; pwd -P)"
 
 prev_arg=""
@@ -67,8 +67,8 @@ mkdir -p ${AUTARK_HOME}
 cat <<'a292effa503b' > ${AUTARK_HOME}/autark.c
 #ifndef CONFIG_H
 #define CONFIG_H
-#define META_VERSION "0.9.9"
-#define META_REVISION "54f7b3b"
+#define META_VERSION "0.9.10"
+#define META_REVISION "625b751"
 #define MACRO_MAX_RECURSIVE_CALLS 128
 #endif
 #define _AMALGAMATE_
@@ -883,6 +883,7 @@ void autark_build_prepare(const char *script_path);
 #define node_is_value(n__)        ((n__)->type == NODE_TYPE_VALUE)
 #define node_is_can_be_value(n__) ((n__)->type >= NODE_TYPE_VALUE && (n__)->type <= NODE_TYPE_FETCH_URL)
 #define node_is_rule(n__) !node_is_value(n__)
+#define node_is_spread(n__) ((n__)->value[0] == '.' && (n__)->value[1] == '.')
 #define NODE_PRINT_INDENT 2
 struct node_foreach {
   char    *name;
@@ -4008,7 +4009,7 @@ static const char* _set_value_get(struct node *n) {
     if (!v) {
       v = "";
     }
-    if (nn->value[0] == '.' && nn->value[1] == '.') {
+    if (node_is_spread(nn)) {
       utils_split_values_add(v, xstr);
     } else {
       if (!is_vlist(v)) {
@@ -4439,6 +4440,9 @@ static const char* _join_value(struct node *n) {
     }
   }
   if (c == 2) {
+    // Check special cases:
+    //  ^{"prefix" ${list}}
+    //  ^{${list} "suffix"}
     const char *vpair[] = { node_value(pair[0]), node_value(pair[1]) };
     if ((vpair[0] && !is_vlist(vpair[0]) && is_vlist(vpair[1]))) {
       const char *prefix = vpair[0];
@@ -4466,18 +4470,17 @@ static const char* _join_value(struct node *n) {
       return n->impl;
     }
   }
-  bool list = n->value[0] == '.';
   for (struct node *nn = n->child; nn; nn = nn->next) {
-    if (list) {
-      xstr_cat(xstr, "\1");
-    }
     const char *val = node_value(nn);
     if (is_vlist(val)) {
       struct vlist_iter iter;
       vlist_iter_init(val, &iter);
+      xstr_cat(xstr, "\1");
       while (vlist_iter_next(&iter)) {
         xstr_cat2(xstr, iter.item, iter.len);
       }
+    } else if (node_is_spread(nn)) {
+      utils_split_values_add(val, xstr);
     } else {
       xstr_cat(xstr, val);
     }
@@ -4649,6 +4652,8 @@ static void _run_on_resolve_shell(struct node_resolve *r, struct node *nn_) {
         }
         xstr_cat2(xstr, iter.item, iter.len);
       }
+    } else if (node_is_spread(nn)) {
+      utils_split_values_add(v, xstr);
     } else {
       xstr_cat(xstr, v);
     }
@@ -4697,7 +4702,14 @@ static void _run_on_resolve_exec(struct node_resolve *r, struct node *ncmd) {
   spawn_set_stderr_handler(s, _run_stderr_handler);
   for (struct node *nn = ncmd->next; nn; nn = nn->next) {
     if (node_is_can_be_value(nn)) {
-      spawn_arg_add(s, node_value(nn));
+      if (node_is_spread(nn)) {
+        struct xstr *xstr = xstr_create_empty();
+        utils_split_values_add(node_value(nn), xstr);
+        spawn_arg_add(s, xstr_ptr(xstr));
+        xstr_destroy(xstr);
+      } else {
+        spawn_arg_add(s, node_value(nn));
+      }
     }
   }
   if (g_env.check.log) {
