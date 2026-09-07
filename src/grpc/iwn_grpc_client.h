@@ -4,7 +4,7 @@
 
 #include "iwn_grpc.h" // IWYU pragma: export
 #include "iwn_poller_adapter.h"
-#include  "utils/iwn_pairs.h"
+#include  "iwn_pairs.h"
 
 IW_EXTERN_C_START;
 
