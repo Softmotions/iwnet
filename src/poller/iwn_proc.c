@@ -96,7 +96,9 @@ static iwrc _init_lk(void) {
   if (__sync_bool_compare_and_swap(&init, false, true)) {
     pthread_condattr_t cattr;
     pthread_condattr_init(&cattr);
+#ifndef __APPLE__
     pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
+#endif
     pthread_cond_init(&cc.cond, &cattr);
     pthread_condattr_destroy(&cattr);
     RCB(finish, cc.map = iwhmap_create_u32(_kv_free));

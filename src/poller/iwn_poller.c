@@ -22,6 +22,9 @@
 
 #if defined(IWN_KQUEUE)
 #include <sys/event.h>
+#ifndef NOTE_MSECONDS
+#define NOTE_MSECONDS 0
+#endif
 #elif defined(IWN_EPOLL)
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
