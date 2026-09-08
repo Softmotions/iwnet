@@ -3,7 +3,7 @@ meta {
  
   version_major { 1 }
   version_minor { 3 }
-  version_patch { 0 }
+  version_patch { 1 }
 
   description { Pure C Asynchronous HTTP/IO framework with routing, websockets, SSL and reverse proxy. }
   website { https://github.com/Softmotions/iwnet }
