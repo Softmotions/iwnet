@@ -6,7 +6,7 @@
 # https://github.com/Softmotions/autark
 
 META_VERSION=0.9.11
-META_REVISION=fa37b24
+META_REVISION=5352b5e
 cd "$(cd "$(dirname "$0")"; pwd -P)"
 
 prev_arg=""
@@ -68,7 +68,7 @@ cat <<'a292effa503b' > ${AUTARK_HOME}/autark.c
 #ifndef CONFIG_H
 #define CONFIG_H
 #define META_VERSION "0.9.11"
-#define META_REVISION "fa37b24"
+#define META_REVISION "5352b5e"
 #define MACRO_MAX_RECURSIVE_CALLS 128
 #endif
 #define _AMALGAMATE_
@@ -2552,18 +2552,36 @@ const char* utils_json_escape_str(const char *val, ssize_t len, struct xstr *xst
   if (len < 0) {
     len = strlen(val);
   }
-  static const char *specials = "btnvfr";
   xstr_cat2(xstr, "\"", 1);
   for (size_t i = 0; i < len; ++i) {
     uint8_t ch = (uint8_t) val[i];
-    if (ch == '"' || ch == '\\') {
-      xstr_cat2(xstr, "\\", 1);
-      xstr_cat2(xstr, &ch, 1);
-    } else if (ch >= '\b' && ch <= '\r') {
-      xstr_cat2(xstr, "\\", 1);
-      xstr_cat2(xstr, &specials[ch - '\b'], 1);
-    } else {
-      xstr_cat2(xstr, &ch, 1);
+    switch (ch) {
+      case '"':
+      case '\\':
+        xstr_cat2(xstr, "\\", 1);
+        xstr_cat2(xstr, &ch, 1);
+        break;
+      case '\b':
+        xstr_cat(xstr, "\\b");
+        break;
+      case '\t':
+        xstr_cat(xstr, "\\t");
+        break;
+      case '\n':
+        xstr_cat(xstr, "\\n");
+        break;
+      case '\f':
+        xstr_cat(xstr, "\\f");
+        break;
+      case '\r':
+        xstr_cat(xstr, "\\r");
+        break;
+      default:
+        if (ch < 0x20) {
+          xstr_printf(xstr, "\\u%04x", ch);
+        } else {
+          xstr_cat2(xstr, &ch, 1);
+        }
     }
   }
   xstr_cat2(xstr, "\"", 1);
@@ -3019,6 +3037,9 @@ const char* path_is_prefix_for(const char *prefix, const char *path, const char 
     return 0;
   }
   const char *p = path + len;
+  if (*p == '\0') {
+    return p;
+  }
   if (*p == '/') {
     while (*p == '/') ++p;
     return p;
@@ -3598,11 +3619,7 @@ bool deps_cur_is_outdated(struct node *n, struct deps *d) {
         return strcmp(val, d->resource) != 0;
       }
       case DEPS_TYPE_FILE_NOT_EXISTS: {
-        struct akpath_stat st;
-        if (path_stat(d->resource, &st) || st.ftype == AKPATH_NOT_EXISTS) {
-          return true;
-        }
-        break;
+        return !access(d->resource, F_OK);
       }
       case DEPS_TYPE_OUTDATED:
         return true;
@@ -3780,7 +3797,10 @@ int fetchreg_register(struct fetchreg *r, const struct fetcherg_entry *entry) {
     return AK_ERROR_INVALID_ARGS;
   }
   long int old_pos = ftell(r->f);
-  if (fseek(r->f, SEEK_END, 0) == -1) {
+  if (old_pos < 0) {
+    return errno;
+  }
+  if (fseek(r->f, 0, SEEK_END) == -1) {
     return errno;
   }
   if (entry->target) {
@@ -5322,12 +5342,10 @@ static void _cc_deps_MMD_add(struct node *n, struct deps *deps, const char *src,
         break;
       }
       char *sp = p;
-      char *ep = sp;
       while (*p != '\0' && !utils_char_is_space(*p)) {
-        ep = p;
         ++p;
       }
-      if (ep > sp) {
+      if (p > sp) {
         if (*p != '\0') {
           *p = '\0';
           ++p;
@@ -9467,7 +9485,7 @@ void node_resolve(struct node_resolve *r) {
   bool env_created = false;
   if (r->on_resolve && (r->num_deps == 0 || r->resolve_outdated.num)) {
     if (g_env.check.log && r->n) {
-      xstr_printf(g_env.check.log, "%s: resolved outdated outdated=%d\n", r->n->name, r->resolve_outdated.num);
+      xstr_printf(g_env.check.log, "%s: resolved outdated outdated=%u\n", r->n->name, r->resolve_outdated.num);
     }
     r->on_resolve(r);
     if (access(deps_path_tmp, F_OK) == 0) {
