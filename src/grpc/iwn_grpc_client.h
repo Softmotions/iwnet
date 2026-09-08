@@ -24,7 +24,7 @@ struct iwn_grpc_client_ctx {
 struct iwn_grpc_req_spec {
   struct iwn_grpc_client *client; ///< gRPC Client connection. Required.
   const char *path;               ///< Service path. Required.
-  bool  client_streaming;         ///<  Client streaming is allowed
+  bool  client_streaming;         ///< Client streaming is allowed
   void *user_data;
 
   /// Called when HTTP2/gRPC errors received by response headers.

@@ -5,8 +5,8 @@
 # Autark: aec5320de2e44ef5a0338f9ea990ed2a
 # https://github.com/Softmotions/autark
 
-META_VERSION=0.9.10
-META_REVISION=625b751
+META_VERSION=0.9.11
+META_REVISION=fa37b24
 cd "$(cd "$(dirname "$0")"; pwd -P)"
 
 prev_arg=""
@@ -67,14 +67,16 @@ mkdir -p ${AUTARK_HOME}
 cat <<'a292effa503b' > ${AUTARK_HOME}/autark.c
 #ifndef CONFIG_H
 #define CONFIG_H
-#define META_VERSION "0.9.10"
-#define META_REVISION "625b751"
+#define META_VERSION "0.9.11"
+#define META_REVISION "fa37b24"
 #define MACRO_MAX_RECURSIVE_CALLS 128
 #endif
 #define _AMALGAMATE_
 #define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
+#ifndef _DEFAULT_SOURCE
 #define _DEFAULT_SOURCE
+#endif
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -282,14 +284,6 @@ char* pool_strdup(struct pool*, const char*);
 char* pool_strndup(struct pool*, const char*, size_t len);
 char* pool_printf_va(struct pool*, const char *format, va_list va);
 char* pool_printf(struct pool*, const char*, ...) __attribute__((format(__printf__, 2, 3)));
-const char** pool_split_string(
-  struct pool *pool,
-  const char  *haystack,
-  const char  *split_chars,
-  int          ignore_whitespace);
-const char** pool_split(
-  struct pool*, const char *split_chars, int ignore_ws, const char *fmt,
-  ...) __attribute__((format(__printf__, 4, 5)));
 #endif
 #ifndef XSTR_H
 #define XSTR_H
@@ -344,6 +338,7 @@ void ulist_set(struct ulist*, unsigned idx, const void *data);
 void ulist_remove(struct ulist*, unsigned idx);
 void ulist_push(struct ulist*, const void *data);
 void ulist_pop(struct ulist*);
+void ulist_pop_no_realloc(struct ulist *list);
 void ulist_unshift(struct ulist*, const void *data);
 void ulist_shift(struct ulist*);
 struct ulist* ulist_clone(const struct ulist*);
@@ -1291,6 +1286,11 @@ void ulist_pop(struct ulist *list) {
   }
   list->num = num;
 }
+void ulist_pop_no_realloc(struct ulist *list) {
+  if (list->num > 0) {
+    --list->num;
+  }
+}
 void ulist_unshift(struct ulist *list, const void *data) {
   if (!list->start) {
     if (list->num >= list->anum) {
@@ -1332,7 +1332,7 @@ struct ulist* ulist_clone(const struct ulist *list) {
   struct ulist *nlist = xmalloc(sizeof(*nlist));
   unsigned anum = list->num > _ALLOC_UNIT ? list->num : _ALLOC_UNIT;
   nlist->array = xmalloc(anum * list->usize);
-  memcpy(nlist->array, list->array + list->start, list->num * list->usize);
+  memcpy(nlist->array, list->array + (size_t) list->start * list->usize, list->num * list->usize);
   nlist->usize = list->usize;
   nlist->num = list->num;
   nlist->anum = anum;
@@ -1485,40 +1485,6 @@ char* pool_printf(struct pool *pool, const char *fmt, ...) {
   char *res = _printf_va(pool, size, fmt, ap);
   va_end(ap);
   return res;
-}
-const char** pool_split_string(
-  struct pool *pool,
-  const char  *haystack,
-  const char  *split_chars,
-  int          ignore_whitespace) {
-  size_t hsz = strlen(haystack);
-  const char **ret = (const char**) pool_alloc(pool, (hsz + 1) * sizeof(char*));
-  const char *sp = haystack;
-  const char *ep = sp;
-  int j = 0;
-  for (int i = 0; *ep; ++i, ++ep) {
-    const char ch = haystack[i];
-    const char *sch = strchr(split_chars, ch);
-    if ((ep >= sp) && (sch || (*(ep + 1) == '\0'))) {
-      if (!sch && (*(ep + 1) == '\0')) {
-        ++ep;
-      }
-      if (ignore_whitespace) {
-        while (utils_char_is_space(*sp)) ++sp;
-        while (utils_char_is_space(*(ep - 1))) --ep;
-      }
-      if (ep >= sp) {
-        char *s = pool_alloc(pool, ep - sp + 1);
-        memcpy(s, sp, ep - sp);
-        s[ep - sp] = '\0';
-        ret[j++] = s;
-        ep = haystack + i;
-      }
-      sp = haystack + i + 1;
-    }
-  }
-  ret[j] = 0;
-  return ret;
 }
 #ifndef _AMALGAMATE_
 #include "basedefs.h"
@@ -1702,12 +1668,12 @@ struct _map_entry {
 };
 struct _map_bucket {
   struct _map_entry *entries;
-  uint32_t      used;
-  uint32_t      total;
+  uint32_t used;
+  uint32_t total;
 };
 struct map {
-  uint32_t       count;
-  uint32_t       buckets_mask;
+  uint32_t count;
+  uint32_t buckets_mask;
   struct _map_bucket *buckets;
   int      (*cmp_fn)(const void*, const void*);
   uint32_t (*hash_key_fn)(const void*);
@@ -1761,8 +1727,11 @@ static inline uint32_t _map_hash_uint64(uint64_t x) {
   return x;
 }
 static inline uint32_t _map_hash_uint64_key(const void *key) {
+  return _map_hash_uint64((uintptr_t) key);
+}
+static inline uint32_t _map_hash_uint64_key_read(const void *key) {
   uint64_t lv = 0;
-  memcpy(&lv, key, sizeof(void*));
+  memcpy(&lv, key, sizeof(key));
   return _map_hash_uint64(lv);
 }
 static inline uint32_t _map_hash_uint32_key(const void *key) {
@@ -1816,7 +1785,7 @@ static struct _map_entry* _map_entry_find(struct map *hm, const void *key, uint3
 static void _map_rehash(struct map *hm, uint32_t num_buckets) {
   struct _map_bucket *buckets = xcalloc(num_buckets, sizeof(*buckets));
   struct _map_bucket *bucket,
-                *bucket_end = hm->buckets + _map_n_buckets(hm);
+                     *bucket_end = hm->buckets + _map_n_buckets(hm);
   struct map hm_copy = *hm;
   hm_copy.count = 0;
   hm_copy.buckets_mask = num_buckets - 1;
@@ -1826,7 +1795,9 @@ static void _map_rehash(struct map *hm, uint32_t num_buckets) {
     if (entry_old) {
       struct _map_entry *entry_old_end = entry_old + bucket->used;
       for ( ; entry_old < entry_old_end; ++entry_old) {
-        struct _map_entry *entry_new = _map_entry_add(&hm_copy, entry_old->key, entry_old->hash);
+        struct _map_entry *entry_new = _map_entry_add(&hm_copy,
+                                                      entry_old->key,
+                                                      entry_old->hash);
         entry_new->key = entry_old->key;
         entry_new->val = entry_old->val;
       }
@@ -1856,7 +1827,8 @@ static void _map_entry_remove(struct map *hm, struct _map_bucket *bucket, struct
     uint32_t steps_used = bucket->used / STEPS;
     uint32_t steps_total = bucket->total / STEPS;
     if (steps_used + 1 < steps_total) {
-      struct _map_entry *entries_new = realloc(bucket->entries, ((size_t) steps_used + 1) * STEPS * sizeof(entries_new[0]));
+      struct _map_entry *entries_new = realloc(bucket->entries,
+                                               ((size_t) steps_used + 1) * STEPS * sizeof(entries_new[0]));
       if (entries_new) {
         bucket->entries = entries_new;
         bucket->total = (steps_used + 1) * STEPS;
@@ -1912,11 +1884,15 @@ struct map* map_create_u64(void (*kv_free_fn)(void*, void*)) {
   if (!kv_free_fn) {
     kv_free_fn = _map_noop_uint64_kv_free;
   }
-  struct map *hm = map_create(_map_uint64_cmp, _map_hash_uint64_key, kv_free_fn);
+  int key_as_pointer = 0;
+  if (sizeof(uintptr_t) >= sizeof(uint64_t)) {
+    key_as_pointer = 1;
+  }
+  struct map *hm = map_create(_map_uint64_cmp,
+                              key_as_pointer ? _map_hash_uint64_key : _map_hash_uint64_key_read,
+                              kv_free_fn);
   if (hm) {
-    if (sizeof(uintptr_t) >= sizeof(uint64_t)) {
-      hm->int_key_as_pointer_value = 1;
-    }
+    hm->int_key_as_pointer_value = key_as_pointer;
   }
   return hm;
 }
@@ -2103,6 +2079,7 @@ struct value utils_file_as_buf(const char *path, ssize_t buflen_max) {
   }
   ret.len = xstr_size(xstr);
   ret.buf = xstr_destroy_keep_ptr(xstr);
+  close(fd);
   return ret;
 }
 int utils_file_write_buf(const char *path, const char *buf, size_t len, bool append) {
@@ -2579,7 +2556,7 @@ const char* utils_json_escape_str(const char *val, ssize_t len, struct xstr *xst
   xstr_cat2(xstr, "\"", 1);
   for (size_t i = 0; i < len; ++i) {
     uint8_t ch = (uint8_t) val[i];
-    if (ch == '"' || ch == '\'') {
+    if (ch == '"' || ch == '\\') {
       xstr_cat2(xstr, "\\", 1);
       xstr_cat2(xstr, &ch, 1);
     } else if (ch >= '\b' && ch <= '\r') {
@@ -2655,6 +2632,27 @@ const char* path_real_pool(const char *path, struct pool *pool) {
     return 0;
   }
 }
+static bool _path_needs_normalize(const char *path) {
+  const char *p = path;
+  while (*p) {
+    if (*p == '/') {
+      if (p[1] == '/') {
+        return true;
+      }
+      const char *s = p + 1;
+      if (s[0] == '.' && (s[1] == '/' || s[1] == '\0')) {
+        return true;
+      }
+      if (  s[0] == '.' && s[1] == '.'
+         && (s[2] == '/' || s[2] == '\0')) {
+        return true;
+      }
+    }
+    ++p;
+  }
+  size_t len = p - path;
+  return len > 1 && path[len - 1] == '/';
+}
 char* path_normalize(const char *path, char buf[PATH_MAX]) {
   char cwd[PATH_MAX];
   if (!getcwd(cwd, PATH_MAX)) {
@@ -2665,10 +2663,13 @@ char* path_normalize(const char *path, char buf[PATH_MAX]) {
 char* path_normalize_cwd(const char *path, const char *cwd, char buf[PATH_MAX]) {
   akassert(cwd);
   if (path[0] == '/') {
-    utils_strncpy(buf, path, PATH_MAX);
-    char *p = strchr(buf, '.');
-    if (  p == 0
-       || !(*(p - 1) == '/' && (p[1] == '/' || p[1] == '.' || p[1] == '\0'))) {
+    size_t len = strlen(path);
+    if (len >= PATH_MAX) {
+      errno = ENAMETOOLONG;
+      akfatal(errno, "Failed to normalize path, name is too long: %s", path);
+    }
+    memcpy(buf, path, len + 1);
+    if (!_path_needs_normalize(buf)) {
       return buf;
     }
   } else {
@@ -3299,6 +3300,16 @@ void spawn_set_nowait(struct spawn *s, bool nowait) {
 void spawn_set_wstatus(struct spawn *s, int wstatus) {
   s->wstatus = wstatus;
 }
+static void _spawn_close_fd(int *fd) {
+  if (*fd != -1) {
+    close(*fd);
+    *fd = -1;
+  }
+}
+static void _spawn_close_pipe(int pipefd[2]) {
+  _spawn_close_fd(&pipefd[0]);
+  _spawn_close_fd(&pipefd[1]);
+}
 int spawn_do(struct spawn *s) {
   int rc = 0;
   bool nowait = s->nowait;
@@ -3339,54 +3350,58 @@ int spawn_do(struct spawn *s) {
   }
   if (!nowait) {
     if (pipe(pipe_stdout) == -1) {
-      return errno;
+      rc = errno;
+      goto fail;
     }
     if (pipe(pipe_stderr) == -1) {
-      return errno;
+      rc = errno;
+      goto fail;
     }
   }
   if (s->stdin_provider) {
     if (pipe(pipe_stdin) == -1) {
-      return errno;
+      rc = errno;
+      goto fail;
     }
   }
   s->pid = fork();
   if (s->pid == -1) {
-    return errno;
+    rc = errno;
+    goto fail;
   }
   if (s->pid == 0) {
     if (pipe_stdin[0] != -1) {
-      close(pipe_stdin[1]);
+      _spawn_close_fd(&pipe_stdin[1]);
       if (dup2(pipe_stdin[0], STDIN_FILENO) == -1) {
         perror("dup2");
         _exit(EXIT_FAILURE);
       }
-      close(pipe_stdin[0]);
+      _spawn_close_fd(&pipe_stdin[0]);
     }
     if (!nowait) {
-      close(pipe_stdout[0]);
+      _spawn_close_fd(&pipe_stdout[0]);
       if (dup2(pipe_stdout[1], STDOUT_FILENO) == -1) {
         perror("dup2");
         _exit(EXIT_FAILURE);
       }
-      close(pipe_stdout[1]);
-      close(pipe_stderr[0]);
+      _spawn_close_fd(&pipe_stdout[1]);
+      _spawn_close_fd(&pipe_stderr[0]);
       if (dup2(pipe_stderr[1], STDERR_FILENO) == -1) {
         perror("dup2");
         _exit(EXIT_FAILURE);
       }
-      close(pipe_stderr[1]);
+      _spawn_close_fd(&pipe_stderr[1]);
     }
     execve(file, args, envp);
     perror("execve");
     _exit(EXIT_FAILURE);
   } else {
     if (!nowait) {
-      close(pipe_stdout[1]);
-      close(pipe_stderr[1]);
+      _spawn_close_fd(&pipe_stdout[1]);
+      _spawn_close_fd(&pipe_stderr[1]);
     }
     if (s->stdin_provider) {
-      close(pipe_stdin[0]);
+      _spawn_close_fd(&pipe_stdin[0]);
       ssize_t tow = 0;
       while ((tow = s->stdin_provider(buf, sizeof(buf), s)) > 0) {
         while (tow > 0) {
@@ -3401,7 +3416,7 @@ int spawn_do(struct spawn *s) {
           }
         }
       }
-      close(pipe_stdin[1]);
+      _spawn_close_fd(&pipe_stdin[1]);
     }
     if (!nowait) {
       // Now read both stdout & stderr
@@ -3437,30 +3452,39 @@ int spawn_do(struct spawn *s) {
                 s->stderr_handler(buf, n, s);
               }
             } else if (n == 0) { // EOF
-              close(fds[i].fd);
-              fds[i].fd = -1;
+              _spawn_close_fd(&fds[i].fd);
               --c;
             } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-              close(fds[i].fd);
-              fds[i].fd = -1;
+              _spawn_close_fd(&fds[i].fd);
               --c;
             }
           }
           if (fds[i].fd != -1 && (revents & POLLNVAL)) {
-            close(fds[i].fd);
-            fds[i].fd = -1;
+            _spawn_close_fd(&fds[i].fd);
             --c;
           }
         }
       }
-      if (waitpid(s->pid, &s->wstatus, 0) == -1) {
-        perror("waitpid");
+      int ret;
+      do {
+        ret = waitpid(s->pid, &s->wstatus, 0);
+      } while (ret == -1 && errno == EINTR);
+      if (ret == -1) {
+        rc = errno;
       }
     }
   }
   if (rc) {
     akerror(rc, "Failed to spawn: %s", file);
   }
+  return rc;
+fail:
+  if (rc) {
+    akerror(rc, "Failed to spawn: %s", file);
+  }
+  _spawn_close_pipe(pipe_stdout);
+  _spawn_close_pipe(pipe_stderr);
+  _spawn_close_pipe(pipe_stdin);
   return rc;
 }
 void spawn_destroy(struct spawn *s) {
@@ -4203,7 +4227,7 @@ int node_subst_setup(struct node *n) {
 static bool _if_defined_eval(struct node *mn) {
   struct node *n = mn->parent;
   for (struct node *nn = mn->child; nn; nn = nn->next) {
-    const char *val = node_value(mn->child);
+    const char *val = node_value(nn);
     if (val && *val != '\0' && node_env_get(n, val)) {
       return true;
     }
@@ -4249,7 +4273,9 @@ static bool _if_in_eval(struct node *mn) {
     for (struct node *nn = mn->child->next; nn; nn = nn->next) {
       const char *val2 = node_value(nn);
       if (val1 && val2) {
-        return strcmp(val1, val2) == 0;
+        if (strcmp(val1, val2) == 0) {
+          return true;
+        }
       } else if (val1 == 0 && val2 == 0) {
         return true;
       }
@@ -4267,7 +4293,7 @@ static bool _if_OR_eval(struct node *n, struct node *mn) {
   return false;
 }
 static bool _if_AND_eval(struct node *n, struct node *mn) {
-  for (struct node *nn = mn->child; nn; nn = nn->child) {
+  for (struct node *nn = mn->child; nn; nn = nn->next) {
     if (!_if_cond_eval(n, nn)) {
       return false;
     }
@@ -4275,9 +4301,6 @@ static bool _if_AND_eval(struct node *n, struct node *mn) {
   return mn->child != 0;
 }
 static bool _if_cond_eval(struct node *n, struct node *mn) {
-  if (node_is_value(mn)) {
-    return true;
-  }
   const char *op = mn->value;
   if (!op) {
     node_fatal(AK_ERROR_SCRIPT_SYNTAX, n, "Matching condition is not set");
@@ -5262,17 +5285,6 @@ struct _cc_ctx {
 };
 static void _cc_cdb_entry_add(struct node *n, struct spawn *s, const char *src, const char *tgt);
 static void _cc_deps_MMD_item_add(const char *item, struct node *n, struct deps *deps, const char *src) {
-  char buf[127];
-  char *p = strrchr(item, '.');
-  if (!p || p[1] == '\0') {
-    return;
-  }
-  ++p;
-  char *ext = utils_strncpy(buf, p, sizeof(buf));
-  if (*ext == 'c' || *ext == 'C' || *ext == 'm') {
-    // Skip source files
-    return;
-  }
   deps_add_alias(deps, 's', src, item);
 }
 static void _cc_deps_MMD_add(struct node *n, struct deps *deps, const char *src, const char *obj) {
@@ -5372,6 +5384,7 @@ static void _cc_on_build_source(
   _cc_cdb_entry_add(n, s, src, obj);
   int rc = spawn_do(s);
   if (rc) {
+    task->s = 0;
     spawn_destroy(s);
     node_error(rc, ctx->n, "%s", ctx->cc);
     return;
@@ -5449,6 +5462,9 @@ static void _cc_on_resolve(struct node_resolve *r) {
         ulist_push(&tasks, &task);
       }
       ++i;
+    }
+    if (tasks.num == 0) {
+      continue;
     }
     int wstatus = 0;
     pid_t pid = wait(&wstatus);
@@ -6628,7 +6644,7 @@ static int _call_macro_visit(struct node *n, int lvl, void *d) {
     return 0;
   }
   if (lvl < 0) {
-    ulist_pop(&call->nodes);
+    ulist_pop_no_realloc(&call->nodes);
     return 0;
   }
   // Macro arg
@@ -6822,6 +6838,7 @@ void unit_env_set_val(struct unit *u, const char *key, const char *val) {
   }
   struct unit_env_item *item = xmalloc(len);
   item->n = 0;
+  item->tag = 0;
   if (len > sizeof(struct unit_env_item)) {
     char *wp = ((char*) item) + sizeof(struct unit_env_item);
     memcpy(wp, val, len - sizeof(struct unit_env_item));
@@ -6957,7 +6974,7 @@ void unit_push(struct unit *unit, struct node *n) {
 struct unit* unit_pop(void) {
   akassert(g_env.stack_units.num > 0);
   struct unit_ctx *ctx = (struct unit_ctx*) ulist_get(&g_env.stack_units, g_env.stack_units.num - 1);
-  ulist_pop(&g_env.stack_units);
+  ulist_pop_no_realloc(&g_env.stack_units);
   struct unit_ctx peek = unit_peek_ctx();
   if (peek.unit) {
     unit_ch_dir(&peek, 0);
@@ -7380,8 +7397,9 @@ static void _build(struct ulist *options) {
     if (p) {
       *p = '\0';
       char *val = p + 1;
-      for (int vlen = strlen(val); vlen >= 0 && (val[vlen - 1] == '\n' || val[vlen - 1] == '\r'); --vlen) {
-        val[vlen - 1] = '\0';
+      size_t vlen = strlen(val);
+      while (vlen > 0 && (val[vlen - 1] == '\n' || val[vlen - 1] == '\r')) {
+        val[--vlen] = '\0';
       }
       unit_env_set_val(root, opt, val);
     } else {
@@ -8617,7 +8635,7 @@ static struct xnode* _rule(struct _yycontext *yy, struct xnode *key) {
       x->base.next = key->base.child;
       x->base.parent = &key->base;
       key->base.child = &x->base;
-      ulist_pop(s);
+      ulist_pop_no_realloc(s);
     } else {
       // Keep rule on the stack
       break;
@@ -8634,7 +8652,7 @@ static void _finish(struct _yycontext *yy) {
     x->base.next = root->base.child;
     x->base.parent = &root->base;
     root->base.child = &x->base;
-    ulist_pop(s);
+    ulist_pop_no_realloc(s);
   }
 }
 static int _node_visit(struct node *n, int lvl, void *ctx, int (*visitor)(struct node*, int, void*)) {
@@ -9391,7 +9409,7 @@ void node_add_unit_deps(struct node *n, struct deps *deps) {
 }
 void node_resolve(struct node_resolve *r) {
   akassert(r && r->path && r->n);
-  int rc;
+  int rc = 0;
   struct deps deps = { 0 };
   struct pool *pool = pool_create_empty();
   struct unit *unit = unit_peek();
@@ -9475,15 +9493,16 @@ void node_resolve(struct node_resolve *r) {
         if (p) {
           *p = '\0';
           char *val = p + 1;
-          for (int vlen = strlen(val); vlen >= 0 && (val[vlen - 1] == '\n' || val[vlen - 1] == '\r'); --vlen) {
-            val[vlen - 1] = '\0';
+          size_t vlen = strlen(val);
+          while (vlen > 0 && (val[vlen - 1] == '\n' || val[vlen - 1] == '\r')) {
+            val[--vlen] = '\0';
           }
           r->on_env_value(r, buf, val);
         }
       }
       fclose(f);
     } else {
-      akfatal(rc, "Failed to open env file: %s", env_path);
+      akfatal(errno, "Failed to open env file: %s", env_path);
     }
   }
   ulist_destroy_keep(&r->resolve_outdated);
