@@ -1,9 +1,19 @@
+check {
+  changelog_gnu.sh { S{Changelog} }
+  system.sh
+  test_blocks.sh { IW_BLOCKS }
+  test_header.sh { arpa/inet.h HAVE_ARPA_INET_H } 
+  test_header.sh { netinet/in.h HAVE_NETINET_IN_H } 
+  test_header.sh { winsock2.h HAVE_WINSOCK2_H }
+}
+
 meta {
   name { iwnet }
  
-  version_major { 1 }
-  version_minor { 3 }
-  version_patch { 1 }
+  version { ${CHANGELOG_VERSION} }
+  version_major { ${CHANGELOG_VERSION_MAJOR} }
+  version_minor { ${CHANGELOG_VERSION_MINOR} }
+  version_patch { ${CHANGELOG_VERSION_PATCH} }
 
   description { Pure C Asynchronous HTTP/IO framework with routing, websockets, SSL and reverse proxy. }
   website { https://github.com/Softmotions/iwnet }
@@ -19,11 +29,6 @@ option { ENABLE_GRPC              Enable gRPC client. Default: 0  }
 option { ENABLE_ASAN              Turn on address sanitizer }
 option { ENABLE_UBSAN             Turn on UB sanitizer }
 option { ENABLE_DEBINFO           Generate debuginfo even in release mode }
-
-set {
-  META_VERSION
-  ^{ ${META_VERSION_MAJOR} . ${META_VERSION_MINOR} . ${META_VERSION_PATCH} }
-}
 
 set {
   META_REVISION
@@ -47,13 +52,6 @@ env {
   C{${INSTALL_PKGCONFIG_DIR}}
 }
 
-check {
-  system.sh
-  test_blocks.sh { IW_BLOCKS }
-  test_header.sh { arpa/inet.h HAVE_ARPA_INET_H } 
-  test_header.sh { netinet/in.h HAVE_NETINET_IN_H } 
-  test_header.sh { winsock2.h HAVE_WINSOCK2_H }
-}
 
 include { iowow.autark }
 
