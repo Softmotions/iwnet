@@ -48,7 +48,7 @@ struct iwn_grpc_req_spec {
   void (*on_destroy)(const struct iwn_grpc_req_ctx*);
 
 #ifdef IW_BLOCKS
-  void (^on_error_block)(const struct iwn_grpc_req_ctx*);
+  void (^on_error_block)(struct iwn_grpc_req_ctx*);
   void (^on_message_block)(struct iwn_grpc_req_message*, bool*);
   void (^on_outgoing_messages_queue_drained_block)(struct iwn_grpc_req_ctx*);
   void (^on_closed_block)(const struct iwn_grpc_req_ctx*);

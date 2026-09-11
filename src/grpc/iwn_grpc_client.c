@@ -666,7 +666,7 @@ static iwrc _on_request_error_deferred(const struct _deferred_callback *cb) {
     void (*on_error)(struct iwn_grpc_req_ctx*) = req->spec.on_error;
 #ifdef IW_BLOCKS
     if (req->spec.on_error_block) {
-      void (^on_error_block)(const struct iwn_grpc_req_ctx*) = req->spec.on_error_block;
+      void (^on_error_block)(struct iwn_grpc_req_ctx*) = req->spec.on_error_block;
       req->spec.on_error_block = 0;
       on_error_block(&rctx);
       Block_release(on_error_block);
@@ -702,7 +702,7 @@ static iwrc _on_stream_close_deferred(const struct _deferred_callback *cb) {
     if (req->rc) {
 #ifdef IW_BLOCKS
       if (req->spec.on_error_block) {
-        void (^on_error_block)(const struct iwn_grpc_req_ctx*) = req->spec.on_error_block;
+        void (^on_error_block)(struct iwn_grpc_req_ctx*) = req->spec.on_error_block;
         req->spec.on_error_block = 0;
         on_error_block(&rctx);
         Block_release(on_error_block);
