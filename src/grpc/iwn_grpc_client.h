@@ -29,7 +29,7 @@ struct iwn_grpc_req_spec {
 
   /// Called when HTTP2/gRPC errors received by response headers.
   /// In the case of errors, this callback is called only once.
-  void (*on_error)(const struct iwn_grpc_req_ctx*);
+  void (*on_error)(struct iwn_grpc_req_ctx*);
 
   /// When server message arrived to client.
   /// Set `out_continue` to false to stop delivering further messages to this callback.

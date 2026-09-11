@@ -663,7 +663,7 @@ static iwrc _on_request_error_deferred(const struct _deferred_callback *cb) {
   struct iwn_grpc_req_ctx rctx;
   if (iwn_grpc_client_acquire_request_ctx(cb->client, cb->stream_id, &rctx)) {
     struct _request *req = rctx.impl;
-    void (*on_error)(const struct iwn_grpc_req_ctx*) = req->spec.on_error;
+    void (*on_error)(struct iwn_grpc_req_ctx*) = req->spec.on_error;
 #ifdef IW_BLOCKS
     if (req->spec.on_error_block) {
       void (^on_error_block)(const struct iwn_grpc_req_ctx*) = req->spec.on_error_block;
@@ -698,7 +698,7 @@ static iwrc _on_stream_close_deferred(const struct _deferred_callback *cb) {
       req->spec.on_closed(&rctx);
     }
 
-    void (*on_error)(const struct iwn_grpc_req_ctx*) = req->spec.on_error;
+    void (*on_error)(struct iwn_grpc_req_ctx*) = req->spec.on_error;
     if (req->rc) {
 #ifdef IW_BLOCKS
       if (req->spec.on_error_block) {

@@ -146,7 +146,7 @@ static void _req_on_closed(const struct iwn_grpc_req_ctx *rctx) {
   IWN_ASSERT(ret);
 }
 
-static void _req_on_error(const struct iwn_grpc_req_ctx *ctx) {
+static void _req_on_error(struct iwn_grpc_req_ctx *ctx) {
   iw_stepbox_on(&sbox[0], STEP_REQ_ON_ERROR, 1);
   struct _req_test_ctx *tctx = ctx->spec.user_data;
   IWN_ASSERT(!tctx->rc);
