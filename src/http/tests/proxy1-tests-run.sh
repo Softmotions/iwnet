@@ -79,8 +79,10 @@ run() {
   printf "\n\nSession put:\n"
   curl -isk ${ARGS} -c ./cookie.jar ${BASE}/session/put | ${FILTER}
 
+  SESSIONID="$(awk -F'\t' '$6 == "sessionid" { gsub(/^"|"$/, "", $7); print $7 }' ./cookie.jar | tail -1)"
+
   printf "\n\nSession get:\n"
-  curl -isk ${ARGS} -b ./cookie.jar ${BASE}/session/get | ${FILTER}
+  curl -isk ${ARGS} -H "Cookie: sessionid=${SESSIONID}" ${BASE}/session/get | ${FILTER}
 
   printf "\n\nDirectory serve:\n"
   mkdir -p foo/bar

@@ -195,3 +195,11 @@ The accompanying Python test server is:
 ```text
 src/grpc/tests/grpc_test_server1.py
 ```
+
+The test server and all test clients accept a `--port PORT` option (default `50051`).
+
+To run the whole suite, including automatic server startup and shutdown:
+
+```sh
+src/grpc/tests/tests.sh [--port PORT]
+```

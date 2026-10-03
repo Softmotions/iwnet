@@ -7,6 +7,7 @@
 #include <iowow/iwconv.h>
 #include <iowow/iwpool.h>
 #include <getopt.h>
+#include <stdio.h>
 #include <string.h>
 #include <pthread.h>
 #include <signal.h>
@@ -62,6 +63,41 @@ static struct _ctx {
   iwrc  rc;
   const char *error_explained;
 } _ctx;
+
+static int _grpc_port = 50051;
+
+static void _grpc_url(char *buf, size_t buflen) {
+  snprintf(buf, buflen, "grpc+plaintext://localhost:%d", _grpc_port);
+}
+
+static void _parse_port(int argc, char *argv[]) {
+  static const struct option longopts[] = {
+    { "port", required_argument, 0, 'p' },
+    { "help", no_argument,       0, 'h' },
+    { 0,      0,                 0,  0  },
+  };
+  int ch;
+  while ((ch = getopt_long(argc, argv, "p:h", longopts, 0)) != -1) {
+    switch (ch) {
+      case 'p': {
+        char *end = 0;
+        long v = strtol(optarg, &end, 10);
+        if (!end || *end != '\0' || v <= 0 || v > 65535) {
+          fprintf(stderr, "Invalid port: %s\n", optarg);
+          exit(EXIT_FAILURE);
+        }
+        _grpc_port = (int) v;
+        break;
+      }
+      case 'h':
+        fprintf(stderr, "Usage: %s [--port PORT]\n", argv[0]);
+        exit(EXIT_SUCCESS);
+      default:
+        fprintf(stderr, "Usage: %s [--port PORT]\n", argv[0]);
+        exit(EXIT_FAILURE);
+    }
+  }
+}
 
 static void _on_signal(int signo) {
   fprintf(stderr, "On signal: %d\n", signo);

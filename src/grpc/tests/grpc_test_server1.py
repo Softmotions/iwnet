@@ -2,6 +2,7 @@
 
 from concurrent import futures
 
+import argparse
 import signal
 import threading
 
@@ -34,7 +35,7 @@ class Greeter(helloworld_pb2_grpc.GreeterServicer):
                 message=f"1b36bee4-e5d4-4057-a9d5-a0a343aa36ca: {request.name}")
 
 
-def serve():
+def serve(port: int):
     stop_event = threading.Event()
 
     server = grpc.server(
@@ -49,12 +50,12 @@ def serve():
             f"\nSignal {signal.Signals(signum).name} received, shutting down...")
         stop_event.set()
 
-    server.add_insecure_port("127.0.0.1:50051")
+    server.add_insecure_port(f"127.0.0.1:{port}")
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    print("gRPC test server listening on :50051")
+    print(f"gRPC test server listening on 127.0.0.1:{port}")
     server.start()
 
     try:
@@ -64,4 +65,15 @@ def serve():
 
 
 if __name__ == "__main__":
-    serve()
+    parser = argparse.ArgumentParser(description="iwnet gRPC test server")
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        default=50051,
+        help="Port to listen on (default: 50051)",
+    )
+    args = parser.parse_args()
+    if args.port < 1 or args.port > 65535:
+        parser.error("port must be in range 1-65535")
+    serve(args.port)

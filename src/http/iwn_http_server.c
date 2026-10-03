@@ -717,6 +717,8 @@ struct token _meta_emit_token(struct parser *parser) {
       token.type = HS_TOK_REQ_END;
       memset(parser, 0, sizeof(*parser));
       break;
+    default:
+      break;
   }
   return token;
 }
@@ -847,6 +849,8 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       break;
     case BR:
       emitted.type = HS_TOK_ERROR;
+      break;
+    default:
       break;
   }
 #undef MATCH
@@ -1509,6 +1513,8 @@ again:
           goto again;
         }
         break;
+      default:
+        break;
     }
   } while (token.type != HS_TOK_NONE && client->state == HTTP_SESSION_READ);
 }
@@ -1535,6 +1541,8 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
       break;
     case HTTP_SESSION_WRITE:
       _client_write(client);
+      break;
+    default:
       break;
   }
   if (client->flags & HTTP_END_SESSION) {

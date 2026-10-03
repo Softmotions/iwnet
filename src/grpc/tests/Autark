@@ -17,6 +17,13 @@ foreach {
   }
 }
 
-#if { ${IWNET_RUN_TESTS}
-#
-#}
+if { ${IWNET_RUN_TESTS}
+  run {
+    shell { cp SS{grpc_test_server1.py helloworld_pb2.py helloworld_pb2_grpc.py tests.sh} CC{} }
+  }
+
+  run {
+    always
+    shell { ./tests.sh }
+  }
+}

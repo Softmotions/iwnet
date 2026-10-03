@@ -49,9 +49,12 @@ finish:
 }
 
 int main(int argc, char *argv[]) {
+  _parse_port(argc, argv);
   _signals_setup();
 
-  ssize_t len;
+  char url[128];
+  _grpc_url(url, sizeof(url));
+
   iwrc rc = iwn_grpc_init();
   RCRET(rc);
 
@@ -60,7 +63,7 @@ int main(int argc, char *argv[]) {
   _ctx.pool = pool;
 
   struct iwn_grpc_client_spec spec = {
-    .url = "grpc+plaintext://localhost:50051",
+    .url = url,
     .on_handshake = _on_handshake,
     .on_closed = _on_closed,
     .on_error = _on_error,
