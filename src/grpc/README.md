@@ -179,29 +179,3 @@ iwn_grpc_client_spec.on_error
 ```
 
 gRPC status codes are mapped to `GRPC_ERROR_*` values defined in `iwn_grpc.h`.
-
-## Tests
-
-Examples covering the supported RPC modes are located in:
-
-```text
-src/grpc/tests/grpc_test_client1.c   Unary RPC
-src/grpc/tests/grpc_test_client2.c   Server streaming
-src/grpc/tests/grpc_test_client3.c   Bidirectional streaming
-```
-
-The accompanying Python test server is:
-
-```text
-src/grpc/tests/grpc_test_server1.py
-```
-
-The test server and all test clients accept a `--port PORT` option (default `50051`)
-and a `--ssl` option. The TLS test server uses `grpc-server-cert.pem` and
-`grpc-server-key.pem`; regenerate them with `gen-certs.sh` when necessary.
-
-To run the whole suite, including automatic server startup and shutdown:
-
-```sh
-src/grpc/tests/tests.sh [--port PORT] [--ssl]
-```

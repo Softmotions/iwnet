@@ -3,6 +3,10 @@ cc {
     grpc_test_client1.c
     grpc_test_client2.c
     grpc_test_client3.c
+    grpc_test_client4.c
+    grpc_test_client5.c
+    grpc_test_client6.c
+    grpc_test_client7.c
   }
   ${CFLAGS_TESTS}
 }
@@ -18,11 +22,24 @@ foreach {
 }
 
 if { ${IWNET_RUN_TESTS}
+  set {
+    TEST_RESOURCES
+    grpc-server-cert.pem
+    grpc-server-key.pem
+    grpc_mock.py
+    grpc_test_server1.py
+    helloworld_pb2.py
+    helloworld_pb2_grpc.py
+    tests.sh
+  }
   run {
-    shell { 
+    shell {
       cp
-      SS{grpc_test_server1.py helloworld_pb2.py helloworld_pb2_grpc.py tests.sh grpc-server-cert.pem grpc-server-key.pem} 
-      CC{} 
+      SS{${TEST_RESOURCES}}
+      CC{}
+    }
+    consumes {
+      SS{${TEST_RESOURCES}}
     }
   }
 

@@ -12,7 +12,15 @@ def grpc_frame(payload: bytes) -> bytes:
     return b'\x00' + struct.pack('!I', len(payload)) + payload
 
 
-def serve(port: int, mode: str, messages: list[bytes], split: bool = False, pause_after_first: float = 0.0):
+def serve(
+    port: int,
+    mode: str,
+    messages: list[bytes],
+    split: bool = False,
+    pause_after_first: float = 0.0,
+    grpc_status: int = 0,
+    grpc_message: str = "",
+):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(('127.0.0.1', port))
@@ -43,13 +51,15 @@ def serve(port: int, mode: str, messages: list[bytes], split: bool = False, paus
                     sid = ev.stream_id
                     print('STREAM_ENDED', sid, flush=True)
                     h2.send_headers(sid, [(':status', '200'), ('content-type', 'application/grpc')], end_stream=False)
-                    if mode == 'unary':
+                    if grpc_status == 0 and mode == 'unary':
                         body = grpc_frame(messages[0])
                         if split and len(body) > 2:
                             h2.send_data(sid, body[:2], end_stream=False)
                             h2.send_data(sid, body[2:], end_stream=False)
                         else:
                             h2.send_data(sid, body, end_stream=False)
+                    elif grpc_status != 0:
+                        pass
                     else:
                         # Send first message split across frames and then two messages packed in one DATA frame.
                         bodies = [grpc_frame(m) for m in messages]
@@ -81,11 +91,13 @@ def serve(port: int, mode: str, messages: list[bytes], split: bool = False, paus
                         else:
                             for b in bodies:
                                 h2.send_data(sid, b, end_stream=False)
-                    h2.send_headers(sid, [('grpc-status', '0'), ('grpc-message', '')], end_stream=True)
+                    h2.send_headers(
+                        sid,
+                        [('grpc-status', str(grpc_status)), ('grpc-message', grpc_message)],
+                        end_stream=True,
+                    )
                     conn_sock.sendall(h2.data_to_send())
                     sent = True
-                    if mode == 'unary':
-                        return
                 elif isinstance(ev, StreamReset):
                     print('RST_STREAM', ev.stream_id, ev.error_code, flush=True)
                     return
@@ -95,9 +107,20 @@ def serve(port: int, mode: str, messages: list[bytes], split: bool = False, paus
             out = h2.data_to_send()
             if out:
                 conn_sock.sendall(out)
-            if sent and mode != 'unary':
-                # Give client a moment to read trailers or send RST_STREAM in cancellation tests.
-                time.sleep(0.2)
+            if sent:
+                # Give the client a chance to read trailers and send GOAWAY before closing.
+                try:
+                    conn_sock.settimeout(2.0)
+                    while True:
+                        more = conn_sock.recv(65535)
+                        if not more:
+                            break
+                        for e2 in h2.receive_data(more):
+                            if isinstance(e2, ConnectionTerminated):
+                                print('GOAWAY', e2.error_code, flush=True)
+                                return
+                except socket.timeout:
+                    pass
                 return
     finally:
         conn_sock.close()
@@ -111,6 +134,8 @@ if __name__ == '__main__':
     ap.add_argument('--message', action='append', default=[])
     ap.add_argument('--split', action='store_true')
     ap.add_argument('--pause-after-first', type=float, default=0.0)
+    ap.add_argument('--grpc-status', type=int, default=0)
+    ap.add_argument('--grpc-message', default='')
     ns = ap.parse_args()
     msgs = [bytes.fromhex(x) for x in ns.message] or [bytes.fromhex('0a026f6b')]
-    serve(ns.port, ns.mode, msgs, ns.split, ns.pause_after_first)
+    serve(ns.port, ns.mode, msgs, ns.split, ns.pause_after_first, ns.grpc_status, ns.grpc_message)

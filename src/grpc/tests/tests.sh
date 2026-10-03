@@ -14,11 +14,12 @@ usage() {
 Usage: $0 [--port PORT] [--bin-dir DIR] [--ssl]
 
 Runs the iwnet gRPC client test suite. Starts the Python test server,
-runs grpc_test_client{1,2,3} against it and shuts the server down on exit.
+runs grpc_test_client{1,2,3,7} against it, then runs grpc_test_client{4,5,6}
+against grpc_mock.py and shuts all servers down on exit.
 
 Options:
   --port, -p PORT   Port used by the server and clients (default: 50051).
-  --bin-dir DIR     Directory containing grpc_test_client{1,2,3} binaries.
+  --bin-dir DIR     Directory containing grpc_test_client{1..7} binaries.
   --ssl             Run clients and server in TLS mode.
   -h, --help        Show this help.
 
@@ -108,7 +109,7 @@ fi
 
 BIN_DIR="$(cd "$BIN_DIR" && pwd)"
 
-for _bin in grpc_test_client1 grpc_test_client2 grpc_test_client3; do
+for _bin in grpc_test_client1 grpc_test_client2 grpc_test_client3 grpc_test_client4 grpc_test_client5 grpc_test_client6 grpc_test_client7; do
   if [ ! -x "$BIN_DIR/$_bin" ]; then
     echo "Missing test binary: $BIN_DIR/$_bin" >&2
     exit 1
@@ -138,6 +139,8 @@ if [ "$USE_SSL" -eq 1 ]; then
 fi
 
 SERVER_PID=""
+MOCK_PID=""
+MOCK_LOG=""
 
 cleanup() {
   trap - EXIT INT TERM
@@ -145,6 +148,14 @@ cleanup() {
     echo "Stopping gRPC test server (pid $SERVER_PID)..." >&2
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
+  fi
+  if [ -n "$MOCK_PID" ] && kill -0 "$MOCK_PID" 2>/dev/null; then
+    echo "Stopping gRPC mock server (pid $MOCK_PID)..." >&2
+    kill "$MOCK_PID" 2>/dev/null || true
+    wait "$MOCK_PID" 2>/dev/null || true
+  fi
+  if [ -n "$MOCK_LOG" ]; then
+    rm -f "$MOCK_LOG"
   fi
 }
 
@@ -163,6 +174,84 @@ if [ "$USE_SSL" -eq 1 ]; then
   SERVER_ARGS="$SERVER_ARGS --ssl"
   CLIENT_ARGS="$CLIENT_ARGS --ssl"
 fi
+
+mock_port() {
+  _off="$1"
+  _p=$((PORT + _off))
+  if [ "$_p" -gt 65535 ]; then
+    _p=$((PORT - _off))
+  fi
+  printf '%s\n' "$_p"
+}
+
+start_mock() {
+  _port="$1"
+  shift
+  MOCK_LOG="${TMPDIR:-/tmp}/iwnet_grpc_mock_$$.log"
+  (
+    cd "$SERVER_DIR"
+    exec "$PYTHON" grpc_mock.py --port "$_port" "$@"
+  ) > "$MOCK_LOG" 2>&1 &
+  MOCK_PID=$!
+
+  _i=0
+  while [ "$_i" -lt 150 ]; do
+    if grep -q "LISTEN $_port" "$MOCK_LOG" 2>/dev/null; then
+      break
+    fi
+    if ! kill -0 "$MOCK_PID" 2>/dev/null; then
+      echo "gRPC mock server exited before becoming ready." >&2
+      cat "$MOCK_LOG" >&2 || true
+      exit 1
+    fi
+    _i=$((_i + 1))
+    sleep 0.1
+  done
+
+  if [ "$_i" -ge 150 ]; then
+    echo "gRPC mock server did not become ready on port $_port" >&2
+    cat "$MOCK_LOG" >&2 || true
+    exit 1
+  fi
+}
+
+stop_mock() {
+  if [ -n "$MOCK_PID" ] && kill -0 "$MOCK_PID" 2>/dev/null; then
+    kill "$MOCK_PID" 2>/dev/null || true
+    wait "$MOCK_PID" 2>/dev/null || true
+  fi
+  if [ -n "$MOCK_LOG" ]; then
+    rm -f "$MOCK_LOG"
+  fi
+  MOCK_PID=""
+  MOCK_LOG=""
+}
+
+run_mock_tests() {
+  echo "Running mock-based gRPC tests..."
+
+  # Framing: first message split across DATA frames, remaining messages packed in one DATA frame.
+  run_mock_test grpc_test_client4 "$(mock_port 1)" \
+    --mode server-streaming --message 0a0141 --message 0a0142 --message 0a0143 --split
+
+  # gRPC error status propagation.
+  run_mock_test grpc_test_client5 "$(mock_port 2)" \
+    --mode unary --grpc-status 3 --grpc-message "bad argument"
+
+  # Request cancellation.
+  run_mock_test grpc_test_client6 "$(mock_port 3)" \
+    --mode server-streaming --message 0a0141 --pause-after-first 0.5
+}
+
+run_mock_test() {
+  _bin="$1"
+  _port="$2"
+  shift 2
+  echo "Running $_bin (mock)..."
+  start_mock "$_port" "$@"
+  "$BIN_DIR/$_bin" --port "$_port"
+  stop_mock
+}
 
 if [ "$USE_SSL" -eq 1 ]; then
   echo "Starting gRPC test server in SSL mode on 127.0.0.1:$PORT..."
@@ -199,9 +288,13 @@ if ! kill -0 "$SERVER_PID" 2>/dev/null; then
   exit 1
 fi
 
-for _bin in grpc_test_client1 grpc_test_client2 grpc_test_client3; do
+for _bin in grpc_test_client1 grpc_test_client2 grpc_test_client3 grpc_test_client7; do
   echo "Running $_bin..."
   "$BIN_DIR/$_bin" $CLIENT_ARGS
 done
+
+if [ "$USE_SSL" -eq 0 ]; then
+  run_mock_tests
+fi
 
 echo "All gRPC tests passed."
