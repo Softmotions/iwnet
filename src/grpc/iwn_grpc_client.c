@@ -293,9 +293,14 @@ static void _io_consume_iov(struct _io_writev_state *st, size_t written) {
   }
 }
 
-static int _io_flush_writev(int fd, struct _io_writev_state *st, ssize_t *out_acc_written) {
+static int _io_flush_writev(struct iwn_poller_adapter *pa, struct _io_writev_state *st, ssize_t *out_acc_written) {
   while (st->iovcnt > 0) {
-    ssize_t ret = writev(fd, st->iov, st->iovcnt);
+    if (st->iov[0].iov_len == 0) {
+      st->iov++;
+      st->iovcnt--;
+      continue;
+    }
+    ssize_t ret = pa->write(pa, st->iov[0].iov_base, st->iov[0].iov_len);
     if (ret > 0) {
       _io_consume_iov(st, (size_t) ret);
       *out_acc_written = *out_acc_written + ret;
@@ -1009,7 +1014,7 @@ static ssize_t _hcb_io_send(
   }
 
   ssize_t total = 0;
-  int rci = _io_flush_writev(client->pa->fd, &(struct _io_writev_state) { iov, iovcnt }, &total);
+  int rci = _io_flush_writev(client->pa, &(struct _io_writev_state) { iov, iovcnt }, &total);
   if (rci == -1) {
     return -1;
   }
@@ -1108,7 +1113,7 @@ static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void
   // Drain input fd buffer completelly in EPOLLET polling mode
   client->io_wouldblock = false;
   while (hive_session_want_read(sess)) {
-    ssize_t n = recv(pa->fd, buf, sizeof(buf), 0);
+    ssize_t n = pa->read(pa, buf, sizeof(buf));
     if (n < 0) {
       if (errno == EINTR) {
         continue;
@@ -1140,7 +1145,7 @@ static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void
   // Drain input fd buffer completelly in EPOLLET polling mode
   client->io_wouldblock = false;
   while (!client->io_wouldblock) {
-    ssize_t n = recv(pa->fd, buf, sizeof(buf), 0);
+    ssize_t n = pa->read(pa, buf, sizeof(buf));
     if (n < 0) {
       if (errno == EINTR) {
         continue;

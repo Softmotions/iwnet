@@ -7,10 +7,11 @@ SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 PORT="${GRPC_TEST_PORT:-50051}"
 BIN_DIR="${GRPC_TEST_BIN_DIR:-}"
 PYTHON="${PYTHON:-python3}"
+USE_SSL=0
 
 usage() {
   cat <<EOF
-Usage: $0 [--port PORT] [--bin-dir DIR]
+Usage: $0 [--port PORT] [--bin-dir DIR] [--ssl]
 
 Runs the iwnet gRPC client test suite. Starts the Python test server,
 runs grpc_test_client{1,2,3} against it and shuts the server down on exit.
@@ -18,6 +19,7 @@ runs grpc_test_client{1,2,3} against it and shuts the server down on exit.
 Options:
   --port, -p PORT   Port used by the server and clients (default: 50051).
   --bin-dir DIR     Directory containing grpc_test_client{1,2,3} binaries.
+  --ssl             Run clients and server in TLS mode.
   -h, --help        Show this help.
 
 Environment:
@@ -44,6 +46,10 @@ while [ $# -gt 0 ]; do
       }
       BIN_DIR="$2"
       shift 2
+      ;;
+    --ssl)
+      USE_SSL=1
+      shift
       ;;
     -h|--help)
       usage
@@ -122,6 +128,15 @@ fi
 
 SERVER_DIR="$(cd "$SERVER_DIR" && pwd)"
 
+if [ "$USE_SSL" -eq 1 ]; then
+  for _f in grpc-server-cert.pem grpc-server-key.pem; do
+    if [ ! -f "$SERVER_DIR/$_f" ]; then
+      echo "Cannot locate TLS file: $SERVER_DIR/$_f" >&2
+      exit 1
+    fi
+  done
+fi
+
 SERVER_PID=""
 
 cleanup() {
@@ -142,10 +157,21 @@ if ! command -v "$PYTHON" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "Starting gRPC test server on 127.0.0.1:$PORT..."
+SERVER_ARGS="--port $PORT"
+CLIENT_ARGS="--port $PORT"
+if [ "$USE_SSL" -eq 1 ]; then
+  SERVER_ARGS="$SERVER_ARGS --ssl"
+  CLIENT_ARGS="$CLIENT_ARGS --ssl"
+fi
+
+if [ "$USE_SSL" -eq 1 ]; then
+  echo "Starting gRPC test server in SSL mode on 127.0.0.1:$PORT..."
+else
+  echo "Starting gRPC test server in plaintext mode on 127.0.0.1:$PORT..."
+fi
 (
   cd "$SERVER_DIR"
-  exec "$PYTHON" grpc_test_server1.py --port "$PORT"
+  exec "$PYTHON" grpc_test_server1.py $SERVER_ARGS
 ) &
 SERVER_PID=$!
 
@@ -175,7 +201,7 @@ fi
 
 for _bin in grpc_test_client1 grpc_test_client2 grpc_test_client3; do
   echo "Running $_bin..."
-  "$BIN_DIR/$_bin" --port "$PORT"
+  "$BIN_DIR/$_bin" $CLIENT_ARGS
 done
 
 echo "All gRPC tests passed."

@@ -29,7 +29,7 @@ if { ${IWNET_RUN_TESTS}
   }
 
   run {
-    exec { ${CC} ${TOOLS_OBJS} -o echo }
+    exec { ${CC} ${TOOLS_OBJS} ${SANITIZER_FLAGS} -o echo }
     produces { echo }
     consumes { ${TOOLS_OBJS} }
   }

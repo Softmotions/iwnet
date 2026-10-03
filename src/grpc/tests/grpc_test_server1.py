@@ -5,6 +5,7 @@ from concurrent import futures
 import argparse
 import signal
 import threading
+from typing import Optional
 
 import grpc
 import helloworld_pb2
@@ -35,7 +36,7 @@ class Greeter(helloworld_pb2_grpc.GreeterServicer):
                 message=f"1b36bee4-e5d4-4057-a9d5-a0a343aa36ca: {request.name}")
 
 
-def serve(port: int):
+def serve(port: int, ssl_cert: Optional[str] = None, ssl_key: Optional[str] = None):
     stop_event = threading.Event()
 
     server = grpc.server(
@@ -50,12 +51,20 @@ def serve(port: int):
             f"\nSignal {signal.Signals(signum).name} received, shutting down...")
         stop_event.set()
 
-    server.add_insecure_port(f"127.0.0.1:{port}")
+    if ssl_cert and ssl_key:
+        with open(ssl_cert, "rb") as f:
+            cert = f.read()
+        with open(ssl_key, "rb") as f:
+            key = f.read()
+        creds = grpc.ssl_server_credentials([(key, cert)])
+        server.add_secure_port(f"127.0.0.1:{port}", creds)
+    else:
+        server.add_insecure_port(f"127.0.0.1:{port}")
 
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    print(f"gRPC test server listening on 127.0.0.1:{port}")
+    print(f"gRPC test server listening on 127.0.0.1:{port} ({'ssl' if ssl_cert else 'plaintext'})")
     server.start()
 
     try:
@@ -73,7 +82,25 @@ if __name__ == "__main__":
         default=50051,
         help="Port to listen on (default: 50051)",
     )
+    parser.add_argument(
+        "--ssl",
+        action="store_true",
+        help="Enable TLS",
+    )
+    parser.add_argument(
+        "--ssl-cert",
+        default="grpc-server-cert.pem",
+        help="TLS server certificate chain (default: grpc-server-cert.pem)",
+    )
+    parser.add_argument(
+        "--ssl-key",
+        default="grpc-server-key.pem",
+        help="TLS server private key (default: grpc-server-key.pem)",
+    )
     args = parser.parse_args()
     if args.port < 1 or args.port > 65535:
         parser.error("port must be in range 1-65535")
-    serve(args.port)
+    if args.ssl:
+        serve(args.port, args.ssl_cert, args.ssl_key)
+    else:
+        serve(args.port)

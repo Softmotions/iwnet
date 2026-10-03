@@ -260,7 +260,8 @@ static const int8_t _meta_transitions[] = {
 
 //                 next
 /* BDY readbody */ M_END, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
-/* END reqend */ M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
+/* END reqend */ M_WFK, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR,
+/* ERR */ M_ERR, M_ERR, M_ERR, M_ERR, M_ERR, M_ERR
 };
 
 static const int8_t _ctype[] = {
@@ -701,9 +702,13 @@ static bool _client_read_bytes(struct client *client) {
   return bytes != 0;
 }
 
-IW_INLINE void _meta_trigger(struct parser *parser, int event) {
+IW_INLINE bool _meta_trigger(struct parser *parser, int event) {
+  if (parser->meta == M_ERR) {
+    return true;
+  }
   int8_t to = _meta_transitions[parser->meta * HS_META_TYPE_LEN + event];
   parser->meta = to;
+  return to == M_ERR;
 }
 
 struct token _meta_emit_token(struct parser *parser) {
@@ -737,8 +742,9 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
     if (type != HS_TOK_NONE) {
       _stream_begin_token(stream, type);
     }
-    if (from == CS) {
-      _meta_trigger(parser, HS_META_END_CHK_SIZE);
+    if (from == CS && _meta_trigger(parser, HS_META_END_CHK_SIZE)) {
+      emitted.type = HS_TOK_ERROR;
+      return emitted;
     }
     if (to == HK) {
       ++parser->header_count;
@@ -746,7 +752,10 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
         emitted.type = HS_TOK_ERROR;
       }
     } else if (to == HS) {
-      _meta_trigger(parser, HS_META_END_KEY);
+      if (_meta_trigger(parser, HS_META_END_KEY)) {
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
+      }
       emitted = _stream_emit(stream);
     } else if (from == HS && to == HR) {
       _stream_begin_token(stream, HS_TOK_HEADER_VAL);
@@ -762,7 +771,10 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
         in_bounds = parser->match_index < (int) sizeof(str__) - 1; \
         m = in_bounds ? str__[parser->match_index] : m;            \
         low = c >= 'A' && c <= 'Z' ? c + 32 : c;                   \
-        if (low != m) _meta_trigger(parser, meta__)
+        if (low != m && _meta_trigger(parser, meta__)) {           \
+          emitted.type = HS_TOK_ERROR;                             \
+          return emitted;                                          \
+        }
 
   switch (to) {
     case MS:
@@ -770,8 +782,13 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       emitted = _stream_emit(stream);
       break;
     case RR:
+      emitted = _stream_emit(stream);
+      break;
     case HR:
-      _meta_trigger(parser, HS_META_END_VALUE);
+      if (_meta_trigger(parser, HS_META_END_VALUE)) {
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
+      }
       emitted = _stream_emit(stream);
       break;
     case HK:
@@ -793,13 +810,19 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       }
       break;
     case HN:
-      if (parser->meta == M_SML && !_stream_can_contain(client, parser->content_length)) {
-        _meta_trigger(parser, HS_META_LARGE_BODY);
+      if (  parser->meta == M_SML
+         && !_stream_can_contain(client, parser->content_length)
+         && _meta_trigger(parser, HS_META_LARGE_BODY)) {
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
       }
       if (parser->meta == M_BIG || parser->meta == M_CHK) {
         emitted.type = HS_TOK_BODY_STREAM;
       }
-      _meta_trigger(parser, HS_META_END_HEADERS);
+      if (_meta_trigger(parser, HS_META_END_HEADERS)) {
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
+      }
       if (parser->content_length == 0 && parser->meta == M_BDY) {
         parser->meta = M_END;
       }
@@ -808,8 +831,9 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       }
       break;
     case CS:
-      if (c != '0') {
-        _meta_trigger(parser, HS_META_NON_ZERO);
+      if (c != '0' && _meta_trigger(parser, HS_META_NON_ZERO)) {
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
       }
       if (c >= 'A' && c <= 'F') {
         parser->content_length *= 0x10;
@@ -830,7 +854,10 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       body_left = parser->content_length - parser->body_consumed;
       if (_stream_jump(stream, body_left)) {
         emitted = _stream_emit(stream);
-        _meta_trigger(parser, HS_META_NEXT);
+        if (_meta_trigger(parser, HS_META_NEXT)) {
+          emitted.type = HS_TOK_ERROR;
+          return emitted;
+        }
         if (to == CB) {
           parser->state = CD;
         }
@@ -845,7 +872,10 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       }
       break;
     case C2:
-      _meta_trigger(parser, HS_META_END_CHUNK);
+      if (_meta_trigger(parser, HS_META_END_CHUNK)) {
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
+      }
       break;
     case BR:
       emitted.type = HS_TOK_ERROR;

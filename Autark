@@ -47,6 +47,18 @@ if { eq { ${BUILD_TYPE} Release }
   }
 }
 
+set {
+  SANITIZER_FLAGS
+  if { ${ENABLE_ASAN}
+    -fsanitize=address
+    -fno-omit-frame-pointer
+  }
+  if { ${ENABLE_UBSAN}
+    -fsanitize=undefined
+    -fno-omit-frame-pointer
+  }
+}
+
 env {
   PKG_CONFIG_PATH
   C{${INSTALL_PKGCONFIG_DIR}}
@@ -76,6 +88,7 @@ set {
   ..${LDFLAGS}
   ..@@{${PKGCONF} --libs --static libiowow}
   ..${LDFLAGS_PKGCONF}
+  ..${SANITIZER_FLAGS}
 }
 
 set {
@@ -97,15 +110,8 @@ set {
 
   ..@@{${PKGCONF} --cflags libiowow}
 
-  if { ${ENABLE_ASAN}
-    -fsanitize=address
-    -fno-omit-frame-pointer
-  } else {
-    if { ${ENABLE_UBSAN}
-      -fsanitize=undefined
-      -fno-omit-frame-pointer
-    }
-  }
+  ..${SANITIZER_FLAGS}
+
   if { prefix { ${BUILD_TYPE} Debug }
     -O0
     -ggdb

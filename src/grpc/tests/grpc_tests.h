@@ -65,19 +65,21 @@ static struct _ctx {
 } _ctx;
 
 static int _grpc_port = 50051;
+static bool _grpc_ssl = false;
 
 static void _grpc_url(char *buf, size_t buflen) {
-  snprintf(buf, buflen, "grpc+plaintext://localhost:%d", _grpc_port);
+  snprintf(buf, buflen, _grpc_ssl ? "grpc://localhost:%d" : "grpc+plaintext://localhost:%d", _grpc_port);
 }
 
 static void _parse_port(int argc, char *argv[]) {
   static const struct option longopts[] = {
     { "port", required_argument, 0, 'p' },
+    { "ssl",  no_argument,       0, 's' },
     { "help", no_argument,       0, 'h' },
     { 0,      0,                 0,  0  },
   };
   int ch;
-  while ((ch = getopt_long(argc, argv, "p:h", longopts, 0)) != -1) {
+  while ((ch = getopt_long(argc, argv, "p:sh", longopts, 0)) != -1) {
     switch (ch) {
       case 'p': {
         char *end = 0;
@@ -89,11 +91,14 @@ static void _parse_port(int argc, char *argv[]) {
         _grpc_port = (int) v;
         break;
       }
+      case 's':
+        _grpc_ssl = true;
+        break;
       case 'h':
-        fprintf(stderr, "Usage: %s [--port PORT]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--port PORT] [--ssl]\n", argv[0]);
         exit(EXIT_SUCCESS);
       default:
-        fprintf(stderr, "Usage: %s [--port PORT]\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--port PORT] [--ssl]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
   }

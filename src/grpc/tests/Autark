@@ -19,11 +19,16 @@ foreach {
 
 if { ${IWNET_RUN_TESTS}
   run {
-    shell { cp SS{grpc_test_server1.py helloworld_pb2.py helloworld_pb2_grpc.py tests.sh} CC{} }
+    shell { 
+      cp
+      SS{grpc_test_server1.py helloworld_pb2.py helloworld_pb2_grpc.py tests.sh grpc-server-cert.pem grpc-server-key.pem} 
+      CC{} 
+    }
   }
 
   run {
     always
     shell { ./tests.sh }
+    shell { ./tests.sh --ssl }
   }
 }

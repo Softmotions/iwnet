@@ -34,8 +34,12 @@ if { ${IWNET_RUN_TESTS}
     exec { ./server2-tests-run.sh -- --ssl }
     exec { ./proxy1-tests-run.sh }
     if { defined { SYSTEM_LINUX } 
-      exec { ./server1-tests-run.sh --valgrind }
-      exec { ./server1-tests-run.sh --valgrind -- --ssl }
+      if { !${ENABLE_ASAN}
+        if { !${ENABLE_UBSAN}
+          exec { ./server1-tests-run.sh --valgrind }
+          exec { ./server1-tests-run.sh --valgrind -- --ssl }
+        }
+      }
     }
   }
 }

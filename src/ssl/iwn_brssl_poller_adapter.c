@@ -562,6 +562,7 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
   }
   struct pa *a = iwpool_calloc(sizeof(*a), pool);
   RCB(finish, a);
+  a->pool = pool;
 
   a->is_client = true;
   a->b.fd = spec->fd;
