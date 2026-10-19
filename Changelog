@@ -1,4 +1,5 @@
 2026-10-19	Anton Adamansky  <adamansky@gmail.com>  [v1.4.0-dev]
+	* iwn_wf: Fixed wrong in-place body parsing.
 	* iwnet: Test cases refactored and migrated to iowow tests harness.
 	* src/http/iwn_http_server.c: Fixed errors in HTTP parser.
 	* src/grpc/iwn_grpc_client.c: Now tested in ssl mode.
