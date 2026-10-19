@@ -35,6 +35,14 @@ content-length: 15
 
 foo=bar&baz=a@z
 
+Post urlencoded (raw body preserved):
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: text/plain
+content-length: 17
+
+@books/[age = 31]
+
 Put data:
 HTTP/1.1 200 OK
 connection: keep-alive

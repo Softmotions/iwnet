@@ -62,6 +62,9 @@ run() {
   printf "\n\nPost urlencoded:\n"
   curl -isk -d'foo=bar&baz=a%40z' ${BASE}/post/urlencoded | ${FILTER}
 
+  printf "\n\nPost urlencoded (raw body preserved):\n"
+  curl -isk --data-raw '@books/[age = 31]' ${BASE}/post/urlencoded_raw | ${FILTER}
+
   printf "\n\nPut data:\n"
   curl -isk -XPUT -H'Content-Type:text/plain' -d'ff5fd857-c90b-4066-910f-a9a5d1fa1b47' ${BASE}/post/putdata | ${FILTER}
 

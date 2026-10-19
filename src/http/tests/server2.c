@@ -88,6 +88,24 @@ static int _handle_post_urlencoded(struct iwn_wf_req *req, void *user_data) {
   return 1;
 }
 
+static int _handle_post_urlencoded_raw(struct iwn_wf_req *req, void *user_data) {
+  static const char raw[] = "@books/[age = 31]";
+  unsigned long af = iw_test_failures();
+  // Parsing of an urlencoded body must not modify the raw request body.
+  IW_TEST_ASSERT(req->body && req->body_len == IW_LLEN(raw));
+  if (req->body && req->body_len == IW_LLEN(raw)) {
+    IW_TEST_ASSERT(memcmp(req->body, raw, IW_LLEN(raw)) == 0);
+  }
+  struct iwn_val key = iwn_pair_find_val(&req->form_params, "@books/[age ", -1);
+  IW_TEST_ASSERT(key.len && key.buf);
+  if (key.len) {
+    IW_TEST_ASSERT(strcmp(key.buf, " 31]") == 0);
+  }
+  bool ret = iwn_http_response_printf(req->http, 200, "text/plain", "%.*s", (int) req->body_len, req->body);
+  IW_TEST_ASSERT(ret);
+  return af == iw_test_failures() ? 1 : 500;
+}
+
 static int _handle_put_data(struct iwn_wf_req *req, void *user_data) {
   IW_TEST_ASSERT(req->body && req->body_len);
   bool ret = iwn_http_response_write(req->http, 200, "text/plan", req->body, req->body_len);
@@ -253,6 +271,13 @@ int main(int argc, char *argv[]) {
     .parent = r,
     .pattern = "/urlencoded",
     .handler = _handle_post_urlencoded,
+    .flags = IWN_WF_POST
+  }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .parent = r,
+    .pattern = "/urlencoded_raw",
+    .handler = _handle_post_urlencoded_raw,
     .flags = IWN_WF_POST
   }, 0));
 

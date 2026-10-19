@@ -923,8 +923,16 @@ static bool _request_form_multipart_parse(struct request *req) {
 }
 
 IW_INLINE bool _request_form_url_encoded_parse(struct request *req) {
-  return 0 == _request_parse_query_inplace(req->pool, &req->base.form_params,
-                                           (char*) req->base.body, req->base.body_len);
+  if (!req->base.body || !req->base.body_len) {
+    return true;
+  }
+  // The parser decodes the input in place, so it works on a pool-allocated copy of the
+  // request body. The original (raw) body remains untouched and available to route handlers.
+  char *body = iwpool_strndup2(req->pool, req->base.body, req->base.body_len);
+  if (!body) {
+    return false;
+  }
+  return 0 == _request_parse_query_inplace(req->pool, &req->base.form_params, body, req->base.body_len);
 }
 
 IW_INLINE bool _request_form_parse(struct request *req) {
