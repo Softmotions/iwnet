@@ -23,5 +23,4 @@ Checks:    >
   -performance-no-int-to-ptr,
   -bugprone-assignment-in-if-condition,
   -bugprone-signal-handler,
-
-...
+  -bugprone-switch-missing-default-case,
