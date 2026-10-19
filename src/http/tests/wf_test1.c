@@ -1,6 +1,8 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_wf_internal.h"
 #include "iwn_codec.h"
+
+#include <iowow/iwlog.h>
 
 #include <string.h>
 
@@ -16,7 +18,7 @@ static int _route_handler(struct iwn_wf_req *req, void *user_data) {
 
 static struct request* _request_create(const char *path, int method, struct iwpool *pool) {
   struct request *req = iwpool_calloc(sizeof(*req), pool);
-  IWN_ASSERT_FATAL(req);
+  IW_TEST_ASSERT_FATAL(req);
   req->base.path = path;
   req->path_len = strlen(path);
   req->base.path_unmatched = path;
@@ -28,7 +30,7 @@ static struct request* _request_create(const char *path, int method, struct iwpo
 
 static struct route* _request_first_matched(const char *path, int methods, struct route_iter *oit) {
   struct iwpool *pool = iwpool_create_empty();
-  IWN_ASSERT_FATAL(pool);
+  IW_TEST_ASSERT_FATAL(pool);
   struct request *req = _request_create(path, methods, pool);
   struct route_iter it = { 0 };
   dbg_route_iter_init(req, &it);
@@ -41,7 +43,7 @@ static struct route* _request_first_matched(const char *path, int methods, struc
   return route;
 }
 
-static iwrc test_regexp_matching(void) {
+static void test_regexp_matching(void) {
   iwrc rc = 0;
   struct route_iter it = { 0 };
   struct route *r;
@@ -66,26 +68,26 @@ static iwrc test_regexp_matching(void) {
   }, 0));
 
   r = _request_first_matched("/foo", IWN_WF_GET, &it);
-  IWN_ASSERT(r);
+  IW_TEST_ASSERT(r);
   dbg_request_destroy(it.req);
 
 finish:
   iwn_wf_destroy(ctx);
   ctx = 0;
-  return rc;
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
 }
 
 static iwrc test_header_parsing(void) {
   iwrc rc = 0;
   const char *rp = "_ga=GA1.2.258852180.1582174090; sessionid=AJyF7R984Ezziz7nYgmezxtxmMbT1Cyr\r\nU";
   const char *ep = strchr(rp, '\r');
-  IWN_ASSERT_FATAL(ep);
+  IW_TEST_ASSERT_FATAL(ep);
   struct iwn_pair pv = iwn_wf_header_val_part_find(rp, ep, "sessionid");
 
   return rc;
 }
 
-static iwrc test_simple_matching(void) {
+static void test_simple_matching(void) {
   iwrc rc = 0;
   struct route_iter it = { 0 };
   struct route *r, *r2;
@@ -130,44 +132,44 @@ static iwrc test_simple_matching(void) {
   }, 0));
 
   r = _request_first_matched("/bar", IWN_WF_PUT, &it);
-  IWN_ASSERT(r);
+  IW_TEST_ASSERT(r);
   if (r) {
-    IWN_ASSERT(strcmp(r->pattern, "/bar") == 0);
+    IW_TEST_ASSERT(strcmp(r->pattern, "/bar") == 0);
   }
   dbg_request_destroy(it.req);
 
   r = _request_first_matched("/bar", IWN_WF_POST, &it);
-  IWN_ASSERT(!rc);
+  IW_TEST_ASSERT(!rc);
   dbg_request_destroy(it.req);
 
   r = _request_first_matched("/foo", IWN_WF_GET, &it);
-  IWN_ASSERT(r);
+  IW_TEST_ASSERT(r);
   if (r) {
-    IWN_ASSERT(strcmp(r->pattern, "/foo") == 0);
+    IW_TEST_ASSERT(strcmp(r->pattern, "/foo") == 0);
   }
   r = dbg_route_iter_next(&it);
-  IWN_ASSERT(!r);
+  IW_TEST_ASSERT(!r);
   dbg_request_destroy(it.req);
 
   r = _request_first_matched("/foo/bar", IWN_WF_GET, &it);
-  IWN_ASSERT_FATAL(r);
-  IWN_ASSERT_FATAL(strcmp(r->pattern, "/foo") == 0);
+  IW_TEST_ASSERT_FATAL(r);
+  IW_TEST_ASSERT_FATAL(strcmp(r->pattern, "/foo") == 0);
 
   r2 = dbg_route_iter_next(&it);
-  IWN_ASSERT_FATAL(r2);
-  IWN_ASSERT(r2->parent == r);
-  IWN_ASSERT_FATAL(strcmp(r2->pattern, "/bar") == 0);
+  IW_TEST_ASSERT_FATAL(r2);
+  IW_TEST_ASSERT(r2->parent == r);
+  IW_TEST_ASSERT_FATAL(strcmp(r2->pattern, "/bar") == 0);
 
   r = dbg_route_iter_next(&it);
-  IWN_ASSERT_FATAL(r);
-  IWN_ASSERT(r->parent == r2);
-  IWN_ASSERT(strcmp(r->base.tag, "bar2_nested") == 0);
+  IW_TEST_ASSERT_FATAL(r);
+  IW_TEST_ASSERT(r->parent == r2);
+  IW_TEST_ASSERT(strcmp(r->base.tag, "bar2_nested") == 0);
   dbg_request_destroy(it.req);
 
 finish:
   iwn_wf_destroy(ctx);
   ctx = 0;
-  return rc;
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
 }
 
 static bool _ensure_multipart(
@@ -176,7 +178,7 @@ static bool _ensure_multipart(
   const char       *file,
   const char       *ctype,
   const char       *data) {
-  IWN_ASSERT_FATAL(parts && name);
+  IW_TEST_ASSERT_FATAL(parts && name);
   struct iwn_pair *part = iwn_pair_find(parts, name, -1), *p = 0;
   if (!part) {
     return false;
@@ -215,8 +217,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
   struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
   const char *cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -227,8 +229,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -239,9 +241,9 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(_ensure_multipart(&parts, "zz", "foo.html", 0, 0));
-  IWN_ASSERT(cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(_ensure_multipart(&parts, "zz", "foo.html", 0, 0));
+  IW_TEST_ASSERT(cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -254,8 +256,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
   // TODO: should be cp == 0
   // http://test.greenbytes.de/tech/tc2231/#attwithtokfncommanq
-  IWN_ASSERT(cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -266,8 +268,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -278,8 +280,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--xx--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -290,8 +292,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -302,8 +304,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -314,8 +316,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(!eof);
 
   memset(&parts, 0, sizeof(parts));
   free(rp);
@@ -326,8 +328,8 @@ static void _multipart_parsing3(struct iwpool *pool) {
              "--x--\r\n");
   ep = rp + strlen(rp);
   cp = dbg_multipart_parse_next(pool, "x", 1, rp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(!eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(!eof);
   free(rp);
 }
 
@@ -343,12 +345,12 @@ static void _multipart_parsing2(struct iwpool *pool) {
   struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
   const char *cp = dbg_multipart_parse_next(pool, "", 0, rp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(cp);
-  IWN_ASSERT(!eof);
-  IWN_ASSERT(_ensure_multipart(&parts, "", 0, 0, 0));
+  IW_TEST_ASSERT_FATAL(cp);
+  IW_TEST_ASSERT(!eof);
+  IW_TEST_ASSERT(_ensure_multipart(&parts, "", 0, 0, 0));
   cp = dbg_multipart_parse_next(pool, "", 0, cp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(eof);
   free(rp);
 }
 
@@ -371,44 +373,40 @@ static void _multipart_parsing1(struct iwpool *pool) {
   struct iwn_pairs parts = { 0 };
   const char *ep = rp + strlen(rp);
   const char *cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), rp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(cp);
-  IWN_ASSERT(!eof);
-  IWN_ASSERT(_ensure_multipart(&parts, "name", 0, "text/plain;charset=UTF-8", "John"));
+  IW_TEST_ASSERT_FATAL(cp);
+  IW_TEST_ASSERT(!eof);
+  IW_TEST_ASSERT(_ensure_multipart(&parts, "name", 0, "text/plain;charset=UTF-8", "John"));
 
   cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), cp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(cp);
-  IWN_ASSERT(!eof);
-  IWN_ASSERT(_ensure_multipart(&parts, "age", 0, 0, "23"));
+  IW_TEST_ASSERT_FATAL(cp);
+  IW_TEST_ASSERT(!eof);
+  IW_TEST_ASSERT(_ensure_multipart(&parts, "age", 0, 0, "23"));
 
   cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), cp, ep, &parts, &eof);
-  IWN_ASSERT_FATAL(cp);
-  IWN_ASSERT(!eof);
-  IWN_ASSERT(_ensure_multipart(&parts, "photo", "photo.jpeg", "image/jpeg", "xxJPGxx"));
+  IW_TEST_ASSERT_FATAL(cp);
+  IW_TEST_ASSERT(!eof);
+  IW_TEST_ASSERT(_ensure_multipart(&parts, "photo", "photo.jpeg", "image/jpeg", "xxJPGxx"));
 
   cp = dbg_multipart_parse_next(pool, "xyz", IW_LLEN("xyz"), cp, ep, &parts, &eof);
-  IWN_ASSERT(!cp);
-  IWN_ASSERT(eof);
+  IW_TEST_ASSERT(!cp);
+  IW_TEST_ASSERT(eof);
   free(rp);
 }
 
-static iwrc test_multipart_parsing(void) {
-  iwrc rc = 0;
+static void test_multipart_parsing(void) {
   struct iwpool *pool = iwpool_create_empty();
-  IWN_ASSERT_FATAL(pool);
+  IW_TEST_ASSERT_PTR_NOT_NULL_FATAL(pool);
   _multipart_parsing1(pool);
   _multipart_parsing2(pool);
   _multipart_parsing3(pool);
   iwpool_destroy(pool);
-  return rc;
 }
 
 int main(int argc, char *argv[]) {
-  iwrc rc = 0;
-  //RCC(rc, finish, test_header_parsing());
-  RCC(rc, finish, test_simple_matching());
-  RCC(rc, finish, test_regexp_matching());
-  RCC(rc, finish, test_multipart_parsing());
-finish:
-  IWN_ASSERT(rc == 0);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  static const struct iw_test_case cases[] = {
+    IW_TEST_CASE(test_simple_matching),
+    IW_TEST_CASE(test_regexp_matching),
+    IW_TEST_CASE(test_multipart_parsing),
+  };
+  return iw_test_run(argc, argv, IW_TEST_SUITE("http_wf", cases, 0, 0));
 }

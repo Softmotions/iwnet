@@ -9,7 +9,7 @@ static void _req_on_message7(struct iwn_grpc_req_message *msg, bool *cont) {
 
   char buf[255];
   iwbin2hex(buf, sizeof(buf), (void*) msg->msg.buf, msg->msg.len);
-  IWN_ASSERT(strcmp(
+  IW_TEST_ASSERT(strcmp(
                "0a2e31623336626565342d653564342d343035372d613964352d6130613334336161333663613a20416e746f6e2023311001",
                buf) == 0);
 }
@@ -19,7 +19,7 @@ static void _req_on_closed7(const struct iwn_grpc_req_ctx *rctx) {
   // Close the client only after both concurrent requests have completed.
   if (atomic_fetch_add(&_closed_requests, 1) == 1) {
     bool ret = iwn_grpc_client_close(rctx->client_ctx.client);
-    IWN_ASSERT(ret);
+    IW_TEST_ASSERT(ret);
   }
 }
 
@@ -43,65 +43,47 @@ static iwrc _run_tests(void) {
 
   struct _req_test_ctx *rctx1 = _req_test_ctx_create();
   struct _req_test_ctx *rctx2 = _req_test_ctx_create();
-  IWN_ASSERT_FATAL(rctx1);
-  IWN_ASSERT_FATAL(rctx2);
+  IW_TEST_ASSERT_FATAL(rctx1);
+  IW_TEST_ASSERT_FATAL(rctx2);
 
   spec.user_data = rctx1;
-  IWN_ASSERT_FATAL(iwn_grpc_client_request_open(&spec, &val, 0, &rctx1->req_id) == 0);
+  IW_TEST_ASSERT_FATAL(iwn_grpc_client_request_open(&spec, &val, 0, &rctx1->req_id) == 0);
 
   spec.user_data = rctx2;
-  IWN_ASSERT_FATAL(iwn_grpc_client_request_open(&spec, &val, 0, &rctx2->req_id) == 0);
+  IW_TEST_ASSERT_FATAL(iwn_grpc_client_request_open(&spec, &val, 0, &rctx2->req_id) == 0);
 
   _iwn_val_destroy(&val);
   return rc;
 }
 
-int main(int argc, char *argv[]) {
-  _parse_port(argc, argv);
-  _signals_setup();
-
-  char url[128];
-  _grpc_url(url, sizeof(url));
-
-  iwrc rc = iwn_grpc_init();
-  RCRET(rc);
-
-  struct iwpool *pool = iwpool_create_empty();
-  RCB(finish, pool);
-  _ctx.pool = pool;
-
-  struct iwn_grpc_client_spec spec = {
-    .url = url,
-    .on_handshake = _on_handshake,
-    .on_closed = _on_closed,
-    .on_error = _on_error,
-    .on_destroy = _on_destroy,
-  };
-
-  RCC(rc, finish, iwn_poller_create(3, 1, &_ctx.poller));
-  spec.poller = _ctx.poller;
-  RCC(rc, finish, iwn_grpc_client_open(&spec, &_ctx.client));
-
+static void test_concurrent_unary(void) {
   pthread_t poll_thread = 0;
-  RCC(rc, finish, iwn_poller_poll_in_thread(_ctx.poller, "poller", &poll_thread));
-  IWN_ASSERT((rc = _run_tests()) == 0);
+  iwrc rc = _grpc_test_setup(&poll_thread);
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
+
+  IW_TEST_ASSERT_EQUAL(rc = _run_tests(), 0);
   if (rc) {
     iwn_poller_shutdown_request(_ctx.poller);
   }
   pthread_join(poll_thread, 0);
 
-finish:
-  IWN_ASSERT(sbox[0].steps[STEP_ON_DESTROY] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_ON_CLOSED] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_ON_HANDSHAKE] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_MESSAGE] == 2);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_DRAINED] == 2);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_CLOSED] == 2);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_ERROR] == 0);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_ON_DESTROY] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_ON_CLOSED] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_ON_HANDSHAKE] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_REQ_ON_MESSAGE] == 2);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_REQ_ON_DRAINED] == 2);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_REQ_ON_CLOSED] == 2);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_REQ_ON_ERROR] == 0);
   if (rc) {
     iwlog_ecode_error3(rc);
   }
-  IWN_ASSERT(rc == 0);
-  _ctx_destroy();
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  IW_TEST_ASSERT(rc == 0);
+  _grpc_test_teardown();
+}
+
+int main(int argc, char *argv[]) {
+  static const struct iw_test_case cases[] = {
+    IW_TEST_CASE(test_concurrent_unary),
+  };
+  return iw_test_run(argc, argv, IW_TEST_SUITE("grpc_concurrent_unary", cases, 0, 0));
 }

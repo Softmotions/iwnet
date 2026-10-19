@@ -1,12 +1,12 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_grpc_client.h"
 #include "iwn_poller.h"
 #include "iwstepbox.h"
 
 #include <iowow/iwarr.h>
 #include <iowow/iwconv.h>
+#include <iowow/iwlog.h>
 #include <iowow/iwpool.h>
-#include <getopt.h>
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
@@ -71,35 +71,22 @@ static void _grpc_url(char *buf, size_t buflen) {
   snprintf(buf, buflen, _grpc_ssl ? "grpc://localhost:%d" : "grpc+plaintext://localhost:%d", _grpc_port);
 }
 
-static void _parse_port(int argc, char *argv[]) {
-  static const struct option longopts[] = {
-    { "port", required_argument, 0, 'p' },
-    { "ssl",  no_argument,       0, 's' },
-    { "help", no_argument,       0, 'h' },
-    { 0,      0,                 0,  0  },
-  };
-  int ch;
-  while ((ch = getopt_long(argc, argv, "p:sh", longopts, 0)) != -1) {
-    switch (ch) {
-      case 'p': {
-        char *end = 0;
-        long v = strtol(optarg, &end, 10);
-        if (!end || *end != '\0' || v <= 0 || v > 65535) {
-          fprintf(stderr, "Invalid port: %s\n", optarg);
-          exit(EXIT_FAILURE);
-        }
-        _grpc_port = (int) v;
-        break;
+static void _parse_args(int argc, char *argv[]) {
+  for (int i = 0; i < argc; ++i) {
+    const char *arg = argv[i];
+    if (!strcmp(arg, "--ssl")) {
+      _grpc_ssl = true;
+    } else if (!strcmp(arg, "--port") && i + 1 < argc) {
+      char *end = 0;
+      long v = strtol(argv[++i], &end, 10);
+      if (!end || *end != '\0' || v <= 0 || v > 65535) {
+        IW_TEST_FAILF("Invalid port: %s", argv[i]);
+        return;
       }
-      case 's':
-        _grpc_ssl = true;
-        break;
-      case 'h':
-        fprintf(stderr, "Usage: %s [--port PORT] [--ssl]\n", argv[0]);
-        exit(EXIT_SUCCESS);
-      default:
-        fprintf(stderr, "Usage: %s [--port PORT] [--ssl]\n", argv[0]);
-        exit(EXIT_FAILURE);
+      _grpc_port = (int) v;
+    } else {
+      IW_TEST_FAILF("Unknown option: %s, expected --port PORT or --ssl", arg);
+      return;
     }
   }
 }
@@ -128,14 +115,14 @@ static void _on_closed(struct iwn_grpc_client_ctx *cc) {
 
 static void _on_error(struct iwn_grpc_client_ctx *cc) {
   iw_stepbox_on(&sbox[0], STEP_ON_ERROR, 1);
-  IWN_ASSERT(cc->rc);
+  IW_TEST_ASSERT(cc->rc);
   if (cc->rc) {
     iwlog_ecode_error2(cc->rc, "on_error");
   }
 }
 
 static void _on_destroy(struct iwn_grpc_client_ctx *cc) {
-  IWN_ASSERT(_ctx.client == cc->client);
+  IW_TEST_ASSERT(_ctx.client == cc->client);
   _ctx.client = 0;
   iw_stepbox_on(&sbox[0], STEP_ON_DESTROY, 1);
 }
@@ -144,9 +131,9 @@ static void _iwn_val_init(struct iwn_val *val, const char *hex) {
   memset(val, 0, sizeof(*val));
   size_t hexlen = strlen(hex);
   size_t nbytes = hexlen / 2;
-  IWN_ASSERT_FATAL(nbytes * 2 == hexlen);
+  IW_TEST_ASSERT_FATAL(nbytes * 2 == hexlen);
   char *buf = malloc(nbytes);
-  IWN_ASSERT_FATAL(buf);
+  IW_TEST_ASSERT_FATAL(buf);
   val->len = iwhex2bin(hex, hexlen, buf, nbytes);
   val->buf = buf;
 };
@@ -165,7 +152,7 @@ struct _req_test_ctx {
 };
 
 static void _req_on_destroy_impl(const struct _req_test_ctx *tctx) {
-  IWN_ASSERT(tctx);
+  IW_TEST_ASSERT(tctx);
   if (tctx) {
     if (tctx->rc) {
       iwlog_ecode_error2(tctx->rc, "_req_test_ctx error");
@@ -184,15 +171,15 @@ static void _req_on_closed(const struct iwn_grpc_req_ctx *rctx) {
   iw_stepbox_on(&sbox[0], STEP_REQ_ON_CLOSED, 1);
   // Request closed now terminate grpc client session
   bool ret = iwn_grpc_client_close(rctx->client_ctx.client);
-  IWN_ASSERT(ret);
+  IW_TEST_ASSERT(ret);
 }
 
 static void _req_on_error(struct iwn_grpc_req_ctx *ctx) {
   iw_stepbox_on(&sbox[0], STEP_REQ_ON_ERROR, 1);
   struct _req_test_ctx *tctx = ctx->spec.user_data;
-  IWN_ASSERT(!tctx->rc);
-  IWN_ASSERT(!tctx->error);
-  IWN_ASSERT(ctx->rc);
+  IW_TEST_ASSERT(!tctx->rc);
+  IW_TEST_ASSERT(!tctx->error);
+  IW_TEST_ASSERT(ctx->rc);
   tctx->rc = ctx->rc;
   if (ctx->error_explained) {
     tctx->error = iwpool_strdup2(tctx->pool, ctx->error_explained);
@@ -212,7 +199,7 @@ struct _req_test_ctx* _req_test_ctx_create(void) {
   RCB(finish, rctx);
   rctx->pool = pool;
 finish:
-  IWN_ASSERT(rc == 0);
+  IW_TEST_ASSERT(rc == 0);
   if (rc) {
     return 0;
   } else {
@@ -232,4 +219,49 @@ static void _signals_setup(void) {
   if (signal(SIGINT, _on_signal) == SIG_ERR) {
     _exit(EXIT_FAILURE);
   }
+}
+
+/// Opens the gRPC client session and starts the poller thread.
+/// The test options are taken from the arguments given after `--`.
+static iwrc _grpc_test_setup(pthread_t *poll_thread) {
+  iwrc rc = 0;
+  char url[128];
+
+  _signals_setup();
+  _parse_args(iw_test_argc, iw_test_argv);
+  if (iw_test_failures() > 0) {
+    /* The option errors are reported already, connecting makes no sense. */
+    return IW_ERROR_INVALID_CMD_ARGS;
+  }
+
+  _grpc_url(url, sizeof(url));
+
+  RCC(rc, finish, iwn_grpc_init());
+  RCB(finish, _ctx.pool = iwpool_create_empty());
+
+  struct iwn_grpc_client_spec spec = {
+    .url = url,
+    .on_handshake = _on_handshake,
+    .on_closed = _on_closed,
+    .on_error = _on_error,
+    .on_destroy = _on_destroy,
+  };
+
+  RCC(rc, finish, iwn_poller_create(3, 1, &_ctx.poller));
+  spec.poller = _ctx.poller;
+  RCC(rc, finish, iwn_grpc_client_open(&spec, &_ctx.client));
+  RCC(rc, finish, iwn_poller_poll_in_thread(_ctx.poller, "poller", poll_thread));
+
+finish:
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    /* Release the partially created context, the case will not run. */
+    _ctx_destroy();
+  }
+  return rc;
+}
+
+/// Releases the gRPC client session and its resources.
+static void _grpc_test_teardown(void) {
+  _ctx_destroy();
 }

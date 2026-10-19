@@ -1,6 +1,7 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_ws_server.h"
 
+#include <iowow/iwlog.h>
 #include <iowow/iwconv.h>
 
 #include <string.h>
@@ -29,8 +30,8 @@ static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_le
     return false;
   }
 
-  IWN_ASSERT_FATAL(sess && msg && msg_len);
-  IWN_ASSERT(sess->spec->user_data == ctx);
+  IW_TEST_ASSERT_FATAL(sess && msg && msg_len);
+  IW_TEST_ASSERT(sess->spec->user_data == ctx);
   fprintf(stderr, "message: %s\n", msg);
   char buf[64 + msg_len];
   int len = snprintf(buf, sizeof(buf), "echo: %s", msg);
@@ -40,15 +41,15 @@ static bool _on_ws_echo(struct iwn_ws_sess *sess, const char *msg, size_t msg_le
 static bool _on_ws_session_init(struct iwn_ws_sess *sess) {
   fprintf(stderr, "New client\n");
   state |= S_SESSION_INIT;
-  IWN_ASSERT_FATAL(sess);
-  IWN_ASSERT(sess->spec->user_data == ctx);
+  IW_TEST_ASSERT_FATAL(sess);
+  IW_TEST_ASSERT(sess->spec->user_data == ctx);
   return true;
 }
 
 static void _on_ws_session_dispose(struct iwn_ws_sess *sess) {
   state |= S_SESSION_DISPOSE;
-  IWN_ASSERT_FATAL(sess);
-  IWN_ASSERT(sess->spec->user_data == ctx);
+  IW_TEST_ASSERT_FATAL(sess);
+  IW_TEST_ASSERT(sess->spec->user_data == ctx);
 }
 
 int main(int argc, char *argv[]) {
@@ -127,9 +128,9 @@ int main(int argc, char *argv[]) {
   iwn_poller_poll(poller);
 
 finish:
-  IWN_ASSERT(rc == 0);
-  IWN_ASSERT(state & S_SESSION_INIT);
-  IWN_ASSERT(state & S_SESSION_DISPOSE);
+  IW_TEST_ASSERT(rc == 0);
+  IW_TEST_ASSERT(state & S_SESSION_INIT);
+  IW_TEST_ASSERT(state & S_SESSION_DISPOSE);
   iwn_poller_destroy(&poller);
-  return iwn_assertions_failed > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
+  return iw_test_failures() > 0 ? EXIT_FAILURE : EXIT_SUCCESS;
 }

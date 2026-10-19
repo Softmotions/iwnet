@@ -17,7 +17,6 @@ if { !defined { IWNET_PUBLIC_HEADERS_DESTINATION }
 set {
   LDFLAGS_TEST
   ${LIBIWNET_A}
-  ..@@{ ${PKGCONF} --libs --static cunit }
   ..${LDFLAGS}
 }
 
@@ -25,7 +24,7 @@ set {
   CFLAGS_TESTS
   -DIW_STATIC
   -DIW_TESTS
-  ..@@{ ${PKGCONF} --cflags --static cunit }
+  -DIW_TEST_HARNESS="iwnet"
   ..${CFLAGS}
 }
 

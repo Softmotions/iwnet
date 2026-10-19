@@ -1,7 +1,8 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_wf.h"
 #include "iwn_wf_files.h"
 
+#include <iowow/iwlog.h>
 #include <iowow/iwconv.h>
 
 #include <string.h>
@@ -55,19 +56,19 @@ static int _handle_get(struct iwn_wf_req *req, void *user_data) {
 
 static int _handle_get_empty(struct iwn_wf_req *req, void *user_data) {
   ++_handle_get_empty_cnt;
-  IWN_ASSERT((intptr_t) user_data == 1);
+  IW_TEST_ASSERT((intptr_t) user_data == 1);
   return 200; // Empty reponse with ok status
 }
 
 static int _handle_get_query(struct iwn_wf_req *req, void *user_data) {
   struct iwn_val foo = iwn_pair_find_val(&req->query_params, "foo", -1);
-  IWN_ASSERT(foo.len && foo.buf);
+  IW_TEST_ASSERT(foo.len && foo.buf);
   struct iwn_val baz = iwn_pair_find_val(&req->query_params, "baz", -1);
-  IWN_ASSERT(baz.len && baz.buf);
-  IWN_ASSERT(strcmp(baz.buf, "a@z") == 0);
-  IWN_ASSERT(strcmp(foo.buf, "bar") == 0);
+  IW_TEST_ASSERT(baz.len && baz.buf);
+  IW_TEST_ASSERT(strcmp(baz.buf, "a@z") == 0);
+  IW_TEST_ASSERT(strcmp(foo.buf, "bar") == 0);
   bool ret = iwn_http_response_printf(req->http, 200, "text/plain;", "foo=%s&baz=%s", foo.buf, baz.buf);
-  IWN_ASSERT(ret);
+  IW_TEST_ASSERT(ret);
   return 1;
 }
 
@@ -77,49 +78,49 @@ static int _handle_fail(struct iwn_wf_req *req, void *user_data) {
 
 static int _handle_post_urlencoded(struct iwn_wf_req *req, void *user_data) {
   struct iwn_val foo = iwn_pair_find_val(&req->form_params, "foo", -1);
-  IWN_ASSERT(foo.len && foo.buf);
+  IW_TEST_ASSERT(foo.len && foo.buf);
   struct iwn_val baz = iwn_pair_find_val(&req->form_params, "baz", -1);
-  IWN_ASSERT(baz.len && baz.buf);
-  IWN_ASSERT(strcmp(baz.buf, "a@z") == 0);
-  IWN_ASSERT(strcmp(foo.buf, "bar") == 0);
+  IW_TEST_ASSERT(baz.len && baz.buf);
+  IW_TEST_ASSERT(strcmp(baz.buf, "a@z") == 0);
+  IW_TEST_ASSERT(strcmp(foo.buf, "bar") == 0);
   bool ret = iwn_http_response_printf(req->http, 200, "text/plain;", "foo=%s&baz=%s", foo.buf, baz.buf);
-  IWN_ASSERT(ret);
+  IW_TEST_ASSERT(ret);
   return 1;
 }
 
 static int _handle_put_data(struct iwn_wf_req *req, void *user_data) {
-  IWN_ASSERT(req->body && req->body_len);
+  IW_TEST_ASSERT(req->body && req->body_len);
   bool ret = iwn_http_response_write(req->http, 200, "text/plan", req->body, req->body_len);
-  IWN_ASSERT(ret);
+  IW_TEST_ASSERT(ret);
   return 1;
 }
 
 static int _handle_post_bigparam(struct iwn_wf_req *req, void *user_data) {
   struct iwn_val bigparam = iwn_pair_find_val(&req->form_params, "bigparam", -1);
-  IWN_ASSERT(bigparam.len && bigparam.buf);
+  IW_TEST_ASSERT(bigparam.len && bigparam.buf);
   bool ret = iwn_http_response_write(req->http, 200, "text/plain", bigparam.buf, bigparam.len);
-  IWN_ASSERT(ret)
+  IW_TEST_ASSERT(ret);
   return 1;
 }
 
 static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
-  atomic_int af = iwn_assertions_failed;
+  unsigned long af = iw_test_failures();
   struct iwn_pair *p = iwn_pair_find(&req->form_params, "foo", -1);
-  IWN_ASSERT(p);
+  IW_TEST_ASSERT(p);
   if (p) {
-    IWN_ASSERT(strncmp(p->val, "bar", p->val_len) == 0);
+    IW_TEST_ASSERT(strncmp(p->val, "bar", p->val_len) == 0);
   }
   p = iwn_pair_find(&req->form_params, "baz", -1);
-  IWN_ASSERT(p);
+  IW_TEST_ASSERT(p);
   if (p) {
-    IWN_ASSERT(strncmp(p->val, "a%40z", p->val_len) == 0);
+    IW_TEST_ASSERT(strncmp(p->val, "a%40z", p->val_len) == 0);
   }
   p = iwn_pair_find(&req->form_params, "bigparam", -1);
-  IWN_ASSERT(p);
+  IW_TEST_ASSERT(p);
   if (p) {
-    IWN_ASSERT(p->val_len == 15165824);
+    IW_TEST_ASSERT(p->val_len == 15165824);
   }
-  if (af == iwn_assertions_failed) {
+  if (af == iw_test_failures()) {
     return 200;
   } else {
     return 500;
@@ -127,7 +128,7 @@ static int _handle_post_multipart(struct iwn_wf_req *req, void *user_data) {
 }
 
 static int _handle_session_put(struct iwn_wf_req *req, void *user_data) {
-  IWN_ASSERT(iwn_wf_session_put(req, "mykey", "70b2a86f-025b-4805-b267-871f3e1bc170") == 0);
+  IW_TEST_ASSERT(iwn_wf_session_put(req, "mykey", "70b2a86f-025b-4805-b267-871f3e1bc170") == 0);
   return 200;
 }
 
@@ -135,7 +136,7 @@ static int _handle_session_get(struct iwn_wf_req *req, void *user_data) {
   const char *val = iwn_wf_session_get(req, "mykey");
   if (val) {
     bool ret = iwn_http_response_write(req->http, 200, "text/plan", val, strlen(val));
-    IWN_ASSERT(ret);
+    IW_TEST_ASSERT(ret);
     return 1;
   } else {
     return 500;
@@ -150,7 +151,7 @@ static int _handle_file_get(struct iwn_wf_req *req, void *user_data) {
 
 static void _handle_file_get2_completed(void *d) {
   FILE *f = d;
-  IWN_ASSERT_FATAL(f);
+  IW_TEST_ASSERT_FATAL(f);
   fclose(f);
 }
 
@@ -158,7 +159,7 @@ static int _handle_file_get2(struct iwn_wf_req *req, void *user_data) {
   const char *path = req->path_unmatched;
   while (*path == '/') ++path;
   FILE *f = fopen(path, "r");
-  IWN_ASSERT_FATAL(f);
+  IW_TEST_ASSERT_FATAL(f);
   return iwn_wf_fileobj_serve(req, 0, f, _handle_file_get2_completed, f);
 }
 
@@ -336,7 +337,7 @@ int main(int argc, char *argv[]) {
 
 finish:
   iwn_poller_destroy(&poller);
-  IWN_ASSERT(rc == 0);
-  IWN_ASSERT(state & S_ROOT_DISPOSED);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  IW_TEST_ASSERT(rc == 0);
+  IW_TEST_ASSERT(state & S_ROOT_DISPOSED);
+  return iw_test_failures() > 0 ? 1 : 0;
 }

@@ -22,7 +22,6 @@ set {
   utils/iwn_mimetypes.h
   utils/iwn_net.h
   utils/iwn_pairs.h
-  utils/iwn_tests.h
   utils/iwn_url.h
   utils/iwn_utils.h
 }

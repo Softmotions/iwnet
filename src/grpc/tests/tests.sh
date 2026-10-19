@@ -249,7 +249,7 @@ run_mock_test() {
   shift 2
   echo "Running $_bin (mock)..."
   start_mock "$_port" "$@"
-  "$BIN_DIR/$_bin" --port "$_port"
+  "$BIN_DIR/$_bin" -- --port "$_port"
   stop_mock
 }
 
@@ -290,7 +290,8 @@ fi
 
 for _bin in grpc_test_client1 grpc_test_client2 grpc_test_client3 grpc_test_client7; do
   echo "Running $_bin..."
-  "$BIN_DIR/$_bin" $CLIENT_ARGS
+  # Everything after `--` is passed to the test executable by the iwtests harness.
+  "$BIN_DIR/$_bin" -- $CLIENT_ARGS
 done
 
 if [ "$USE_SSL" -eq 0 ]; then

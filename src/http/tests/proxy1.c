@@ -1,6 +1,8 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_wf.h"
 #include "iwn_proc.h"
+
+#include <iowow/iwlog.h>
 
 #include <signal.h>
 #include <errno.h>
@@ -105,7 +107,7 @@ int main(int argc, char *argv[]) {
   iwn_proc_dispose2(SIGTERM, 10000);
 
 finish:
-  IWN_ASSERT(rc == 0);
+  IW_TEST_ASSERT(rc == 0);
   iwn_poller_destroy(&poller);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  return iw_test_failures() > 0 ? 1 : 0;
 }

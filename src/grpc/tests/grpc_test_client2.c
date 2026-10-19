@@ -3,7 +3,7 @@
 static void _req_on_message1(struct iwn_grpc_req_message *msg, bool *cont) {
   iw_stepbox_on(&sbox[0], STEP_REQ_ON_MESSAGE, 1);
   //struct _req_test_ctx *tctx = msg->ctx.spec.user_data;
-  //IWN_ASSERT_FATAL(iwn_vals_add_val(tctx->pool, &tctx->vals, &msg->msg, true));
+  //IW_TEST_ASSERT_FATAL(iwn_vals_add_val(tctx->pool, &tctx->vals, &msg->msg, true));
 }
 
 static iwrc _run_tests(void) {
@@ -29,7 +29,7 @@ static iwrc _run_tests(void) {
   _iwn_val_init(&val, "0a05416e746f6e1064");
 
   struct _req_test_ctx *rctx = _req_test_ctx_create();
-  IWN_ASSERT_FATAL(rctx);
+  IW_TEST_ASSERT_FATAL(rctx);
   spec.user_data = rctx;
 
   RCC(rc, finish, iwn_grpc_client_request_open(&spec, &val, 0, &rctx->req_id));
@@ -43,51 +43,33 @@ finish:
   return rc;
 }
 
-int main(int argc, char *argv[]) {
-  _parse_port(argc, argv);
-  _signals_setup();
-
-  char url[128];
-  _grpc_url(url, sizeof(url));
-
-  iwrc rc = iwn_grpc_init();
-  RCRET(rc);
-
-  struct iwpool *pool = iwpool_create_empty();
-  RCB(finish, pool);
-  _ctx.pool = pool;
-
-  struct iwn_grpc_client_spec spec = {
-    .url = url,
-    .on_handshake = _on_handshake,
-    .on_closed = _on_closed,
-    .on_error = _on_error,
-    .on_destroy = _on_destroy,
-  };
-
-  RCC(rc, finish, iwn_poller_create(3, 1, &_ctx.poller));
-  spec.poller = _ctx.poller;
-  RCC(rc, finish, iwn_grpc_client_open(&spec, &_ctx.client));
-
+static void test_server_streaming(void) {
   pthread_t poll_thread = 0;
-  RCC(rc, finish, iwn_poller_poll_in_thread(_ctx.poller, "poller", &poll_thread));
-  IWN_ASSERT((rc = _run_tests()) == 0);
+  iwrc rc = _grpc_test_setup(&poll_thread);
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
+
+  IW_TEST_ASSERT_EQUAL(rc = _run_tests(), 0);
   if (rc) {
     iwn_poller_shutdown_request(_ctx.poller);
   }
   pthread_join(poll_thread, 0);
 
-finish:
-  IWN_ASSERT(sbox[0].steps[STEP_ON_DESTROY] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_ON_CLOSED] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_ON_HANDSHAKE] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_MESSAGE] == 100);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_DRAINED] == 1);
-  IWN_ASSERT(sbox[0].steps[STEP_REQ_ON_CLOSED] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_ON_DESTROY] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_ON_CLOSED] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_ON_HANDSHAKE] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_REQ_ON_MESSAGE] == 100);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_REQ_ON_DRAINED] == 1);
+  IW_TEST_ASSERT(sbox[0].steps[STEP_REQ_ON_CLOSED] == 1);
   if (rc) {
     iwlog_ecode_error3(rc);
   }
-  IWN_ASSERT(rc == 0);
-  _ctx_destroy();
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  IW_TEST_ASSERT(rc == 0);
+  _grpc_test_teardown();
+}
+
+int main(int argc, char *argv[]) {
+  static const struct iw_test_case cases[] = {
+    IW_TEST_CASE(test_server_streaming),
+  };
+  return iw_test_run(argc, argv, IW_TEST_SUITE("grpc_server_streaming", cases, 0, 0));
 }

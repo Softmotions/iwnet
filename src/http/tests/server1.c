@@ -1,7 +1,8 @@
 
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_http_server.h"
 
+#include <iowow/iwlog.h>
 #include <iowow/iwxstr.h>
 #include <iowow/iwconv.h>
 
@@ -31,18 +32,18 @@ static void _server_on_dispose(const struct iwn_http_server *srv) {
 
 static bool _chunk_req_cb(struct iwn_http_req *req, bool *again) {
   struct iwxstr *xstr = req->user_data;
-  IWN_ASSERT_FATAL(xstr);
+  IW_TEST_ASSERT_FATAL(xstr);
   struct iwn_val val = iwn_http_request_chunk_get(req);
   if (val.len > 0) {
     iwrc rc = iwxstr_cat(xstr, val.buf, val.len);
-    IWN_ASSERT_FATAL(rc == 0);
+    IW_TEST_ASSERT_FATAL(rc == 0);
     iwn_http_request_chunk_next(req, _chunk_req_cb);
   } else {
     char *body = iwxstr_ptr(xstr);
     size_t body_len = iwxstr_size(xstr);
     iwn_http_response_body_set(req, body, body_len, 0);
     iwrc rc = iwn_http_response_end(req);
-    IWN_ASSERT(rc == 0);
+    IW_TEST_ASSERT(rc == 0);
   }
   return true;
 }
@@ -63,10 +64,10 @@ static bool _chunk_resp_cb(struct iwn_http_req *req, bool *again) {
   }
   if (cdata) {
     iwrc rc = iwn_http_response_chunk_write(req, cdata, -1, _chunk_resp_cb, again);
-    IWN_ASSERT(rc == 0);
+    IW_TEST_ASSERT(rc == 0);
   } else {
     iwrc rc = iwn_http_response_chunk_end(req);
-    IWN_ASSERT(rc == 0);
+    IW_TEST_ASSERT(rc == 0);
   }
   return true;
 }
@@ -91,7 +92,7 @@ static bool _request_handler(struct iwn_http_req *req) {
     struct iwn_val val = iwn_http_request_header_get(req, "X-Foo", -1);
     iwn_http_response_body_set(req, val.buf, val.len, 0);
   } else if (iwn_http_request_target_is(req, "/large", -1)) {
-    IWN_ASSERT(iwn_http_request_is_streamed(req));
+    IW_TEST_ASSERT(iwn_http_request_is_streamed(req));
     struct iwxstr *xstr;
     RCA(xstr = iwxstr_create_empty(), finish);
     req->user_data = xstr;
@@ -175,9 +176,9 @@ int main(int argc, char *argv[]) {
   iwn_poller_poll(poller);
 
 finish:
-  IWN_ASSERT(rc == 0);
-  IWN_ASSERT(state & STATE_SERVER_DISPOSED);
-  IWN_ASSERT(state & STATE_CLOSED_ON_SIGNAL);
+  IW_TEST_ASSERT(rc == 0);
+  IW_TEST_ASSERT(state & STATE_SERVER_DISPOSED);
+  IW_TEST_ASSERT(state & STATE_CLOSED_ON_SIGNAL);
   iwn_poller_destroy(&poller);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  return iw_test_failures() > 0 ? 1 : 0;
 }

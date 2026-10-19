@@ -34,6 +34,20 @@ Builds powerd by [Autark](https://github.com/Softmotions/autark)
 ./build.sh --prefix=$HOME/.local
 ```
 
+**Tests**
+
+The test cases are built and run by:
+
+```sh
+IWNET_RUN_TESTS=1 ./build.sh -c
+
+# Run only the cases whose name contains "echo" or "multipart"
+IW_TEST_FILTER=echo,multipart IWNET_RUN_TESTS=1 ./build.sh -c
+```
+
+The C test cases are [iwtests.h](./src/iwtests.h) suites, see [TESTS.md](./TESTS.md)
+for the harness documentation and the project specific test layout.
+
 
 
 # Asynchronous HTTP Framework
@@ -364,22 +378,6 @@ iwn_grpc_client_spec.on_error
 ```
 
 gRPC status codes are mapped to `GRPC_ERROR_*` values defined in `iwn_grpc.h`.
-
-## Tests
-
-Examples covering the supported RPC modes are located in:
-
-```text
-src/grpc/tests/grpc_test_client1.c   Unary RPC
-src/grpc/tests/grpc_test_client2.c   Server streaming
-src/grpc/tests/grpc_test_client3.c   Bidirectional streaming
-```
-
-The accompanying Python test server is:
-
-```text
-src/grpc/tests/grpc_test_server1.py
-```
 
 # License
 

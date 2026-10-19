@@ -49,6 +49,6 @@ if { ${IWNET_RUN_TESTS}
 
   run {
     always
-    shell { ./ws_client_test1 --listen socket:///tmp/ws_server1.socket }
+    shell { ./ws_client_test1 -- --listen socket:///tmp/ws_server1.socket }
   }
 }

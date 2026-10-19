@@ -33,3 +33,17 @@ Builds powerd by [Autark](https://github.com/Softmotions/autark)
 ```sh
 ./build.sh --prefix=$HOME/.local
 ```
+
+**Tests**
+
+The test cases are built and run by:
+
+```sh
+IWNET_RUN_TESTS=1 ./build.sh -c
+
+# Run only the cases whose name contains "echo" or "multipart"
+IW_TEST_FILTER=echo,multipart IWNET_RUN_TESTS=1 ./build.sh -c
+```
+
+The C test cases are [iwtests.h](./src/iwtests.h) suites, see [TESTS.md](./TESTS.md)
+for the harness documentation and the project specific test layout.

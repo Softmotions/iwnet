@@ -1,6 +1,8 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_proc.h"
 #include "iwn_ws_client.h"
+
+#include <iowow/iwlog.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +17,7 @@ static int ccnt;
 
 static void on_connected(const struct iwn_ws_client_ctx *ctx) {
   ++ccnt;
-  IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Init", IW_LLEN("Init")));
+  IW_TEST_ASSERT_TRUE(iwn_ws_client_write_text(ctx->ws, "Init", IW_LLEN("Init")));
 }
 
 static void on_message(const struct iwn_ws_client_ctx *ctx, const char *buf, size_t buf_len, uint8_t frame) {
@@ -25,7 +27,7 @@ static void on_message(const struct iwn_ws_client_ctx *ctx, const char *buf, siz
     iwn_ws_client_close(ctx->ws);
   } else {
     // Request disconnect
-    IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "disconnect", IW_LLEN("disconnect")));
+    IW_TEST_ASSERT_TRUE(iwn_ws_client_write_text(ctx->ws, "disconnect", IW_LLEN("disconnect")));
   }
 }
 
@@ -48,8 +50,8 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     .reconnect_attempt_pause_sec = 1,
     .reconnect_attempts_num = 1
   }, &ws);
-  IWN_ASSERT(rc == 0);
-  IWN_ASSERT(ws);
+  IW_TEST_ASSERT_EQUAL(rc, 0);
+  IW_TEST_ASSERT_PTR_NOT_NULL(ws);
   if (rc) {
     iwn_proc_kill(ws_server_pid, SIGINT);
   }
@@ -60,9 +62,8 @@ static void _on_ws_server_exit(const struct iwn_proc_ctx *ctx) {
   iwn_poller_shutdown_request(poller);
 }
 
-int main(int argc, char *argv[]) {
+static void test_ws_client_reconnect(void) {
   iwrc rc = 0;
-  iwlog_init();
 
   RCC(rc, finish, iwn_poller_create(1, 1, &poller));
   RCC(rc, finish, iwn_proc_spawn(&(struct iwn_proc_spec) {
@@ -78,10 +79,17 @@ int main(int argc, char *argv[]) {
 
   iwn_proc_dispose2(SIGTERM, 10000);
   iwn_poller_destroy(&poller);
-  IWN_ASSERT(iwn_ws_client_destroy(ws));
+  IW_TEST_ASSERT_TRUE(iwn_ws_client_destroy(ws));
 
 finish:
-  IWN_ASSERT(rc == 0);
-  IWN_ASSERT(ccnt == 3);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
+  IW_TEST_ASSERT_EQUAL(ccnt, 3);
+}
+
+int main(int argc, char *argv[]) {
+  static const struct iw_test_case cases[] = {
+    IW_TEST_CASE(test_ws_client_reconnect),
+  };
+  iwlog_init();
+  return iw_test_run(argc, argv, IW_TEST_SUITE("ws_client_reconnect", cases, 0, 0));
 }

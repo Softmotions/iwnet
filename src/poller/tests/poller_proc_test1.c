@@ -1,6 +1,7 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_proc.h"
 
+#include <iowow/iwlog.h>
 #include <iowow/iwxstr.h>
 
 #include <sys/wait.h>
@@ -9,25 +10,30 @@
 #include <string.h>
 #include <unistd.h>
 
-struct iwn_poller *poller;
-pthread_t poller_thr;
+static struct iwn_poller *poller;
+static pthread_t poller_thr;
 
-struct iwxstr *xstdout, *xstderr;
-int code;
+static struct iwxstr *xstdout, *xstderr;
+static int code;
 
 static void* _poller_worker(void *arg) {
-  IWN_ASSERT_FATAL(poller);
+  IW_TEST_ASSERT_PTR_NOT_NULL(poller);
+  if (!poller) {
+    return 0;
+  }
   iwn_poller_poll(poller);
   return 0;
 }
 
-static iwrc init(void) {
+static int suite_init(void) {
+  iwlog_init();
   xstdout = iwxstr_create_empty();
   xstderr = iwxstr_create_empty();
-  return 0;
+  return (xstdout && xstderr) ? 0 : 1;
 }
 
-static void shutdown(void) {
+static void suite_cleanup(void) {
+  iwn_proc_dispose2(SIGTERM, 0);
   iwxstr_destroy(xstderr);
   iwxstr_destroy(xstdout);
 }
@@ -44,7 +50,7 @@ static void _on_echo1_exit(const struct iwn_proc_ctx *ctx) {
   code = WIFEXITED(ctx->wstatus) ? WEXITSTATUS(ctx->wstatus) : -1;
 }
 
-static iwrc test_echo1(void) {
+static void test_echo_stdout(void) {
   int pid;
   iwrc rc = 0;
 
@@ -69,18 +75,18 @@ static iwrc test_echo1(void) {
   iwn_proc_wait(pid);
   pthread_join(poller_thr, 0);
 
-  IWN_ASSERT(strcmp("a6aa91b3-35ee-40f2-a94f-67f08a59de3e", iwxstr_ptr(xstdout)) == 0);
-  IWN_ASSERT(code == 0);
+  IW_TEST_ASSERT_STR_EQUAL(iwxstr_ptr(xstdout), "a6aa91b3-35ee-40f2-a94f-67f08a59de3e");
+  IW_TEST_ASSERT_EQUAL(code, 0);
 
 finish:
   if (rc) {
     iwlog_ecode_error3(rc);
   }
   iwn_poller_destroy(&poller);
-  return rc;
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
 }
 
-static iwrc test_echo2(void) {
+static void test_echo_stderr(void) {
   int pid;
   iwrc rc = 0;
 
@@ -107,31 +113,23 @@ static iwrc test_echo2(void) {
   iwn_proc_wait(pid);
   pthread_join(poller_thr, 0);
 
-  IWN_ASSERT(strcmp("45f42994-fea8-4d41-9256-33720f42feb8", iwxstr_ptr(xstderr)) == 0);
-  IWN_ASSERT(strcmp("", iwxstr_ptr(xstdout)) == 0);
-  IWN_ASSERT(iwxstr_size(xstdout) == 0);
-  IWN_ASSERT(code == 0);
+  IW_TEST_ASSERT_STR_EQUAL(iwxstr_ptr(xstderr), "45f42994-fea8-4d41-9256-33720f42feb8");
+  IW_TEST_ASSERT_STR_EQUAL(iwxstr_ptr(xstdout), "");
+  IW_TEST_ASSERT_EQUAL(iwxstr_size(xstdout), 0);
+  IW_TEST_ASSERT_EQUAL(code, 0);
 
 finish:
   if (rc) {
     iwlog_ecode_error3(rc);
   }
   iwn_poller_destroy(&poller);
-  return rc;
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
 }
 
 int main(int argc, char *argv[]) {
-  iwrc rc = 0;
-
-  iwlog_init();
-  RCC(rc, finish, init());
-  RCC(rc, finish, test_echo1());
-  RCC(rc, finish, test_echo2());
-
-
-finish:
-  shutdown();
-  iwn_proc_dispose2(SIGTERM, 0);
-  IWN_ASSERT(rc == 0);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  static const struct iw_test_case cases[] = {
+    IW_TEST_CASE(test_echo_stdout),
+    IW_TEST_CASE(test_echo_stderr),
+  };
+  return iw_test_run(argc, argv, IW_TEST_SUITE("poller_proc", cases, suite_init, suite_cleanup));
 }

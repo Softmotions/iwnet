@@ -1,7 +1,8 @@
-
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_proc.h"
 #include "iwn_ws_client.h"
+
+#include <iowow/iwlog.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -12,16 +13,16 @@ static struct iwn_poller *poller;
 static struct iwn_ws_client *ws;
 static int cnt;
 static int ws_server_pid;
-static char *listen = "localhost";
+static const char *listen = "localhost";
 
 static void on_connected(const struct iwn_ws_client_ctx *ctx) {
-  IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
+  IW_TEST_ASSERT_TRUE(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
 }
 
 static void on_message(const struct iwn_ws_client_ctx *ctx, const char *buf, size_t buf_len, uint8_t frame) {
   fprintf(stderr, "on_message %.*s\n", (int) buf_len, buf);
   if (cnt++ < 3) {
-    IWN_ASSERT(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
+    IW_TEST_ASSERT_TRUE(iwn_ws_client_write_text(ctx->ws, "Test", sizeof("Test") - 1));
   } else {
     iwn_ws_client_close(ctx->ws);
   }
@@ -58,20 +59,19 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     .on_dispose = on_dispose,
   }, &ws);
 
-  IWN_ASSERT(rc == 0);
-  IWN_ASSERT(ws);
+  IW_TEST_ASSERT_EQUAL(rc, 0);
+  IW_TEST_ASSERT_PTR_NOT_NULL(ws);
   if (rc) {
     iwn_proc_kill(ws_server_pid, SIGINT);
   }
 }
 
-int main(int argc, char *argv[]) {
+static void test_ws_client(void) {
   iwrc rc = 0;
-  iwlog_init();
 
-  for (int i = 0; i < argc; ++i) {
-    if (strcmp(argv[i], "--listen") == 0 && i + 1 < argc) {
-      listen = argv[i + 1];
+  for (int i = 0; i < iw_test_argc; ++i) {
+    if (strcmp(iw_test_argv[i], "--listen") == 0 && i + 1 < iw_test_argc) {
+      listen = iw_test_argv[++i];
     }
   }
 
@@ -91,10 +91,17 @@ int main(int argc, char *argv[]) {
   iwn_poller_poll(poller);
   iwn_proc_dispose2(SIGTERM, 0);
   iwn_poller_destroy(&poller);
-  IWN_ASSERT(iwn_ws_client_destroy(ws));
+  IW_TEST_ASSERT_TRUE(iwn_ws_client_destroy(ws));
 
 finish:
-  IWN_ASSERT(rc == 0);
-  IWN_ASSERT(cnt == 4);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
+  IW_TEST_ASSERT_EQUAL(cnt, 4);
+}
+
+int main(int argc, char *argv[]) {
+  static const struct iw_test_case cases[] = {
+    IW_TEST_CASE(test_ws_client),
+  };
+  iwlog_init();
+  return iw_test_run(argc, argv, IW_TEST_SUITE("ws_client", cases, 0, 0));
 }

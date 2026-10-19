@@ -1,13 +1,15 @@
-#include "iwn_tests.h"
+#include "iwtests.h"
 #include "iwn_poller.h"
+
+#include <iowow/iwlog.h>
 
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
 #include <fcntl.h>
 
-int fds[2];
-struct iwn_poller *poller;
+static int fds[2] = { -1, -1 };
+static struct iwn_poller *poller;
 
 static iwrc _make_non_blocking(int fd) {
   int rci, flags;
@@ -30,25 +32,21 @@ static int64_t _on_ready_write(const struct iwn_poller_task *t, uint32_t events)
 static int64_t _on_ready_read(const struct iwn_poller_task *t, uint32_t events) {
   char buf[sizeof("test")];
   int rci = read(t->fd, buf, sizeof(buf));
-  IWN_ASSERT(rci == sizeof(buf));
-  IWN_ASSERT(strncmp(buf, "test", sizeof(buf)) == 0);
+  IW_TEST_ASSERT_EQUAL(rci, (int) sizeof(buf));
+  IW_TEST_ASSERT_EQUAL(strncmp(buf, "test", sizeof(buf)), 0);
   rci = read(t->fd, buf, sizeof(buf));
-  IWN_ASSERT(rci == -1);
-  IWN_ASSERT(errno == EAGAIN);
+  IW_TEST_ASSERT_EQUAL(rci, -1);
+  IW_TEST_ASSERT_EQUAL(errno, EAGAIN);
   iwn_poller_shutdown_request(poller);
   return 0;
 }
 
-int main(int argc, char *argv[]) {
+static void test_pipe_et(void) {
   iwrc rc = 0;
-  iwlog_init();
 
-  int rci = pipe(fds);
-  IWN_ASSERT_FATAL(rci == 0);
-
+  IW_TEST_ASSERT_EQUAL_FATAL(pipe(fds), 0);
   RCC(rc, finish, _make_non_blocking(fds[0]));
   RCC(rc, finish, _make_non_blocking(fds[1]));
-
   RCC(rc, finish, iwn_poller_create(2, 1, &poller));
 
   RCC(rc, finish, iwn_poller_add(&(struct iwn_poller_task) {
@@ -71,7 +69,23 @@ int main(int argc, char *argv[]) {
   iwn_poller_poll(poller);
 
 finish:
+  IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
+}
+
+static void suite_cleanup(void) {
   iwn_poller_destroy(&poller);
-  IWN_ASSERT(rc == 0);
-  return iwn_assertions_failed > 0 ? 1 : 0;
+  if (fds[0] > -1) {
+    close(fds[0]);
+  }
+  if (fds[1] > -1) {
+    close(fds[1]);
+  }
+}
+
+int main(int argc, char *argv[]) {
+  static const struct iw_test_case cases[] = {
+    IW_TEST_CASE(test_pipe_et),
+  };
+  iwlog_init();
+  return iw_test_run(argc, argv, IW_TEST_SUITE("poller_pipe", cases, 0, suite_cleanup));
 }
