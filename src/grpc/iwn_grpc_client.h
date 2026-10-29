@@ -24,6 +24,10 @@ struct iwn_grpc_client_ctx {
 struct iwn_grpc_req_spec {
   struct iwn_grpc_client *client; ///< gRPC Client connection. Required.
   const char *path;               ///< Service path. Required.
+  /// Optional request authorization header value.
+  /// If not set the client authorization (`iwn_grpc_client_spec#authorization`) is used.
+  /// The value is copied before `iwn_grpc_client_request_open()` returns.
+  const char *authorization;
   bool  client_streaming;         ///< Client streaming is allowed
   void *user_data;
 

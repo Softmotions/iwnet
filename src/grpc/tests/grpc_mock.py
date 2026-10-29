@@ -20,6 +20,7 @@ def serve(
     pause_after_first: float = 0.0,
     grpc_status: int = 0,
     grpc_message: str = "",
+    expect_authorization: str = None,
 ):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -32,6 +33,7 @@ def serve(
     h2.initiate_connection()
     conn_sock.sendall(h2.data_to_send())
     streams = {}
+    rejected = set()
     sent = False
     try:
         while True:
@@ -43,6 +45,11 @@ def serve(
                 if isinstance(ev, RequestReceived):
                     streams[ev.stream_id] = b''
                     print('REQUEST', ev.stream_id, ev.headers, flush=True)
+                    if expect_authorization is not None:
+                        got = dict(ev.headers).get('authorization')
+                        if got != expect_authorization:
+                            print(f'AUTHORIZATION_MISMATCH {got!r}', flush=True)
+                            rejected.add(ev.stream_id)
                 elif isinstance(ev, DataReceived):
                     streams[ev.stream_id] = streams.get(ev.stream_id, b'') + ev.data
                     h2.acknowledge_received_data(ev.flow_controlled_length, ev.stream_id)
@@ -50,15 +57,19 @@ def serve(
                 elif isinstance(ev, StreamEnded):
                     sid = ev.stream_id
                     print('STREAM_ENDED', sid, flush=True)
+                    if sid in rejected:
+                        status, message = 16, 'unauthenticated'
+                    else:
+                        status, message = grpc_status, grpc_message
                     h2.send_headers(sid, [(':status', '200'), ('content-type', 'application/grpc')], end_stream=False)
-                    if grpc_status == 0 and mode == 'unary':
+                    if status == 0 and mode == 'unary':
                         body = grpc_frame(messages[0])
                         if split and len(body) > 2:
                             h2.send_data(sid, body[:2], end_stream=False)
                             h2.send_data(sid, body[2:], end_stream=False)
                         else:
                             h2.send_data(sid, body, end_stream=False)
-                    elif grpc_status != 0:
+                    elif status != 0:
                         pass
                     else:
                         # Send first message split across frames and then two messages packed in one DATA frame.
@@ -93,7 +104,7 @@ def serve(
                                 h2.send_data(sid, b, end_stream=False)
                     h2.send_headers(
                         sid,
-                        [('grpc-status', str(grpc_status)), ('grpc-message', grpc_message)],
+                        [('grpc-status', str(status)), ('grpc-message', message)],
                         end_stream=True,
                     )
                     conn_sock.sendall(h2.data_to_send())
@@ -136,6 +147,8 @@ if __name__ == '__main__':
     ap.add_argument('--pause-after-first', type=float, default=0.0)
     ap.add_argument('--grpc-status', type=int, default=0)
     ap.add_argument('--grpc-message', default='')
+    ap.add_argument('--expect-authorization', default=None)
     ns = ap.parse_args()
     msgs = [bytes.fromhex(x) for x in ns.message] or [bytes.fromhex('0a026f6b')]
-    serve(ns.port, ns.mode, msgs, ns.split, ns.pause_after_first, ns.grpc_status, ns.grpc_message)
+    serve(ns.port, ns.mode, msgs, ns.split, ns.pause_after_first, ns.grpc_status, ns.grpc_message,
+          ns.expect_authorization)

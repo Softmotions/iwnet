@@ -10,6 +10,7 @@ src/grpc/tests/grpc_test_client4.c   Split/packed gRPC frame parsing
 src/grpc/tests/grpc_test_client5.c   gRPC error status propagation
 src/grpc/tests/grpc_test_client6.c   Request cancellation
 src/grpc/tests/grpc_test_client7.c   Concurrent requests
+grpc_test_client8.c   Per-request authorization header
 ```
 
 The accompanying Python test servers are:

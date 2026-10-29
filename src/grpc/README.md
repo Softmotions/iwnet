@@ -95,6 +95,34 @@ void (*on_message)(struct iwn_grpc_req_message*, bool *out_continue);
 
 The client does not decode protobuf messages.
 
+## Authorization
+
+The `authorization` HTTP/2 header can be set for the whole client:
+
+```c
+struct iwn_grpc_client_spec spec = {
+  .url = "grpc://api.example.com",
+  .poller = poller,
+  .authorization = "Bearer <token>",
+  ...
+};
+```
+
+or per request, overriding the client value:
+
+```c
+struct iwn_grpc_req_spec spec = {
+  .client = client,
+  .path = "/grpc.example.Service/Method",
+  .authorization = "Bearer <token>",
+  ...
+};
+```
+
+Per-request authorization is used when the credential is obtained after the client connection is established
+(for example by an authentication RPC) or when it is renewed during the session lifetime. The value is copied before
+`iwn_grpc_client_request_open()` returns.
+
 ## Streaming messages
 
 Enable client-side streaming with:

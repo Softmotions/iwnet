@@ -1691,6 +1691,9 @@ iwrc iwn_grpc_client_request_open(
     RCB(finish, req->output_data_encoding = iwpool_strdup2(pool, encoding));
   }
   RCB(finish, req->spec.path = iwpool_strdup2(pool, spec_->path));
+  if (spec_->authorization) {
+    RCB(finish, req->spec.authorization = iwpool_strdup2(pool, spec_->authorization));
+  }
 
   if (msg) {
     RCC(rc, finish, _msg_slot_create(req, msg, encoding != 0, &req->mslots));
@@ -1728,7 +1731,9 @@ iwrc iwn_grpc_client_request_open(
     _hive_nv_set(&headers[n++], "grpc-encoding", "identity", 0);
   }
   _hive_nv_set(&headers[n++], "user-agent", client->spec.user_agent, 0);
-  if (client->spec.authorization) {
+  if (req->spec.authorization) {
+    _hive_nv_set(&headers[n++], "authorization", req->spec.authorization, HIVE_NV_FLAG_NO_INDEX);
+  } else if (client->spec.authorization) {
     _hive_nv_set(&headers[n++], "authorization", client->spec.authorization, HIVE_NV_FLAG_NO_INDEX);
   }
 

@@ -241,6 +241,10 @@ run_mock_tests() {
   # Request cancellation.
   run_mock_test grpc_test_client6 "$(mock_port 3)" \
     --mode server-streaming --message 0a0141 --pause-after-first 0.5
+
+  # Per-request authorization header.
+  run_mock_test grpc_test_client8 "$(mock_port 4)" \
+    --mode unary --message 0a0141 --expect-authorization "Bearer per-request-token"
 }
 
 run_mock_test() {

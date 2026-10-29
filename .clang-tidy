@@ -24,3 +24,4 @@ Checks:    >
   -bugprone-assignment-in-if-condition,
   -bugprone-signal-handler,
   -bugprone-switch-missing-default-case,
+  -bugprone-suspicious-string-compare,
