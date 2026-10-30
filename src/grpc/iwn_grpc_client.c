@@ -113,6 +113,8 @@ struct iwn_grpc_client {
   unsigned flags;
 
   bool io_wouldblock;
+  bool io_progress;     ///< Last send round wrote at least one byte into the transport.
+  bool send_blocked;    ///< Request data sources are blocked by the HTTP/2 flow-control window.
 
   volatile iwrc rc;
   volatile bool goaway_submitted;
@@ -1021,7 +1023,9 @@ static ssize_t _hcb_io_send(
   if (rci == 0) {
     client->io_wouldblock = true;
   }
-
+  if (total > 0) {
+    client->io_progress = true;
+  }
   return total;
 }
 
@@ -1055,8 +1059,14 @@ finish:
 }
 
 static bool _client_want_write(struct iwn_grpc_client *client) {
+  // Queued wire output (DATA/HEADERS/RST/GOAWAY and partial writes)
+  // must always be flushed.
   if (hive_session_want_write(client->sess, 1)) {
     return true;
+  }
+  if (client->send_blocked) {
+    // Remaining request messages wait for a WINDOW_UPDATE/SETTINGS frame.
+    return false;
   }
   struct iwhmap_iter it;
   iwhmap_iter_init(client->requests_map, &it);
@@ -1069,6 +1079,37 @@ static bool _client_want_write(struct iwn_grpc_client *client) {
   return false;
 }
 
+/// Runs a bounded number of send rounds.
+/// Stops early when a round produces no frames and no framed output is left:
+/// the remaining request data sources are blocked by the HTTP/2 flow-control
+/// window. This avoids busy spinning both inside this callback and in the
+/// poller when write interest would otherwise be rearmed.
+static int _client_send_rounds(struct iwn_grpc_client *client) {
+  int hrc = HIVE_OK;
+
+  for (int rounds = 0; rounds < 512 && hrc == HIVE_OK && !client->io_wouldblock; ++rounds) {
+    if (!_client_want_write(client)) {
+      break;
+    }
+
+    client->io_progress = false;
+    hrc = hive_session_send(client->sess);
+
+    if (hrc != HIVE_OK || client->io_progress || client->io_wouldblock) {
+      continue;
+    }
+
+    // No frames were emitted. If nothing is queued for the wire either,
+    // the data sources are blocked by the peer flow-control window.
+    if (!hive_session_want_write(client->sess, 1)) {
+      client->send_blocked = true;
+    }
+    break;
+  }
+
+  return hrc;
+}
+
 static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
   struct iwn_grpc_client *client = user_data;
   if (IW_UNLIKELY(client->pa != pa)) {
@@ -1078,6 +1119,7 @@ static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void
   iwrc rc = 0;
   int64_t ret = 0;
   int hrc = HIVE_OK;
+  bool input_consumed = false;
   uint8_t buf[8192];
   struct hive_session *sess = client->sess;
 
@@ -1091,28 +1133,34 @@ static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void
   client->in_loop = true;
   client->io_wouldblock = false;
 
-  while (hrc == HIVE_OK && !client->io_wouldblock && _client_want_write(client)) {
-    hrc = hive_session_send(sess);
-  }
+  hrc = _client_send_rounds(client);
   if (!_hive_rc_is_ok_for_io(hrc, sess)) {
     goto unlock;
   }
 
   hrc = HIVE_OK;
   while (iwxstr_len(client->input_buf) && hive_session_want_read(sess)) {
-    uint8_t *buf = (void*) iwxstr_ptr(client->input_buf);
-    ssize_t consumed = hive_session_recv(sess, buf, iwxstr_len(client->input_buf));
+    size_t blen = iwxstr_len(client->input_buf);
+    uint8_t *p = (void*) iwxstr_ptr(client->input_buf);
+    ssize_t consumed = hive_session_recv(sess, p, blen);
     if (consumed < 0) {
       ret = -1;
       hrc = hive_session_last_error(sess);
       goto unlock;
     }
+    if (consumed > 0) {
+      input_consumed = true;
+    }
     iwxstr_shift(client->input_buf, consumed);
+    if ((size_t) consumed < blen) {
+      // Outbound queue is full; process the rest once it is drained.
+      break;
+    }
   }
 
-  // Drain input fd buffer completelly in EPOLLET polling mode
+  // Drain the socket while it is readable (edge triggered poller).
   client->io_wouldblock = false;
-  while (hive_session_want_read(sess)) {
+  while (!iwxstr_len(client->input_buf) && hive_session_want_read(sess)) {
     ssize_t n = pa->read(pa, buf, sizeof(buf));
     if (n < 0) {
       if (errno == EINTR) {
@@ -1137,34 +1185,24 @@ static int64_t _on_poller_adapter_event_impl(struct iwn_poller_adapter *pa, void
       ret = -1;
       hrc = hive_session_last_error(sess);
       goto unlock;
-    } else if (consumed < n) {
+    }
+    if (consumed > 0) {
+      input_consumed = true;
+    }
+    if (consumed < n) {
+      // Preserve ordering: consume the buffered remainder before reading more.
       RCC(rc, unlock, iwxstr_cat(client->input_buf, buf + consumed, n - consumed));
+      break;
     }
   }
 
-  // Drain input fd buffer completelly in EPOLLET polling mode
-  client->io_wouldblock = false;
-  while (!client->io_wouldblock) {
-    ssize_t n = pa->read(pa, buf, sizeof(buf));
-    if (n < 0) {
-      if (errno == EINTR) {
-        continue;
-      } else if (errno == EWOULDBLOCK || errno == EAGAIN) {
-        client->io_wouldblock = true;
-        break;
-      } else {
-        rc = iwrc_set_errno(IW_ERROR_IO_ERRNO, errno);
-        ret = -1;
-        goto unlock;
-      }
-    } else if (n == 0) {
-      if (!client->rc) {
-        client->rc = GRPC_ERROR_UNAVAILABLE;
-      }
-      ret = -1;
-      break;
+  if (client->send_blocked && input_consumed) {
+    // The peer may have sent WINDOW_UPDATE/SETTINGS that unblock request data.
+    client->send_blocked = false;
+    hrc = _client_send_rounds(client);
+    if (!_hive_rc_is_ok_for_io(hrc, sess)) {
+      goto unlock;
     }
-    RCC(rc, unlock, iwxstr_cat(client->input_buf, buf, n));
   }
 
   if (hive_session_want_read(sess)) {
@@ -1743,6 +1781,9 @@ iwrc iwn_grpc_client_request_open(
     rc = iwhmap_put_u32(client->requests_map, req->stream_id, req);
     if (rc) {
       hive_submit_rst_stream(client->sess, req->stream_id, HIVE_H2_CANCEL);
+    } else {
+      // A new request may be able to send even if data sources were blocked before.
+      client->send_blocked = false;
     }
   }
   pthread_mutex_unlock(&client->mtx);
@@ -1853,6 +1894,8 @@ iwrc iwn_grpc_client_stream_next_message(
 
   req->client_streaming = !stop_streaming;
   req->half_close_pending = stop_streaming;
+  // Allow one more send attempt for the newly queued message.
+  client->send_blocked = false;
 
 finish:
   pthread_mutex_unlock(&client->mtx);

@@ -9,6 +9,7 @@ Works on Linux, macOS, FreeBSD
 * Ultra fast HTTP Reverse Proxy ([iwn_http_server.h](./src/http/iwn_http_server.h))
 * Websocket client and server ([iwn_ws_server.h](./src/ws/iwn_ws_server.h), [iwn_ws_client.h](./src/ws/iwn_ws_client.h))
 * Low level gRPC client with no dependency on `libgrpc++` or other grpc staff. [iwn_grpc_client.h](./src/grpc/iwn_grpc_client.h)
+* Low level gRPC server with no dependency on `libgrpc++` or other grpc staff. [iwn_grpc_server.h](./src/grpc/iwn_grpc_server.h)
 * Poller reactor ([iwn_poller.h](./src/poller/iwn_poller.h))
 * SSL Layer is based on BearSSL ([iwn_brssl_poller_adapter.h](./src/ssl/iwn_brssl_poller_adapter.h))
 * Manager of child processes ([iwn_proc.h](./src/poller/iwn_proc.h))

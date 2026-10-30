@@ -8,6 +8,8 @@ cc {
     grpc_test_client6.c
     grpc_test_client7.c
     grpc_test_client8.c
+    grpc_test_server1.c
+    grpc_test_flowcontrol.c
   }
   ${CFLAGS_TESTS}
 }

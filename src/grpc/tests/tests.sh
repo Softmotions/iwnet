@@ -116,6 +116,16 @@ for _bin in grpc_test_client1 grpc_test_client2 grpc_test_client3 grpc_test_clie
   fi
 done
 
+if [ -x "$BIN_DIR/grpc_test_server1" ]; then
+  echo "Running grpc_test_server1 (in-process server)..."
+  "$BIN_DIR/grpc_test_server1"
+fi
+
+if [ -x "$BIN_DIR/grpc_test_flowcontrol" ]; then
+  echo "Running grpc_test_flowcontrol (client flow control)..."
+  "$BIN_DIR/grpc_test_flowcontrol"
+fi
+
 if [ -f "$SCRIPT_DIR/grpc_test_server1.py" ]; then
   SERVER_DIR="$SCRIPT_DIR"
 else

@@ -4,6 +4,7 @@ set {
   }
   ..${SOURCES}
   grpc/iwn_grpc_client.c
+  grpc/iwn_grpc_server.c
   grpc/iwn_grpc.c
 }
 
@@ -14,6 +15,7 @@ set {
   ..${PUB_HDRS}
   grpc/iwn_grpc.h
   grpc/iwn_grpc_client.h
+  grpc/iwn_grpc_server.h
 }
 
 set {

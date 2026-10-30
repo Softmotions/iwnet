@@ -1,4 +1,6 @@
 2026-10-29	Anton Adamansky  <adamansky@gmail.com>  [v1.4.2-dev]
+	* grpc: Fixed busy-spin on exhausted HTTP/2 flow-control window, fixed client receive-path ordering, and added a flow-control regression test.
+	* grpc: Initial implementation of `iwn_grpc_server`
 	* grpc: Added per-invocation authorization header option.
 
 2026-10-22	Anton Adamansky  <adamansky@gmail.com>  [v1.4.1]
