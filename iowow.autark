@@ -3,7 +3,7 @@ option { IOWOW_URL                IOWOW external project sources URL }
 if { !defined { IOWOW_URL } 
   set {
     IOWOW_URL
-    https://github.com/Softmotions/iowow/archive/refs/tags/v1.7.1.zip
+    https://github.com/Softmotions/iowow/archive/refs/tags/v1.7.2.zip
   }
 }
 
