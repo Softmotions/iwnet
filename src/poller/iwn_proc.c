@@ -19,7 +19,9 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <stddef.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef __linux__
 #include <sys/prctl.h>
@@ -38,7 +40,12 @@ extern char **environ;
 #define FDS_DATAOUT 3
 #define FDS_DATAIN  4
 
+/// Interval of the process group drain checks.
+#define PROC_PG_POLL_MS 50
+
 struct proc {
+  // The leading fields must match `struct iwn_proc_ctx`: the callbacks receive
+  // the `struct proc` instance cast to `const struct iwn_proc_ctx*`.
   pid_t pid;
   int   wstatus;
   void *user_data;
@@ -55,18 +62,36 @@ struct proc {
 
   int fds[5]; // {stdout, stderr, stdin, datain, dataout}
   pthread_mutex_t mtx;
+  pid_t pgid; ///< Process group id of the child, `-1` if the group is not managed
   bool exited;
 };
 
+static_assert(offsetof(struct proc, pid) == offsetof(struct iwn_proc_ctx, pid),
+              "struct proc must extend struct iwn_proc_ctx");
+static_assert(offsetof(struct proc, wstatus) == offsetof(struct iwn_proc_ctx, wstatus),
+              "struct proc must extend struct iwn_proc_ctx");
+static_assert(offsetof(struct proc, user_data) == offsetof(struct iwn_proc_ctx, user_data),
+              "struct proc must extend struct iwn_proc_ctx");
+
 static struct  {
-  struct iwhmap  *map; ///< Proc: pid -> struct *_proc
-  struct iwstw   *stw; ///< Child process wait worker
+  struct iwhmap  *map;  ///< Proc: pid -> struct *_proc
+  struct iwstw   *stw;  ///< Child process wait worker
+  struct iwulist  pg_drain; ///< struct _pg_drain_entry: released processes with a running group
+  pthread_t       pg_reaper;
+  bool            pg_reaper_created;
+  bool            pg_reaper_running;
   pthread_mutex_t mtx;
   pthread_mutex_t spawn_mtx;
   pthread_cond_t  cond;
 } cc = {
   .mtx = PTHREAD_MUTEX_INITIALIZER,
   .spawn_mtx = PTHREAD_MUTEX_INITIALIZER,
+};
+
+/// A released managed process whose process group is still running.
+struct _pg_drain_entry {
+  pid_t pid;  ///< Child leader pid
+  pid_t pgid; ///< Process group id
 };
 
 static void _proc_destroy(struct proc *proc) {
@@ -96,12 +121,18 @@ static iwrc _init_lk(void) {
   if (__sync_bool_compare_and_swap(&init, false, true)) {
     pthread_condattr_t cattr;
     pthread_condattr_init(&cattr);
-#ifndef __APPLE__
+#if defined(CLOCK_MONOTONIC) && !defined(__APPLE__)
+    // The condition variable clock must match the clock used by
+    // `iw_cond_timed_wait_ms()` to compute wait deadlines: it uses `CLOCK_MONOTONIC`
+    // on platforms providing `pthread_condattr_setclock()` (iowow >= 1.7.3) and the
+    // wall clock otherwise. Apple defines `CLOCK_MONOTONIC` but does not provide
+    // `pthread_condattr_setclock()`, so both sides use `CLOCK_REALTIME` there.
     pthread_condattr_setclock(&cattr, CLOCK_MONOTONIC);
 #endif
     pthread_cond_init(&cc.cond, &cattr);
     pthread_condattr_destroy(&cattr);
     RCB(finish, cc.map = iwhmap_create_u32(_kv_free));
+    RCC(rc, finish, iwulist_init(&cc.pg_drain, 8, sizeof(struct _pg_drain_entry)));
     rc = iwstw_start("proc_stw", 0, false, &cc.stw);
   }
 finish:
@@ -136,6 +167,85 @@ static struct proc* _proc_ref(pid_t pid) {
   return proc;
 }
 
+/// @return `true` if the process group `pgid` is still running and can be signalled.
+static bool _proc_pg_exists(pid_t pgid) {
+  // A process group id is reusable only when the group is empty, so `EPERM` (the group is
+  // owned by another user) means that our group is already gone.
+  return kill(-pgid, 0) == 0;
+}
+
+/// Removes the process from the registry of the managed processes.
+/// Must be called with `cc.mtx` held.
+static void _proc_remove_lk(pid_t pid) {
+  if (cc.map) {
+    iwhmap_remove_u32(cc.map, pid);
+  }
+  pthread_cond_broadcast(&cc.cond);
+}
+
+/// Reaper of the process groups which outlived their leaders: the process remains
+/// registered until its group is empty, so the whole process tree can be signalled
+/// and the wait operations complete only when the tree is finished.
+static void* _proc_pg_reaper(void *arg) {
+  iwp_set_current_thread_name("proc_pg_reaper");
+  pthread_mutex_lock(&cc.mtx);
+  while (cc.map) {
+    for (int i = iwulist_length(&cc.pg_drain) - 1; i >= 0; --i) {
+      struct _pg_drain_entry *e = iwulist_get(&cc.pg_drain, i);
+      if (_proc_pg_exists(e->pgid)) {
+        continue;
+      }
+      pid_t pid = e->pid;
+      iwulist_remove(&cc.pg_drain, i);
+      _proc_remove_lk(pid);
+    }
+    if (!iwulist_length(&cc.pg_drain)) {
+      break;
+    }
+    bool bv = false;
+    iw_cond_timed_wait_ms(&cc.cond, &cc.mtx, PROC_PG_POLL_MS, &bv);
+  }
+  cc.pg_reaper_running = false;
+  pthread_mutex_unlock(&cc.mtx);
+  return 0;
+}
+
+/// Adds the released process to the list of the process groups awaiting drain and
+/// starts the group reaper if it is not running.
+/// Must be called with `cc.mtx` held.
+static void _proc_pg_drain_add_lk(pid_t pid, pid_t pgid) {
+  struct _pg_drain_entry e = { .pid = pid, .pgid = pgid };
+
+  iwrc rc = iwulist_push(&cc.pg_drain, &e);
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    _proc_remove_lk(pid);
+    return;
+  }
+  if (cc.pg_reaper_running) {
+    pthread_cond_broadcast(&cc.cond);
+    return;
+  }
+  if (cc.pg_reaper_created) {
+    // The previous reaper has already finished (it resets `pg_reaper_running` while
+    // holding `cc.mtx`), release its resources before starting a new one.
+    pthread_join(cc.pg_reaper, 0);
+    cc.pg_reaper_created = false;
+  }
+  cc.pg_reaper_running = true;
+  pthread_cond_broadcast(&cc.cond);
+  int rci = pthread_create(&cc.pg_reaper, 0, _proc_pg_reaper, 0);
+  if (rci) {
+    cc.pg_reaper_running = false;
+    iwlog_ecode_error2(iwrc_set_errno(IW_ERROR_THREADING_ERRNO, rci),
+                       "proc | Failed to start the process group reaper");
+    iwulist_remove(&cc.pg_drain, iwulist_length(&cc.pg_drain) - 1);
+    _proc_remove_lk(pid);
+    return;
+  }
+  cc.pg_reaper_created = true;
+}
+
 static void _proc_unref(pid_t pid, int wstatus) {
   struct proc *proc = 0;
   pthread_mutex_lock(&cc.mtx);
@@ -147,11 +257,13 @@ static void _proc_unref(pid_t pid, int wstatus) {
   proc->refs--;
   if (wstatus != -1) {
     proc->wstatus = wstatus;
+    pthread_cond_broadcast(&cc.cond); // Notify `iwn_proc_wait_fast()` waiters
   }
   if (proc->refs > 0) {
     pthread_mutex_unlock(&cc.mtx);
     return;
   }
+  const pid_t pgid = proc->pgid;
   pthread_mutex_unlock(&cc.mtx);
 
   // Now shutdown proc instance
@@ -167,10 +279,17 @@ static void _proc_unref(pid_t pid, int wstatus) {
   }
 
   pthread_mutex_lock(&cc.mtx);
-  if (cc.map) {
-    iwhmap_remove_u32(cc.map, pid);
+  if (!cc.map) { // The module has been disposed
+    pthread_mutex_unlock(&cc.mtx);
+    return;
   }
-  pthread_cond_broadcast(&cc.cond);
+  if (pgid > 0 && _proc_pg_exists(pgid)) {
+    // The child leader is reaped, but its process group is still running: the process
+    // remains registered until the group is empty.
+    _proc_pg_drain_add_lk(pid, pgid);
+  } else {
+    _proc_remove_lk(pid);
+  }
   pthread_mutex_unlock(&cc.mtx);
 }
 
@@ -208,6 +327,7 @@ static struct proc* _proc_create(const struct iwn_proc_spec *spec) {
   pthread_mutex_init(&proc->mtx, 0);
   proc->pool = pool;
   proc->pid = -1;
+  proc->pgid = -1;
   proc->wstatus = -1;
   proc->user_data = spec->user_data;
   memcpy(&proc->spec, spec, sizeof(*spec));
@@ -666,33 +786,71 @@ iwrc iwn_proc_wait_all_timeout(long timeout_ms, bool *out_timeout) {
 }
 
 void iwn_proc_kill(pid_t pid, int signum) {
+  pid_t pgid = -1;
+
+  pthread_mutex_lock(&cc.mtx);
+  if (cc.map) {
+    struct proc *proc = iwhmap_get_u32(cc.map, pid);
+    if (proc) {
+      pgid = proc->pgid;
+    }
+  }
+  pthread_mutex_unlock(&cc.mtx);
+
+  if (pgid > 0) {
+    // Signal the whole process group of the managed process.
+    // The process is removed from the registry when its group is empty, so the group
+    // id cannot be reused by a foreign process group here.
+    if (_proc_pg_exists(pgid)) {
+      kill(-pgid, signum);
+    }
+    return;
+  }
   kill(pid, signum);
 }
 
+/// Kill target of ::iwn_proc_kill_all().
+struct _kill_target {
+  pid_t pid;
+  pid_t pgid;
+};
+
 void iwn_proc_kill_all(int signum) {
+  struct _kill_target *targets = 0;
+
   pthread_mutex_lock(&cc.mtx);
   uint32_t len = cc.map ? iwhmap_count(cc.map) : 0;
   if (len == 0) {
     pthread_mutex_unlock(&cc.mtx);
     return;
   }
-  int *pids = malloc((len + 1) * sizeof(int));
-  if (!pids) {
+  targets = malloc((len + 1) * sizeof(*targets));
+  if (!targets) {
     pthread_mutex_unlock(&cc.mtx);
     return;
   }
   struct iwhmap_iter it;
   iwhmap_iter_init(cc.map, &it);
-  pids[len] = -1;
+  targets[len].pid = -1;
   while (iwhmap_iter_next(&it) && len > 0) {
-    pids[--len] = (intptr_t) it.key;
+    pid_t pid = (intptr_t) it.key;
+    struct proc *proc = iwhmap_get_u32(cc.map, pid);
+    --len;
+    targets[len].pid = pid;
+    targets[len].pgid = proc ? proc->pgid : -1;
   }
   pthread_mutex_unlock(&cc.mtx);
-  len = 0;
-  while (pids[len] != -1) {
-    kill(pids[len++], signum);
+
+  for (int i = 0; targets[i].pid != -1; ++i) {
+    if (targets[i].pgid > 0) {
+      if (_proc_pg_exists(targets[i].pgid)) {
+        kill(-targets[i].pgid, signum);
+      }
+    } else {
+      kill(targets[i].pid, signum);
+    }
   }
-  free(pids);
+  free(targets);
 }
 
 struct ktask {
@@ -792,6 +950,7 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
   if (pid > 0) { // Parent
     *out_pid = pid;
     proc->pid = pid;
+    proc->pgid = spec->kill_process_group ? pid : -1;
 
     rc = _proc_add(proc);
     if (!rc) {
@@ -915,6 +1074,14 @@ iwrc iwn_proc_spawn(const struct iwn_proc_spec *spec, pid_t *out_pid) {
     }
 #endif
 
+    if (spec->kill_process_group) {
+      // The child becomes a leader of its own session and process group, thus the whole
+      // process tree can be signalled by the group id which is equal to the child pid.
+      if (setsid() == -1 && setpgid(0, 0) == -1) {
+        _exit(1);
+      }
+    }
+
     if (spec->on_fork_child) {
       struct iwn_proc_fork_child_ctx fcc = {
         .ctx = (void*) proc,
@@ -1015,8 +1182,16 @@ bool iwn_proc_dispose2(int signal, long timeout_ms) {
   pthread_mutex_lock(&cc.mtx);
   map = cc.map;
   cc.map = 0;
+  bool pg_reaper_created = cc.pg_reaper_created;
   pthread_cond_broadcast(&cc.cond);
   pthread_mutex_unlock(&cc.mtx);
+
+  if (pg_reaper_created) {
+    // The reaper exits as soon as it sees that the module has been disposed.
+    pthread_join(cc.pg_reaper, 0);
+    cc.pg_reaper_created = false;
+  }
+  iwulist_destroy_keep(&cc.pg_drain);
   iwstw_shutdown(&cc.stw, false);
   iwhmap_destroy(map);
   pthread_mutex_destroy(&cc.mtx);
