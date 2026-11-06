@@ -1,3 +1,18 @@
+2026-11-06	Anton Adamansky  <adamansky@gmail.com>  [v1.6.0]
+	* iwn_http_server: Added optional HTTP/2 server transport (`ENABLE_HTTP2`, based on libhive).
+	  HTTP/1.1 and HTTP/2 clients are served transparently on the same socket, HTTP/2 is
+	  negotiated by TLS ALPN (`h2`) or by the HTTP/2 connection preface. The transport lives in
+	  the separate `src/http2` module: see `iwn_http_server_spec::http2` and
+	  `iwn_http_request_is_http2()`. `iwn_wf` works with both transports unchanged
+	  (`iwn_wf_server_spec::http2`).
+	* iwn_wf: Fixed request path length after percent-decoding, `+` handling in request paths,
+	  malformed `%XX` escapes, unsupported HTTP method detection, `multipart/form-data` boundary
+	  parameter matching, uninitialized regexp submatch list, `NULL` dereference in
+	  `iwn_wf_request_submatch_last()`, a lock leak in `iwn_wf_session_put()` error path and the
+	  in-memory session store `clear` operation which did not drop stored data.
+	* Tests: Added in-process `iwn_wf` test coverage (route matching, request/query/header parsing,
+	  sessions, in-memory session store) and HTTP/2 runs of the HTTP server test cases.
+
 2026-11-04	Anton Adamansky  <adamansky@gmail.com>  [v1.5.0]
 	* iwn_proc: Added `iwn_proc_spec::kill_process_group`: the child is started as a leader of its own
 	  session and process group, and all the process operations cover the whole process tree:

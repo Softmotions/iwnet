@@ -1,0 +1,15 @@
+set {
+  parent {
+    LDFLAGS_PKGCONF
+  }
+  ..${LDFLAGS_PKGCONF}
+ -lhive
+}
+
+set {
+  parent {
+    SOURCES
+  }
+  ..${SOURCES}
+  http2/iwn_http2_server.c
+}

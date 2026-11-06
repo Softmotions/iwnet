@@ -9,6 +9,10 @@
 #include "poller/iwn_direct_poller_adapter.h"
 #include "ssl/iwn_brssl_poller_adapter.h"
 
+#ifdef IWN_HTTP2
+#include "http2/iwn_http2_server.h"
+#endif
+
 #include <iowow/iwlog.h>
 #include <iowow/iwutils.h>
 #include <iowow/iwpool.h>
@@ -134,6 +138,11 @@ struct client {
   void *_wf_data;
   void  (*_wf_on_request_dispose)(struct iwn_http_req*);
   void  (*_wf_on_response_headers_write)(struct iwn_http_req*);
+
+  // Alternative transport (HTTP/2) connection context
+  void   *_transport_data;
+  void    (*_transport_dispose)(struct iwn_http_req*);
+  int64_t _transport_events; ///< Poller events requested by the transport
 
   atomic_int refs;
   int     fd;
@@ -553,6 +562,11 @@ static void _proxy_destroy(struct client *client) {
 
 static void _client_destroy(struct client *client) {
   if (client) {
+    if (client->_transport_dispose) {
+      void (*dispose)(struct iwn_http_req*) = client->_transport_dispose;
+      client->_transport_dispose = 0;
+      dispose(&client->request);
+    }
     if (client->injected_poller_evh == _proxy_client_on_ready) {
       _proxy_destroy(client);
     }
@@ -1314,28 +1328,43 @@ finish:
 }
 
 iwrc iwn_http_proxy_is_error(struct iwn_http_req *req) {
+  if (IW_UNLIKELY(req->impl)) {
+    return 0;
+  }
   struct client *client = (void*) req;
   return client->proxy.rc;
 }
 
 bool iwn_http_proxy_is_enabled(struct iwn_http_req *req) {
+  if (IW_UNLIKELY(req->impl)) {
+    return false;
+  }
   struct client *client = (void*) req;
   return client->proxy.url_raw != 0;
 }
 
 bool iwn_http_proxy_timeout_connect_set(struct iwn_http_req *req, uint32_t timeout_sec) {
+  if (IW_UNLIKELY(req->impl)) {
+    return false;
+  }
   struct client *client = (void*) req;
   client->proxy.timeout_connect_sec = timeout_sec;
   return true;
 }
 
 bool iwn_http_proxy_timeout_data_set(struct iwn_http_req *req, uint32_t timeout_sec) {
+  if (IW_UNLIKELY(req->impl)) {
+    return false;
+  }
   struct client *client = (void*) req;
   client->proxy.timeout_data_sec = timeout_sec;
   return true;
 }
 
 bool iwn_http_proxy_channel_buf_max_size_set(struct iwn_http_req *req, size_t max_size) {
+  if (IW_UNLIKELY(req->impl)) {
+    return false;
+  }
   struct client *client = (void*) req;
   client->proxy.channel_buf_max_size = max_size;
   return true;
@@ -1346,6 +1375,9 @@ bool iwn_http_proxy_header_set(
   const char          *header_name,
   const char          *header_value,
   ssize_t              header_value_len) {
+  if (IW_UNLIKELY(req->impl)) {
+    return false;
+  }
   struct client *client = (void*) req;
   size_t header_name_len = strlen(header_name);
   char *hname = iwpool_strndup2(client->pool, header_name, header_name_len);
@@ -1363,6 +1395,9 @@ bool iwn_http_proxy_header_set(
 }
 
 bool iwn_http_proxy_url_set(struct iwn_http_req *req, const char *url, ssize_t url_len) {
+  if (IW_UNLIKELY(req->impl)) {
+    return false;
+  }
   iwrc rc = 0;
   if (!url || !req) {
     return false;
@@ -1483,6 +1518,51 @@ static struct iwn_val _token_get_string(struct client *client, int token_type) {
   return ret;
 }
 
+#ifdef IWN_HTTP2
+
+// HTTP/2 connection preface (RFC 9113 §3.3)
+#define IWN_H2_PREFACE     "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
+#define IWN_H2_PREFACE_LEN (sizeof(IWN_H2_PREFACE) - 1)
+
+/// Hands the connection over to the HTTP/2 transport.
+/// `buf`/`len` are the already read bytes following the connection preface.
+static bool _client_http2_attach(struct client *client, const uint8_t *buf, size_t len) {
+  if (!client->server->spec.http2) {
+    return false;
+  }
+  struct iwn_http_req *request = &client->request;
+  if (!iwn_http2_conn_attach_preface(request, buf, len)) {
+    return false;
+  }
+  client->state = HTTP_SESSION_NOP;
+  client->_transport_events = client->injected_poller_evh(request->poller_adapter, request, IWN_POLLIN);
+  if (client->_transport_events < 0) {
+    client->flags |= HTTP_END_SESSION;
+  }
+  return true;
+}
+
+/// Probes the unparsed connection data for the HTTP/2 connection preface.
+/// @return 1 if the connection was handed over to HTTP/2, 2 if more data is needed,
+///         0 if the connection does not start with the HTTP/2 preface.
+static int _client_http2_preface_probe(struct client *client) {
+  struct stream *stream = &client->stream;
+  if (!client->server->spec.http2 || stream->index != 0 || stream->length == 0) {
+    return 0;
+  }
+  size_t len = (size_t) stream->length;
+  size_t n = len < IWN_H2_PREFACE_LEN ? len : IWN_H2_PREFACE_LEN;
+  if (memcmp(stream->buf, IWN_H2_PREFACE, n) != 0) {
+    return 0;
+  }
+  if (len < IWN_H2_PREFACE_LEN) {
+    return 2;
+  }
+  return _client_http2_attach(client, (uint8_t*) stream->buf + IWN_H2_PREFACE_LEN, len - IWN_H2_PREFACE_LEN) ? 1 : 0;
+}
+
+#endif
+
 static void _client_read(struct client *client) {
   struct token token;
 
@@ -1495,6 +1575,29 @@ again:
     client->flags |= HTTP_END_SESSION;
     return;
   }
+#ifdef IWN_HTTP2
+  if (IW_UNLIKELY(client->server->spec.http2)) {
+    int probe = _client_http2_preface_probe(client);
+    if (probe == 1) {
+      return;
+    } else if (probe == 2) {
+      // The connection may start with the HTTP/2 preface. Try to read the rest of it
+      // before running the HTTP/1 parser.
+      struct stream *stream = &client->stream;
+      ssize_t index = stream->index;
+      stream->index = stream->length;
+      bool ok = _client_read_bytes(client);
+      stream->index = index;
+      if (!ok) {
+        client->flags |= HTTP_END_SESSION;
+        return;
+      }
+      if (_client_http2_preface_probe(client) != 0) {
+        return;
+      }
+    }
+  }
+#endif
   do {
     token = _token_parse(client);
     if (token.type != HS_TOK_NONE) {
@@ -1554,6 +1657,13 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
   if (client->request.poller_adapter != pa) {
     client->request.poller_adapter = pa;
   }
+#ifdef IWN_HTTP2
+  if (IW_UNLIKELY(client->state == HTTP_SESSION_INIT && client->server->spec.http2)) {
+    if (iwn_http2_conn_attach_alpn(&client->request)) {
+      client->state = HTTP_SESSION_NOP;
+    }
+  }
+#endif
   if (client->injected_poller_evh) {
     return client->injected_poller_evh(pa, &client->request, events);
   }
@@ -1568,6 +1678,10 @@ static int64_t _client_on_poller_adapter_event(struct iwn_poller_adapter *pa, vo
     // NOTE: Fallthrough
     case HTTP_SESSION_READ:
       _client_read(client);
+      if (IW_UNLIKELY(client->_transport_events)) {
+        resp = client->_transport_events;
+        client->_transport_events = 0;
+      }
       break;
     case HTTP_SESSION_WRITE:
       _client_write(client);
@@ -1588,6 +1702,10 @@ finish:
 }
 
 void iwn_http_inject_poller_events_handler(struct iwn_http_req *request, iwn_on_poller_adapter_event eh) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->poller_events_inject(request, eh);
+    return;
+  }
   struct client *client = (void*) request;
   client->injected_poller_evh = eh;
 }
@@ -1652,6 +1770,7 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
   if (server->https) {
     pthread_mutex_lock(&server->mtx_ssl);
     rc = iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
+      .alpn_protocol_names = server->spec.http2 ? "h2,http/1.1" : 0,
       .certs = server->spec.ssl.certs,
       .certs_in_buffer = server->spec.ssl.certs_in_buffer,
       .certs_len = server->spec.ssl.certs_len,
@@ -1695,21 +1814,37 @@ finish:
 ///////////////////////////////////////////////////////////////////////////
 
 bool iwn_http_request_is_streamed(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_is_streamed(request);
+  }
   struct client *client = (void*) request;
   return (client->flags & HTTP_STREAMED);
 }
 
 bool iwn_http_request_is_secure(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_is_secure(request);
+  }
   struct client *client = (void*) request;
   return client->server->https;
 }
 
+bool iwn_http_request_is_http2(struct iwn_http_req *request) {
+  return request->impl && request->impl->request_is_http2(request);
+}
+
 const char* iwn_http_request_remote_ip(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_remote_ip(request);
+  }
   struct client *client = (void*) request;
   return client->ip;
 }
 
 struct iwn_val iwn_http_request_target(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_target(request);
+  }
   return _token_get_string((void*) request, HS_TOK_TARGET);
 }
 
@@ -1722,10 +1857,16 @@ bool iwn_http_request_target_is(struct iwn_http_req *request, const char *target
 }
 
 struct iwn_val iwn_http_request_method(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_method(request);
+  }
   return _token_get_string((void*) request, HS_TOK_METHOD);
 }
 
 struct iwn_val iwn_http_request_body(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_body(request);
+  }
   return _token_get_string((void*) request, HS_TOK_BODY);
 }
 
@@ -1738,12 +1879,19 @@ void iwn_http_request_user_unlock(struct iwn_http_req *request) {
 }
 
 void iwn_http_request_chunk_next(struct iwn_http_req *request, iwn_http_server_chunk_handler chunk_cb) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->request_chunk_next(request, chunk_cb);
+    return;
+  }
   struct client *client = (void*) request;
   client->chunk_cb = chunk_cb;
   _client_read(client);
 }
 
 struct iwn_val iwn_http_request_chunk_get(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_chunk_get(request);
+  }
   struct client *client = (void*) request;
   struct token *token = &client->tokens.buf[client->tokens.size - 1];
   return (struct iwn_val) {
@@ -1753,12 +1901,20 @@ struct iwn_val iwn_http_request_chunk_get(struct iwn_http_req *request) {
 }
 
 void iwn_http_connection_set_automatic(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->connection_set_automatic(request);
+    return;
+  }
   struct client *client = (void*) request;
   client->flags |= HTTP_AUTOMATIC;
   client->flags &= ~HTTP_KEEP_ALIVE;
 }
 
 void iwn_http_connection_set_keep_alive(struct iwn_http_req *request, bool keep_alive) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->connection_set_keep_alive(request, keep_alive);
+    return;
+  }
   struct client *client = (void*) request;
   client->flags &= ~HTTP_AUTOMATIC;
   if (keep_alive) {
@@ -1769,6 +1925,10 @@ void iwn_http_connection_set_keep_alive(struct iwn_http_req *request, bool keep_
 }
 
 void iwn_http_connection_set_upgrade(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->connection_set_upgrade(request);
+    return;
+  }
   struct client *client = (void*) request;
   client->flags &= ~HTTP_AUTOMATIC;
   client->flags &= ~HTTP_KEEP_ALIVE;
@@ -1776,6 +1936,9 @@ void iwn_http_connection_set_upgrade(struct iwn_http_req *request) {
 }
 
 bool iwn_http_connection_is_upgrade(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->connection_is_upgrade(request);
+  }
   struct client *client = (void*) request;
   return client->flags & HTTP_UPGRADE;
 }
@@ -1784,6 +1947,9 @@ struct iwn_val iwn_http_request_header_get(
   struct iwn_http_req *request,
   const char          *header_name,
   ssize_t              header_name_len) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_header_get(request, header_name, header_name_len);
+  }
   struct client *client = (void*) request;
   if (header_name_len < 0) {
     header_name_len = strlen(header_name);
@@ -1830,6 +1996,9 @@ bool iwn_http_request_headers_iterate(
   struct iwn_val      *key,
   struct iwn_val      *val,
   int                 *iter) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_headers_iterate(request, key, val, iter);
+  }
   struct client *client = (void*) request;
   if (*iter == 0) {
     for ( ; *iter < client->tokens.size; (*iter)++) {
@@ -1846,6 +2015,9 @@ bool iwn_http_request_headers_iterate(
 }
 
 int iwn_http_response_code_get(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_code_get(request);
+  }
   return ((struct client*) request)->response.code;
 }
 
@@ -1856,12 +2028,18 @@ iwrc iwn_http_response_code_set(struct iwn_http_req *request, int code) {
   if (code == 0) {
     code = 200;
   }
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_code_set(request, code);
+  }
   struct client *client = (void*) request;
   client->response.code = code;
   return 0;
 }
 
 struct iwn_val iwn_http_response_header_get(struct iwn_http_req *request, const char *header_name) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_header_get(request, header_name);
+  }
   struct client *client = (void*) request;
   for (struct header *h = client->response.headers; h; h = h->next) {
     if (strcasecmp(h->name, header_name) == 0) {
@@ -1879,6 +2057,9 @@ iwrc iwn_http_response_header_add(
   const char          *header_name,
   const char          *header_value,
   ssize_t              header_value_len) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_header_add(request, header_name, header_value, header_value_len);
+  }
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -1908,6 +2089,9 @@ iwrc iwn_http_response_header_set(
   const char          *header_name,
   const char          *header_value,
   ssize_t              header_value_len) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_header_set(request, header_name, header_value, header_value_len);
+  }
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -2001,6 +2185,10 @@ iwrc iwn_http_response_header_printf(
 }
 
 void iwn_http_response_body_clear(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->response_body_clear(request);
+    return;
+  }
   struct client *client = (void*) request;
   if (client->response.body) {
     if (client->response.body_free) {
@@ -2016,6 +2204,10 @@ void iwn_http_response_body_set(
   const char          *body,
   ssize_t              body_len,
   void               (*body_free)(void*)) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->response_body_set(request, body, body_len, body_free);
+    return;
+  }
   if (!body || body_len == 0) {
     iwn_http_response_body_clear(request);
     return;
@@ -2122,6 +2314,9 @@ IW_INLINE void _client_response_setbuf2(struct client *client, char *buf, ssize_
 }
 
 iwrc iwn_http_response_end(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_end(request);
+  }
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct response *response = &client->response;
@@ -2167,6 +2362,9 @@ finish:
 iwrc iwn_http_response_stream_start(
   struct iwn_http_req          *request,
   iwn_http_server_chunk_handler chunk_cb) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_stream_start(request, chunk_cb);
+  }
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct iwxstr *xstr = iwxstr_create_empty();
@@ -2196,6 +2394,10 @@ void iwn_http_response_stream_write(
   void                        (*buf_free)(void*),
   iwn_http_server_chunk_handler chunk_cb,
   bool                         *again) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->response_stream_write(request, buf, buf_len, buf_free, chunk_cb, again);
+    return;
+  }
   if (!buf_free) {
     buf_free = _noop_free;
   }
@@ -2218,6 +2420,10 @@ void iwn_http_response_stream_write(
 }
 
 void iwn_http_response_stream_end(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->response_stream_end(request);
+    return;
+  }
   iwn_http_response_stream_write(request, 0, 0, 0, 0, 0);
 }
 
@@ -2227,6 +2433,9 @@ iwrc iwn_http_response_chunk_write(
   ssize_t                       body_len,
   iwn_http_server_chunk_handler chunk_cb,
   bool                         *again) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_chunk_write(request, body, body_len, chunk_cb, again);
+  }
   iwrc rc = 0;
   struct client *client = (void*) request;
   if (body_len < 0) {
@@ -2263,6 +2472,9 @@ finish:
 }
 
 iwrc iwn_http_response_chunk_end(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_chunk_end(request);
+  }
   iwrc rc = 0;
   struct client *client = (void*) request;
   struct iwxstr *xstr = iwxstr_create_empty();
@@ -2315,6 +2527,9 @@ iwrc iwn_http_response_write_transfer_buf(
   int                  status_code,
   const char          *content_type,
   struct iwxstr       *buf) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_transfer_buf(request, status_code, content_type, buf);
+  }
   iwrc rc = 0;
   RCC(rc, finish, iwn_http_response_code_set(request, status_code));
   if (!content_type) {
@@ -2495,6 +2710,10 @@ void iwn_http_request_wf_set(
   struct iwn_http_req *request, void *user_data,
   void (*wf_on_request_dispose)(struct iwn_http_req*),
   void (*wf_on_response_headers_write)(struct iwn_http_req*)) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->wf_set(request, user_data, wf_on_request_dispose, wf_on_response_headers_write);
+    return;
+  }
   struct client *client = (void*) request;
   client->_wf_data = user_data;
   client->_wf_on_request_dispose = wf_on_request_dispose;
@@ -2502,18 +2721,57 @@ void iwn_http_request_wf_set(
 }
 
 void* iwn_http_request_wf_data(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->wf_data(request);
+  }
   struct client *client = (void*) request;
   return client->_wf_data;
 }
 
 void iwn_http_request_ws_set(struct iwn_http_req *request, void *user_data) {
+  if (IW_UNLIKELY(request->impl)) {
+    request->impl->ws_set(request, user_data);
+    return;
+  }
   struct client *client = (void*) request;
   client->_ws_data = user_data;
 }
 
 void* iwn_http_request_ws_data(struct iwn_http_req *request) {
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->ws_data(request);
+  }
   struct client *client = (void*) request;
   return client->_ws_data;
+}
+
+struct iwn_http_server_spec* iwn_http_request_server_spec(struct iwn_http_req *request) {
+  struct client *client = (void*) request;
+  return &client->server->spec;
+}
+
+bool iwn_http_request_conn_is_secure(struct iwn_http_req *request) {
+  struct client *client = (void*) request;
+  return client->server->https;
+}
+
+void iwn_http_request_server_date(struct iwn_http_req *request, char out_buf[32]) {
+  struct client *client = (void*) request;
+  _server_time(client->server, out_buf);
+}
+
+void iwn_http_request_transport_set(
+  struct iwn_http_req *request,
+  void                *data,
+  void               (*dispose)(struct iwn_http_req*)) {
+  struct client *client = (void*) request;
+  client->_transport_data = data;
+  client->_transport_dispose = dispose;
+}
+
+void* iwn_http_request_transport_data(struct iwn_http_req *request) {
+  struct client *client = (void*) request;
+  return client->_transport_data;
 }
 
 static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data) {
@@ -2573,6 +2831,13 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   server->refs = 1;
   spec = &server->spec;
   memcpy(spec, spec_, sizeof(*spec));
+
+#ifndef IWN_HTTP2
+  if (spec->http2) {
+    iwlog_warn("HTTP/2 support is not compiled in (ENABLE_HTTP2), ignoring (struct iwn_http_server_spec)::http2");
+    spec->http2 = false;
+  }
+#endif
 
   if (!spec->request_handler) {
     rc = IW_ERROR_INVALID_ARGS;

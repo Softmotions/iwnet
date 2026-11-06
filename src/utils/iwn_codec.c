@@ -11,6 +11,19 @@ IW_INLINE bool is_unreserved(char c) { // See rfc3986
          || c == '-' || c == '.' || c == '_' || c == '~';
 }
 
+IW_INLINE int hexval(char c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  }
+  if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  }
+  if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  }
+  return -1;
+}
+
 size_t iwn_url_encoded_len(const char *src, ssize_t src_len) {
   size_t res = 0;
   if (src_len < 0) {
@@ -188,25 +201,35 @@ size_t iwn_url_decode_inplace2(char *sp, char *ep) {
   return rp - sp;
 }
 
-void iwn_url_decode_inplace(char *str) {
-  const char *rp = str;
+static void _url_decode_inplace(char *str, bool plus_as_space) {
   char *wp = str;
-  char tmp[] = { 0, 0, 0 };
+  const char *rp = str;
   while (*rp) {
-    if (IW_UNLIKELY(*rp == '%')) {
-      rp++;
-      tmp[0] = *rp++;
-      tmp[1] = *rp;
-      *wp = (char) strtol(tmp, 0, 16);
-    } else if (IW_UNLIKELY(*rp == '+')) {
-      *wp = ' ';
+    if (IW_UNLIKELY(*rp == '%') && rp[1] && rp[2]) {
+      // Decode `%XX`, keep malformed escapes as is
+      int h = hexval(rp[1]), l = hexval(rp[2]);
+      if (h < 0 || l < 0) {
+        *wp++ = *rp++;
+        continue;
+      }
+      *wp++ = (char) ((h << 4) | l);
+      rp += 3;
+    } else if (plus_as_space && IW_UNLIKELY(*rp == '+')) {
+      *wp++ = ' ';
+      ++rp;
     } else {
-      *wp = *rp;
+      *wp++ = *rp++;
     }
-    rp++;
-    wp++;
   }
   *wp = '\0';
+}
+
+void iwn_url_decode_inplace(char *str) {
+  _url_decode_inplace(str, true);
+}
+
+void iwn_url_decode_path_inplace(char *str) {
+  _url_decode_inplace(str, false);
 }
 
 size_t iwn_unescape_backslashes_inplace(char *str, ssize_t str_len) {

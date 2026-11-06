@@ -33,11 +33,22 @@ if { ${IWNET_RUN_TESTS}
     exec { ./server2-tests-run.sh }
     exec { ./server2-tests-run.sh -- --ssl }
     exec { ./proxy1-tests-run.sh }
+    if { ${ENABLE_HTTP2}
+      exec { ./server1-tests-run.sh --http2 }
+      exec { ./server1-tests-run.sh --http2 -- --ssl }
+      exec { ./server2-tests-run.sh --http2 }
+      exec { ./server2-tests-run.sh --http2 -- --ssl }
+    }
     if { defined { SYSTEM_LINUX } 
       if { !${ENABLE_ASAN}
         if { !${ENABLE_UBSAN}
+          exec { valgrind --leak-check=full --error-exitcode=9 ./wf_test1 }
           exec { ./server1-tests-run.sh --valgrind }
           exec { ./server1-tests-run.sh --valgrind -- --ssl }
+          if { ${ENABLE_HTTP2}
+            exec { ./server1-tests-run.sh --http2 --valgrind }
+            exec { ./server1-tests-run.sh --http2 --valgrind -- --ssl }
+          }
         }
       }
     }

@@ -181,6 +181,10 @@ struct iwn_wf_server_spec {
   int request_timeout_keepalive_sec;             ///< -1 Disable timeout, 0 Use default timeout: 120sec
   int request_timeout_sec;                       ///< -1 Disable timeout, 0 Use default timeout: 20sec
   int request_token_max_len;                     ///< Default: 8192
+
+  /// Enable transparent HTTP/1.1 <-> HTTP/2 transport negotiation.
+  /// Requires the library to be built with `ENABLE_HTTP2`.
+  bool http2;
 };
 
 /// Web-framework configuration context.
@@ -238,12 +242,26 @@ IW_EXPORT struct iwn_wf_route_submatch* iwn_wf_request_submatch_nth(const struct
 // in place.
 IW_EXPORT iwrc iwn_wf_parse_query_inplace(struct iwpool *pool, struct iwn_pairs *pairs, char *query, size_t query_len);
 
+/// Iterates over comma/semicolon separated parameters of a header value.
+/// Parameters look like: `text/plain; charset=utf-8; name="foo.html"`.
+///
+/// @param header_val Start of the header value.
+/// @param ptr Start of the next parameter to parse (or `header_val` on the first call).
+/// @param header_val_end End of the header value.
+/// @param[out] out Parsed `name=value` pair. Values are not null terminated.
+/// @return Start of the next parameter or `0` if there are no more parameters.
+///
+/// @note Quoted parameter values are unescaped in place, so `header_val` must point
+///       to a writable buffer.
 IW_EXPORT const char* iwn_wf_header_val_part_next(
   const char      *header_val,
   const char      *ptr,
   const char      *header_val_end,
   struct iwn_pair *out);
 
+/// Finds a parameter of a header value by its name.
+/// @note Quoted parameter values are unescaped in place, so `header_val` must point
+///       to a writable buffer.
 IW_EXPORT struct iwn_pair iwn_wf_header_val_part_find(
   const char *header_val,
   const char *header_val_end,

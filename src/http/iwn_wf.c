@@ -221,7 +221,9 @@ static iwrc _request_parse_query_inplace(struct iwpool *pool, struct iwn_pairs *
       } else if (*p == '&') {
         *p = '\0';
         iwn_url_decode_inplace(key);
-        RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, "", 0));
+        if (key[0] != '\0') {
+          RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, "", 0));
+        }
         key = p + 1;
         state = 0;
       }
@@ -230,7 +232,9 @@ static iwrc _request_parse_query_inplace(struct iwpool *pool, struct iwn_pairs *
         *p = '\0';
         iwn_url_decode_inplace(key);
         iwn_url_decode_inplace(val);
-        RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
+        if (key[0] != '\0') {
+          RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
+        }
         key = p + 1;
         state = 0;
       }
@@ -246,7 +250,9 @@ static iwrc _request_parse_query_inplace(struct iwpool *pool, struct iwn_pairs *
   } else {
     iwn_url_decode_inplace(key);
     iwn_url_decode_inplace(val);
-    RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
+    if (key[0] != '\0') {
+      RCC(rc, finish, iwn_pair_add_pool(pool, pairs, key, -1, val, -1));
+    }
   }
 
 finish:
@@ -308,10 +314,10 @@ static iwrc _request_target_parse(struct request *req) {
     }
   }
   RCA(p = iwpool_strndup2(pool, val.buf, i), finish);
-  iwn_url_decode_inplace(p);
+  iwn_url_decode_path_inplace(p);
 
   req->base.path_unmatched = req->base.path = p;
-  req->path_len = i;
+  req->path_len = strlen(p);
   if (++i < val.len) {
     char *q;
     RCA(q = iwpool_strndup2(pool, val.buf + i, val.len - i), finish);
@@ -327,33 +333,20 @@ static iwrc _request_method_parse(struct request *req) {
   if (!val.len) {
     return IW_ERROR_ASSERTION;
   }
-  switch (val.len) {
-    case 3:
-      if (strncmp(val.buf, "GET", val.len) == 0) {
-        req->base.flags = IWN_WF_GET;
-      } else if (strncmp(val.buf, "PUT", val.len) == 0) {
-        req->base.flags = IWN_WF_PUT;
-      }
-      break;
-    case 4:
-      if (strncmp(val.buf, "POST", val.len) == 0) {
-        req->base.flags = IWN_WF_POST;
-      } else if (strncmp(val.buf, "HEAD", val.len) == 0) {
-        req->base.flags = IWN_WF_HEAD;
-      }
-      break;
-    default:
-      if (strncmp(val.buf, "DELETE", val.len) == 0) {
-        req->base.flags = IWN_WF_DELETE;
-      } else if (strncmp(val.buf, "OPTIONS", val.len) == 0) {
-        req->base.flags = IWN_WF_OPTIONS;
-      } else if (strncmp(val.buf, "PATCH", val.len) == 0) {
-        req->base.flags = IWN_WF_PATCH;
-      } else {
-        return WF_ERROR_UNSUPPORTED_HTTP_METHOD;
-      }
-  }
-  return 0;
+  #define _METHOD(name__, flag__)                                                             \
+          if (val.len == IW_LLEN(name__) && strncmp(val.buf, name__, IW_LLEN(name__)) == 0) { \
+            req->base.flags = flag__;                                                         \
+            return 0;                                                                         \
+          }
+  _METHOD("GET", IWN_WF_GET)
+  _METHOD("PUT", IWN_WF_PUT)
+  _METHOD("POST", IWN_WF_POST)
+  _METHOD("HEAD", IWN_WF_HEAD)
+  _METHOD("DELETE", IWN_WF_DELETE)
+  _METHOD("OPTIONS", IWN_WF_OPTIONS)
+  _METHOD("PATCH", IWN_WF_PATCH)
+  #undef _METHOD
+  return WF_ERROR_UNSUPPORTED_HTTP_METHOD;
 }
 
 IW_INLINE bool _c_is_ctl(char c) {
@@ -573,13 +566,13 @@ static iwrc _request_headers_parse(struct request *req) {
   if (val.len > 0) {
     if (val.len >= sizeof(_HN_UEC) - 1 && strncasecmp(val.buf, _HN_UEC, sizeof(_HN_UEC) - 1) == 0) {
       req->base.flags |= IWN_WF_FORM_URL_ENCODED;
-    } else if (  val.len > sizeof(_HN_MFD) - 1
+    } else if (  val.len >= sizeof(_HN_MFD) - 1
               && strncasecmp(val.buf, _HN_MFD, sizeof(_HN_MFD) - 1) == 0) {
       char *ep = val.buf + val.len;
       const char *rp = val.buf += sizeof(_HN_MFD) - 1;
       struct iwn_pair p;
       while ((rp = _header_parse_next_parameter(rp, ep, &p))) {
-        if (strncasecmp(p.key, "boundary", sizeof("boundary") - 1) == 0) {
+        if (p.key_len == IW_LLEN("boundary") && strncasecmp(p.key, "boundary", IW_LLEN("boundary")) == 0) {
           req->boundary_len = p.val_len;
           req->boundary = iwpool_strndup2(req->pool, p.val, p.val_len);
           break;
@@ -625,7 +618,7 @@ static bool _route_do_match_next(int pos, struct route_iter *it) {
         if ((r->base.flags & IWN_WF_MATCH_PREFIX) || unmatched_len == len) {
           mlen = len;
           for (int i = 2; i < 2 * mret; i += 2) {
-            struct iwn_wf_route_submatch *sm = iwpool_alloc(sizeof(*sm), req->pool);
+            struct iwn_wf_route_submatch *sm = iwpool_calloc(sizeof(*sm), req->pool);
             if (sm) {
               sm->route = &r->base;
               sm->input = path_unmatched;
@@ -947,7 +940,8 @@ IW_INLINE bool _request_form_parse(struct request *req) {
 
 static bool _request_routes_process(struct request *req) {
   if (!_request_form_parse(req)) {
-    return false;
+    iwlog_warn2("HTTP request with invalid form data");
+    return iwn_http_response_by_code(req->base.http, 400);
   }
   int rv = 0;
   bool ok = true;
@@ -1070,6 +1064,20 @@ static bool _request_stream_chunk_next(struct iwn_http_req *hreq, bool *again) {
   return req && _request_stream_chunk_process(req, again) == true;
 }
 
+/// Maps a request creation failure (`_request_create()`) to an HTTP response status code.
+/// @return HTTP status code to respond with or `0` if the connection should be closed.
+static int _request_error_status(iwrc rc) {
+  switch (rc) {
+    case IW_ERROR_ASSERTION:          // Missing request target/method
+    case WF_ERROR_INVALID_FORM_DATA:  // Malformed form data
+      return 400;
+    case WF_ERROR_UNSUPPORTED_HTTP_METHOD:
+      return 501;
+    default:
+      return 0;
+  }
+}
+
 static bool _request_handler(struct iwn_http_req *hreq) {
   struct ctx *ctx = hreq->server_user_data;
   assert(ctx);
@@ -1078,6 +1086,10 @@ static bool _request_handler(struct iwn_http_req *hreq) {
     iwrc rc = _request_create(hreq);
     if (rc) {
       iwlog_ecode_error3(rc);
+      int status = _request_error_status(rc);
+      if (status) {
+        return iwn_http_response_by_code(hreq, status);
+      }
       return false;
     }
     req = iwn_http_request_wf_data(hreq);
@@ -1299,14 +1311,16 @@ iwrc iwn_wf_session_put(struct iwn_wf_req *req_, const char *key, const char *da
     iwn_wf_session_del(req_, key);
     return 0;
   }
+  iwrc rc = 0;
   struct request *req = (void*) req_;
   struct ctx *ctx = (void*) req->base.ctx;
   pthread_mutex_lock(&req->sess_map_mtx);
-  RCR(_request_sid_ensure(req));
+  RCC(rc, finish, _request_sid_ensure(req));
   if (req->sess_map) {
     iwhmap_remove(req->sess_map, key);
   }
-  iwrc rc = ctx->sst.put(&ctx->sst, req->sid, key, data);
+  rc = ctx->sst.put(&ctx->sst, req->sid, key, data);
+finish:
   pthread_mutex_unlock(&req->sess_map_mtx);
   return rc;
 }
@@ -1425,7 +1439,7 @@ struct iwn_wf_route_submatch* iwn_wf_request_submatch_first(const struct iwn_wf_
 
 struct iwn_wf_route_submatch* iwn_wf_request_submatch_last(const struct iwn_wf_req *req) {
   struct iwn_wf_route *r = req->route;
-  if (req->last->route == r) {
+  if (req->last && req->last->route == r) {
     return req->last;
   }
   struct iwn_wf_route_submatch *ss = 0;
@@ -1476,6 +1490,7 @@ iwrc iwn_wf_server(const struct iwn_wf_server_spec *spec_, struct iwn_wf_ctx *ct
   http.request_token_max_len = spec.request_token_max_len;
   http.request_max_headers_count = spec.request_max_headers_count;
   http.proxy_handler = spec.proxy_handler;
+  http.http2 = spec.http2;
 
   struct iwn_wf_session_store *sst = &spec.session_store;
   if (memcmp(sst, &(struct iwn_wf_session_store) {}, sizeof(*sst)) == 0) {
@@ -1644,6 +1659,19 @@ struct route* dbg_route_iter_next(struct route_iter *it) {
 
 void dbg_request_destroy(struct request *req) {
   _request_destroy(req);
+}
+
+int dbg_request_error_status(iwrc rc) {
+  return _request_error_status(rc);
+}
+
+iwrc dbg_request_parse(struct request *req) {
+  iwrc rc = 0;
+  RCC(rc, finish, _request_target_parse(req));
+  RCC(rc, finish, _request_method_parse(req));
+  RCC(rc, finish, _request_headers_parse(req));
+finish:
+  return rc;
 }
 
 #endif

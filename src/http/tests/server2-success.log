@@ -8,6 +8,14 @@ content-length: 2
 
 OK
 
+Get transport:
+HTTP/1.1 200 OK
+connection: keep-alive
+content-type: application/json
+content-length: 34
+
+{"transport":"http/1.1","ua":true}
+
 Get not-found:
 HTTP/1.1 404 Not Found
 connection: keep-alive
@@ -56,6 +64,30 @@ Post chunked:
 
 Post multipart:
 OK
+
+Post multipart without boundary:
+HTTP/1.1 400 Bad Request
+connection: keep-alive
+content-type: text/plain
+content-length: 11
+
+Bad Request
+
+Unsupported HTTP method:
+HTTP/1.1 501 Not Implemented
+connection: keep-alive
+content-type: text/plain
+content-length: 15
+
+Not Implemented
+
+Post malformed multipart body:
+HTTP/1.1 400 Bad Request
+connection: keep-alive
+content-type: text/plain
+content-length: 11
+
+Bad Request
 
 Session put:
 HTTP/1.1 200 OK

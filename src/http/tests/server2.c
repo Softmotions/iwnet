@@ -4,6 +4,7 @@
 
 #include <iowow/iwlog.h>
 #include <iowow/iwconv.h>
+#include <iowow/iwjbl.h>
 
 #include <string.h>
 #include <signal.h>
@@ -58,6 +59,33 @@ static int _handle_get_empty(struct iwn_wf_req *req, void *user_data) {
   ++_handle_get_empty_cnt;
   IW_TEST_ASSERT((intptr_t) user_data == 1);
   return 200; // Empty reponse with ok status
+}
+
+// Reports the request transport and checks request headers iteration.
+static int _handle_transport(struct iwn_wf_req *req, void *user_data) {
+  iwrc rc = 0;
+  struct jbl *jbl = 0;
+  bool ua_found = false;
+  struct iwn_val key = { 0 }, val = { 0 };
+  int iter = 0;
+  while (iwn_http_request_headers_iterate(req->http, &key, &val, &iter)) {
+    if (key.len == IW_LLEN("user-agent") && strncasecmp(key.buf, "user-agent", key.len) == 0) {
+      ua_found = val.len > 0;
+    }
+  }
+  RCC(rc, finish, jbl_create_empty_object(&jbl));
+  RCC(rc, finish, jbl_set_string(jbl, "transport", iwn_http_request_is_http2(req->http) ? "h2" : "http/1.1"));
+  RCC(rc, finish, jbl_set_bool(jbl, "ua", ua_found));
+  IW_TEST_ASSERT(iwn_http_response_write_jbl(req->http, 200, jbl));
+  jbl = 0;
+
+finish:
+  jbl_destroy(&jbl);
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    return IWN_WF_RES_CONNECTION_CLOSE;
+  }
+  return IWN_WF_RES_PROCESSED;
 }
 
 static int _handle_get_query(struct iwn_wf_req *req, void *user_data) {
@@ -202,6 +230,7 @@ int main(int argc, char *argv[]) {
   }
 
   bool ssl = false;
+  bool http2 = false;
   int port = 9292;
   int nthreads = 1;
   int oneshot = 1;
@@ -209,6 +238,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < argc; ++i) {
     if (strcmp(argv[i], "--ssl") == 0) {
       ssl = true;
+    } else if (strcmp(argv[i], "--http2") == 0) {
+      http2 = true;
     } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
       port = iwatoi(argv[i + 1]);
     } else if (strcmp(argv[i], "--poll-threads") == 0 && i + 1 < argc) {
@@ -253,6 +284,12 @@ int main(int argc, char *argv[]) {
     .parent = r,
     .pattern = "/query",
     .handler = _handle_get_query
+  }, 0));
+
+  RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
+    .ctx = ctx,
+    .pattern = "/transport",
+    .handler = _handle_transport,
   }, 0));
 
   RCC(rc, finish, iwn_wf_route(&(struct iwn_wf_route) {
@@ -344,6 +381,7 @@ int main(int argc, char *argv[]) {
     .poller = poller,
     .request_timeout_sec = -1,
     .request_timeout_keepalive_sec = -1,
+    .http2 = http2,
   };
 
   if (ssl) {

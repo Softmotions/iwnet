@@ -48,6 +48,9 @@ include { bearssl/Autark }
 if { ${ENABLE_GRPC} 
   include { grpc/Autark }
 }
+if { ${ENABLE_HTTP2} 
+  include { http2/Autark }
+}
 
 cc {
   ${SOURCES}
@@ -60,6 +63,9 @@ cc {
     C{include/data_cacert.inc} 
     C{include/generated_mimegen.h} 
     if { ${ENABLE_GRPC} 
+      ${LIBHIVE_HEADERS}
+    }
+    if { ${ENABLE_HTTP2} 
       ${LIBHIVE_HEADERS}
     }
   }

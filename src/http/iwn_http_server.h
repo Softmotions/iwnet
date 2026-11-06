@@ -20,6 +20,8 @@ struct iwn_http_server {
   int port;
 };
 
+struct iwn_http_req_ops;
+
 struct iwn_http_req {
   void   *user_data;                                ///< Arbitrary user defined data.
   int64_t user_id;                                  ///< Application controlled user id.
@@ -32,6 +34,10 @@ struct iwn_http_req {
   bool (*on_response_completed)(struct iwn_http_req*);
   struct iwn_poller_adapter *poller_adapter;
   int session_cookie_max_age_sec; ///< Max age of session cookies sec.
+
+  /// Not NULL when request is served by an alternative transport (HTTP/2).
+  /// @warning Internal use only.
+  const struct iwn_http_req_ops *impl;
 };
 
 typedef void (*iwn_http_server_on_dispose)(const struct iwn_http_server*);
@@ -82,6 +88,12 @@ struct iwn_http_server_spec {
   int request_timeout_sec;                           ///< -1 Disable timeout, 0 Use default timeout: 20sec
   int request_token_max_len;                         ///< Default: 8191, Min: 8191
   int request_max_headers_count;                     ///< Default:  127
+
+  /// Enable transparent HTTP/1.1 <-> HTTP/2 transport negotiation on this server.
+  /// HTTP/2 is negotiated by TLS ALPN (`h2`) or by the HTTP/2 connection preface
+  /// (prior knowledge, plain text connections).
+  /// Requires the library to be built with `ENABLE_HTTP2`, otherwise the flag is ignored.
+  bool http2;
 };
 
 /// Creates an instance of http server.
@@ -122,6 +134,9 @@ IW_EXPORT bool iwn_http_request_is_streamed(struct iwn_http_req*);
 
 /// Returns `true` when SSL(TLS) user i request transport connection.
 IW_EXPORT bool iwn_http_request_is_secure(struct iwn_http_req*);
+
+/// Returns `true` when request is served by the HTTP/2 transport.
+IW_EXPORT bool iwn_http_request_is_http2(struct iwn_http_req*);
 
 /// Returns remote ip address of request client.
 IW_EXPORT const char* iwn_http_request_remote_ip(struct iwn_http_req*);

@@ -94,10 +94,7 @@ IW_ALLOC static char* _get(struct iwn_wf_session_store *sst, const char *sid, co
 static void _clear(struct iwn_wf_session_store *sst, const char *sid) {
   struct impl *impl = sst->user_data;
   pthread_mutex_lock(&impl->mtx);
-  struct iwhmap *map = iwhmap_get(impl->sidmap, sid);
-  if (map) {
-    iwhmap_remove(map, sid);
-  }
+  iwhmap_remove(impl->sidmap, sid);
   pthread_mutex_unlock(&impl->mtx);
 }
 

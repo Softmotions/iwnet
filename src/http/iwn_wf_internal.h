@@ -75,4 +75,11 @@ const char* dbg_multipart_parse_next(
   struct iwn_pairs *bp,
   bool             *eof);
 
+/// Runs request target, method and headers parsing of `req`.
+/// `req->base.http` must be a valid request object.
+iwrc dbg_request_parse(struct request *req);
+
+/// Maps a request creation failure to an HTTP response status code.
+int dbg_request_error_status(iwrc rc);
+
 #endif

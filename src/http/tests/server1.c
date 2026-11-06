@@ -135,6 +135,7 @@ int main(int argc, char *argv[]) {
   }
 
   bool ssl = false;
+  bool http2 = false;
   int port = 9292;
   int nthreads = 1;
   int oneshot = 1;
@@ -142,6 +143,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < argc; ++i) {
     if (strcmp(argv[i], "--ssl") == 0) {
       ssl = true;
+    } else if (strcmp(argv[i], "--http2") == 0) {
+      http2 = true;
     } else if (strcmp(argv[i], "--port") == 0 && i + 1 < argc) {
       port = iwatoi(argv[i + 1]);
     } else if (strcmp(argv[i], "--poll-threads") == 0 && i + 1 < argc) {
@@ -161,7 +164,8 @@ int main(int argc, char *argv[]) {
     .request_handler = _request_handler,
     .on_server_dispose = _server_on_dispose,
     .request_timeout_sec = -1,
-    .request_timeout_keepalive_sec = -1
+    .request_timeout_keepalive_sec = -1,
+    .http2 = http2,
   };
 
   if (ssl) {

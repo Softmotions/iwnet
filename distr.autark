@@ -11,6 +11,8 @@ install-sources {
  build.sh
  distr.autark
  grpc.autark
+ http2.autark
+ libhive.autark
  src/
  tools/
  uncrustify.cfg

@@ -1,0 +1,177 @@
+
+
+Get empty:
+HTTP/2 200 
+content-type: text/plain
+content-length: 2
+
+OK
+
+Get transport:
+HTTP/2 200 
+content-type: application/json
+content-length: 28
+
+{"transport":"h2","ua":true}
+
+Get not-found:
+HTTP/2 404 
+content-type: text/plain
+content-length: 19
+
+Not found from root
+
+Get query:
+HTTP/2 200 
+content-type: text/plain;
+content-length: 15
+
+foo=bar&baz=a@z
+
+Get fail:
+
+
+Post urlencoded:
+HTTP/2 200 
+content-type: text/plain;
+content-length: 15
+
+foo=bar&baz=a@z
+
+Post urlencoded (raw body preserved):
+HTTP/2 200 
+content-type: text/plain
+content-length: 17
+
+@books/[age = 31]
+
+Put data:
+HTTP/2 200 
+content-type: text/plan
+content-length: 36
+
+ff5fd857-c90b-4066-910f-a9a5d1fa1b47
+
+Post multipart:
+OK
+
+Post multipart without boundary:
+HTTP/2 400 
+content-type: text/plain
+content-length: 11
+
+Bad Request
+
+Unsupported HTTP method:
+HTTP/2 501 
+content-type: text/plain
+content-length: 15
+
+Not Implemented
+
+Post malformed multipart body:
+HTTP/2 400 
+content-type: text/plain
+content-length: 11
+
+Bad Request
+
+Session put:
+HTTP/2 200 
+content-type: text/plain
+content-length: 2
+
+OK
+
+Session get:
+HTTP/2 200 
+content-type: text/plan
+content-length: 36
+
+70b2a86f-025b-4805-b267-871f3e1bc170
+
+Directory serve:
+HTTP/2 200 
+accept-ranges: bytes
+content-type: application/json
+content-length: 16
+
+{"msg":"Hello"}
+
+
+File get:
+
+
+File2 get:
+
+
+File get HEAD:
+HTTP/2 200 
+accept-ranges: bytes
+content-type: application/octet-stream
+content-length: 15165824
+
+
+
+Range1:
+HTTP/2 206 
+accept-ranges: bytes
+content-type: application/octet-stream
+content-length: 8
+content-range: bytes 0-7/36
+
+ae0150d3
+
+Range2:
+HTTP/2 206 
+accept-ranges: bytes
+content-type: application/octet-stream
+content-length: 1
+content-range: bytes 0-0/36
+
+a
+
+Range3:
+HTTP/2 206 
+accept-ranges: bytes
+content-type: application/octet-stream
+content-length: 1
+content-range: bytes 35-35/36
+
+6
+
+Range4:
+HTTP/2 416 
+accept-ranges: bytes
+content-type: text/plain
+content-length: 0
+
+
+
+Range5:
+HTTP/2 200 
+accept-ranges: bytes
+content-type: application/octet-stream
+content-length: 36
+
+ae0150d3-c811-4313-b5d5-89fcfc29f8c6
+
+Range6:
+HTTP/2 416 
+content-type: text/plain
+content-length: 0
+
+
+
+Range7:
+HTTP/2 206 
+accept-ranges: bytes
+
+content-type: application/octet-stream
+content-range: bytes 0-7/36
+
+ae0150d3
+content-type: application/octet-stream
+content-range: bytes 35-35/36
+
+6
