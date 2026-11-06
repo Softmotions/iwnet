@@ -6,6 +6,7 @@ Works on Linux, macOS, FreeBSD
 
 * [Fast asynchronous HTTP server](./src/http) ([iwn_http_server.h](./src/http/iwn_http_server.h))
 * [Web framework based on HTTP server](./src/http) ([iwn_wf.h](./src/http/iwn_wf.h))   
+* Optional HTTP/2 server transport for HTTP server and web framework ([src/http2](./src/http2))
 * Ultra fast HTTP Reverse Proxy ([iwn_http_server.h](./src/http/iwn_http_server.h))
 * Websocket client and server ([iwn_ws_server.h](./src/ws/iwn_ws_server.h), [iwn_ws_client.h](./src/ws/iwn_ws_client.h))
 * Low level gRPC client with no dependency on `libgrpc++` or other grpc staff. [iwn_grpc_client.h](./src/grpc/iwn_grpc_client.h)

@@ -6,6 +6,7 @@ Works on Linux, macOS, FreeBSD
 
 * [Fast asynchronous HTTP server](./src/http) ([iwn_http_server.h](./src/http/iwn_http_server.h))
 * [Web framework based on HTTP server](./src/http) ([iwn_wf.h](./src/http/iwn_wf.h))   
+* Optional HTTP/2 server transport for HTTP server and web framework ([src/http2](./src/http2))
 * Ultra fast HTTP Reverse Proxy ([iwn_http_server.h](./src/http/iwn_http_server.h))
 * Websocket client and server ([iwn_ws_server.h](./src/ws/iwn_ws_server.h), [iwn_ws_client.h](./src/ws/iwn_ws_client.h))
 * Low level gRPC client with no dependency on `libgrpc++` or other grpc staff. [iwn_grpc_client.h](./src/grpc/iwn_grpc_client.h)
@@ -195,6 +196,30 @@ You may find many helpful code examples by looking into
 * [server2.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server2.c)
 * [server1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/server1.c)
 * [HTTP Proxy: proxy1.c](https://github.com/Softmotions/iwnet/tree/master/src/http/tests/proxy1.c)
+
+## HTTP/2
+
+The HTTP server can transparently serve HTTP/1.1 and HTTP/2 clients on the same
+listening socket. HTTP/2 is negotiated by TLS ALPN (`h2`) or, on plain text
+connections, by the HTTP/2 connection preface (prior knowledge).
+
+HTTP/2 support is optional and requires the library to be built with
+`ENABLE_HTTP2=1` (it depends on [libhive](https://github.com/Softmotions/libhive)).
+The server opts in with `iwn_http_server_spec::http2` (`iwn_wf_server_spec::http2`
+for the web framework). Requests are delivered to the very same request handler
+and the `iwn_http_req` API (as well as the `iwn_wf` web framework) works
+unchanged. Use `iwn_http_request_is_http2()` to detect the transport if needed.
+
+```sh
+  # Build with HTTP/2 support
+  ENABLE_HTTP2=1 ./build.sh -c
+
+  # Plain text HTTP/2 (prior knowledge)
+  curl --http2-prior-knowledge http://localhost:8080/
+
+  # HTTP/2 over TLS (ALPN)
+  curl --http2 -k https://localhost:8443/
+```
 
 
 
