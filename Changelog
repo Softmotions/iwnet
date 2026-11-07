@@ -1,4 +1,4 @@
-2026-11-06	Anton Adamansky  <adamansky@gmail.com>  [v1.6.0]
+2026-11-06	Anton Adamansky  <adamansky@gmail.com>  [v1.6.0-dev]
 	* iwn_http_server: Added optional HTTP/2 server transport (`ENABLE_HTTP2`, based on libhive).
 	  HTTP/1.1 and HTTP/2 clients are served transparently on the same socket, HTTP/2 is
 	  negotiated by TLS ALPN (`h2`) or by the HTTP/2 connection preface. The transport lives in
