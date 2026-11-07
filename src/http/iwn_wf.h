@@ -183,7 +183,7 @@ struct iwn_wf_server_spec {
   int request_token_max_len;                     ///< Default: 8192
 
   /// Enable transparent HTTP/1.1 <-> HTTP/2 transport negotiation.
-  /// Requires the library to be built with `ENABLE_HTTP2`.
+  /// Requires the library to be built with `IWN_ENABLE_HTTP2`.
   bool http2;
 };
 

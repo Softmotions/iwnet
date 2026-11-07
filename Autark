@@ -25,8 +25,9 @@ meta {
 option { IWNET_BUILD_SHARED_LIBS  Build shared libraries }
 option { IWNET_BUILD_TESTS        Build test cases }
 option { IWNET_RUN_TESTS          Build and run test cases }
-option { ENABLE_GRPC              Enable gRPC client. Default: 0  }
-option { ENABLE_HTTP2             Enable HTTP/2 server transport (requires libhive). Default: 0 }
+option { IWN_ENABLE_GRPC          Enable gRPC client. Default: 0  }
+option { IWN_ENABLE_HTTP2         Enable HTTP/2 server transport (requires libhive). Default: 0 }
+option { IWN_ENABLE_S2N           Enable AWS s2n-tls TLS implementation. Default: 0 }
 option { ENABLE_ASAN              Turn on address sanitizer }
 option { ENABLE_UBSAN             Turn on UB sanitizer }
 option { ENABLE_DEBINFO           Generate debuginfo even in release mode }
@@ -72,14 +73,14 @@ set {
   IW_LIBHIVE_REQUIRED 0
 }
 
-if { ${ENABLE_GRPC} 
+if { ${IWN_ENABLE_GRPC} 
   set {
     IW_LIBHIVE_REQUIRED 1
   }
   include { grpc.autark }
 }
 
-if { ${ENABLE_HTTP2} 
+if { ${IWN_ENABLE_HTTP2} 
   set {
     IW_LIBHIVE_REQUIRED 1
   }
@@ -181,8 +182,11 @@ set {
   if { ${IWNET_BUILD_TESTS}
     -DIW_TESTS
   }
-  if { ${ENABLE_HTTP2}
+  if { ${IWN_ENABLE_HTTP2}
     -DIWN_HTTP2
+  }
+  if { ${IWN_ENABLE_S2N}
+    -DIWN_ENABLE_S2N
   }
 
   -D_DEFAULT_SOURCE
@@ -195,6 +199,10 @@ set {
   -I S{src}
 }
 
+# Included after CFLAGS/LDFLAGS are defined: it extends them with the s2n-tls flags
+if { ${IWN_ENABLE_S2N}
+  include { s2n.autark }
+}
 
 include { distr.autark }
 include { tools/Autark }

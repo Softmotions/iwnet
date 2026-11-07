@@ -327,3 +327,21 @@ IW_TEST_FILTER=reopen,walfuzz IOWOW_RUN_TESTS=1 ./build.sh -c
 A new test executable is listed in the `src/<module>/tests/Autark` file. The
 binaries and their logs are placed into `autark-cache/src/<module>/tests/`.
 See the [README](README.md#tests) for the project specific details.
+
+## TLS backend selection
+
+The TLS test cases can be run against either TLS backend. The backend is selected
+by the `IWN_TEST_TLS` environment variable: `s2n` selects AWS s2n-tls
+(`IWN_TLS_IMPL_S2N`), any other value or an unset variable selects the default
+BearSSL backend (`IWN_TLS_IMPL_BEARSSL`). The test code obtains the value with
+`iwn_test_tls_impl()` from [iwn_tests_tls.h](./src/iwn_tests_tls.h).
+
+The test suite runs the s2n-tls variants automatically when the library is built
+with `IWN_ENABLE_S2N=1`:
+
+```sh
+IWN_ENABLE_S2N=1 IWNET_RUN_TESTS=1 ./build.sh -c
+
+# Run a single TLS case against s2n-tls
+IWN_TEST_TLS=s2n ./server1-tests-run.sh -- --ssl
+```

@@ -150,7 +150,7 @@ listening socket. HTTP/2 is negotiated by TLS ALPN (`h2`) or, on plain text
 connections, by the HTTP/2 connection preface (prior knowledge).
 
 HTTP/2 support is optional and requires the library to be built with
-`ENABLE_HTTP2=1` (it depends on [libhive](https://github.com/Softmotions/libhive)).
+`IWN_ENABLE_HTTP2=1` (it depends on [libhive](https://github.com/Softmotions/libhive)).
 The server opts in with `iwn_http_server_spec::http2` (`iwn_wf_server_spec::http2`
 for the web framework). Requests are delivered to the very same request handler
 and the `iwn_http_req` API (as well as the `iwn_wf` web framework) works
@@ -158,7 +158,7 @@ unchanged. Use `iwn_http_request_is_http2()` to detect the transport if needed.
 
 ```sh
   # Build with HTTP/2 support
-  ENABLE_HTTP2=1 ./build.sh -c
+  IWN_ENABLE_HTTP2=1 ./build.sh -c
 
   # Plain text HTTP/2 (prior knowledge)
   curl --http2-prior-knowledge http://localhost:8080/

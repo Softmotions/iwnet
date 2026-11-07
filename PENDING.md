@@ -2,6 +2,17 @@
 
 New records are on the top.
 
+## s2n-tls backend
+
+- The s2n-tls adapter builds a `s2n_config` and parses the certificate chain/private key
+  for every accepted connection (same as the BearSSL adapter does). Sharing a single
+  config per server would avoid this cost.
+- The s2n-tls adapter does not send the TLS `close_notify` alert on connection teardown
+  (`s2n_shutdown()` is not called), it just releases the connection. This matches the
+  BearSSL adapter behaviour.
+- gRPC server TLS is exercised only by the C client test cases; `grpc_test_server1` uses a
+  UNIX socket. The s2n server path is covered by the HTTP/WebSocket server test cases.
+
 ## HTTP/2 server transport
 
 - `iwn_http_proxy_*` (reverse proxy) is not supported for requests served by the

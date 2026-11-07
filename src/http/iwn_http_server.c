@@ -7,7 +7,7 @@
 #include "iwn_url.h"
 #include "iwn_scheduler.h"
 #include "poller/iwn_direct_poller_adapter.h"
-#include "ssl/iwn_brssl_poller_adapter.h"
+#include "ssl/iwn_tls_poller_adapter.h"
 
 #ifdef IWN_HTTP2
 #include "http2/iwn_http2_server.h"
@@ -1769,7 +1769,8 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
 
   if (server->https) {
     pthread_mutex_lock(&server->mtx_ssl);
-    rc = iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
+    rc = iwn_tls_server_poller_adapter(&(struct iwn_tls_server_poller_adapter_spec) {
+      .tls_impl = server->spec.ssl.tls_impl,
       .alpn_protocol_names = server->spec.http2 ? "h2,http/1.1" : 0,
       .certs = server->spec.ssl.certs,
       .certs_in_buffer = server->spec.ssl.certs_in_buffer,
@@ -2800,7 +2801,13 @@ static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data)
   }
   server->spec.ssl.certs_in_buffer = ssl->certs_in_buffer;
   server->spec.ssl.private_key_in_buffer = ssl->private_key_in_buffer;
+  server->spec.ssl.tls_impl = ssl->tls_impl;
   server->https = ssl->certs && ssl->certs_len && ssl->private_key && ssl->private_key_len;
+  if (server->https && !iwn_tls_impl_available(ssl->tls_impl)) {
+    server->https = false;
+    iwlog_ecode_error(IWN_TLS_ERROR_NOT_AVAILABLE, "TLS implementation '%s' is not available",
+                      iwn_tls_impl_name(ssl->tls_impl));
+  }
   pthread_mutex_unlock(&server->mtx_ssl);
 }
 
@@ -2834,7 +2841,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
 
 #ifndef IWN_HTTP2
   if (spec->http2) {
-    iwlog_warn("HTTP/2 support is not compiled in (ENABLE_HTTP2), ignoring (struct iwn_http_server_spec)::http2");
+    iwlog_warn("HTTP/2 support is not compiled in (IWN_ENABLE_HTTP2), ignoring (struct iwn_http_server_spec)::http2");
     spec->http2 = false;
   }
 #endif
@@ -2872,6 +2879,11 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
   }
 
   server->https = spec->ssl.certs && spec->ssl.certs_len && spec->ssl.private_key && spec->ssl.private_key_len;
+  if (server->https && !iwn_tls_impl_available(spec->ssl.tls_impl)) {
+    rc = IWN_TLS_ERROR_NOT_AVAILABLE;
+    iwlog_ecode_error(rc, "TLS implementation '%s' is not available", iwn_tls_impl_name(spec->ssl.tls_impl));
+    goto finish;
+  }
   if (server->https) {
     if (spec->ssl.certs_len < 0) {
       spec->ssl.certs_len = strlen(spec->ssl.certs);

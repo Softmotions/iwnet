@@ -5,6 +5,7 @@
 #include "iwn_grpc.h" // IWYU pragma: export
 #include "iwn_pairs.h"
 #include "iwn_poller_adapter.h"
+#include "iwn_tls.h"
 
 IW_EXTERN_C_START;
 
@@ -84,6 +85,7 @@ struct iwn_grpc_server_spec {
     ssize_t     private_key_len; ///< Private key data length. Negative value means strlen().
     bool certs_in_buffer;        ///< `certs` is PEM data rather than a file path.
     bool private_key_in_buffer;  ///< `private_key` is PEM data rather than a file path.
+    iwn_tls_impl_e tls_impl;     ///< TLS implementation. Default: `IWN_TLS_IMPL_BEARSSL`.
   } ssl;
 
   /// Server operation flags.

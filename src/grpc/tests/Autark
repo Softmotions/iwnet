@@ -50,5 +50,8 @@ if { ${IWNET_RUN_TESTS}
     always
     shell { ./tests.sh }
     shell { ./tests.sh --ssl }
+    if { ${IWN_ENABLE_S2N}
+      shell { IWN_TEST_TLS=s2n ./tests.sh --ssl }
+    }
   }
 }

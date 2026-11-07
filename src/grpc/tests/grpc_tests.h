@@ -1,5 +1,6 @@
 #include "iwtests.h"
 #include "iwn_grpc_client.h"
+#include "iwn_tests_tls.h"
 #include "iwn_poller.h"
 #include "iwstepbox.h"
 
@@ -246,6 +247,10 @@ static iwrc _grpc_test_setup(pthread_t *poll_thread) {
     .on_error = _on_error,
     .on_destroy = _on_destroy,
   };
+
+  if (_grpc_ssl) {
+    spec.ssl.tls_impl = iwn_test_tls_impl();
+  }
 
   RCC(rc, finish, iwn_poller_create(3, 1, &_ctx.poller));
   spec.poller = _ctx.poller;

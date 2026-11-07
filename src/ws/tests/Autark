@@ -47,6 +47,14 @@ if { ${IWNET_RUN_TESTS}
     }
   }
 
+  if { ${IWN_ENABLE_S2N}
+    run {
+      always
+      shell { IWN_TEST_TLS=s2n ./ws_client_test2 }
+      consumes { ws_server1 ws_client_test2 }
+    }
+  }
+
   run {
     always
     shell { ./ws_client_test1 -- --listen socket:///tmp/ws_server1.socket }

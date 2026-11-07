@@ -2,7 +2,7 @@
 
 #include "iwn_poller.h"
 #include "poller/iwn_direct_poller_adapter.h"
-#include "ssl/iwn_brssl_poller_adapter.h"
+#include "ssl/iwn_tls_poller_adapter.h"
 
 #include "iwn_base64.h"
 #include "iwn_url.h"
@@ -551,7 +551,8 @@ static iwrc _ws_connect(struct iwn_ws_client *ws) {
   }, ws)));
 
   if (ws->flags & _FLAG_SECURE) {
-    RCC(rc, finish, iwn_brssl_client_poller_adapter(&(struct iwn_brssl_client_poller_adapter_spec) {
+    RCC(rc, finish, iwn_tls_client_poller_adapter(&(struct iwn_tls_client_poller_adapter_spec) {
+      .tls_impl = spec->tls_impl,
       .poller = spec->poller,
       .host = ws->host,
       .on_event = _on_poller_adapter_event,
@@ -801,6 +802,11 @@ iwrc iwn_ws_client_open(const struct iwn_ws_client_spec *spec, struct iwn_ws_cli
   }
   if (ws->port < 1) {
     ws->port = (ws->flags & _FLAG_SECURE) ? 443 : 80;
+  }
+  if ((ws->flags & _FLAG_SECURE) && !iwn_tls_impl_available(ws->spec.tls_impl)) {
+    rc = IWN_TLS_ERROR_NOT_AVAILABLE;
+    iwlog_ecode_error(rc, "TLS implementation '%s' is not available", iwn_tls_impl_name(ws->spec.tls_impl));
+    goto finish;
   }
 
   if (!u.path) {

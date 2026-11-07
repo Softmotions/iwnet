@@ -1,0 +1,90 @@
+option { IWN_S2N_URL                AWS s2n-tls external project sources URL }
+option { IWN_S2N_CMAKE_ARGS         Extra CMake arguments used to build AWS s2n-tls }
+
+if { !defined { IWN_S2N_URL }
+  set {
+    IWN_S2N_URL
+    https://github.com/aws/s2n-tls/archive/refs/tags/v1.7.13.zip
+  }
+}
+
+check {
+  fetch_resource.sh { fetch-url{${IWN_S2N_URL}} C{extern_s2n} S2N_SRC_DIR }
+}
+
+set {
+  S2N_BUILD_DIR
+  C{s2n-build}
+}
+
+set {
+  S2N_INCLUDE_DIR
+  ^{${S2N_SRC_DIR} /api}
+}
+
+set {
+  S2N_LIB
+  ^{${S2N_BUILD_DIR} /lib/libs2n.a}
+}
+
+# Place libs2n.a next to the other installed static libraries (`-ls2n`)
+set {
+  S2N_INSTALLED_LIB
+  ^{C{${INSTALL_LIB_DIR}} /libs2n.a}
+}
+
+run {
+  shell { cmake -S ${S2N_SRC_DIR} -B ${S2N_BUILD_DIR}
+    -DCMAKE_BUILD_TYPE=Release
+    -DBUILD_SHARED_LIBS=OFF
+    -DBUILD_TESTING=OFF
+    -DUNSAFE_TREAT_WARNINGS_AS_ERRORS=OFF
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    ${IWN_S2N_CMAKE_ARGS}
+  }
+  consumes {
+    ${S2N_SRC_DIR}
+  }
+  produces {
+    ^{${S2N_BUILD_DIR} /CMakeCache.txt}
+  }
+}
+
+run {
+  shell { cmake --build ${S2N_BUILD_DIR} --target s2n --parallel }
+  consumes {
+    ^{${S2N_BUILD_DIR} /CMakeCache.txt}
+  }
+  produces {
+    ${S2N_LIB}
+  }
+}
+
+run {
+  shell { cp -f ${S2N_LIB} ${S2N_INSTALLED_LIB} }
+  consumes {
+    ${S2N_LIB}
+  }
+  produces {
+    ${S2N_INSTALLED_LIB}
+  }
+}
+
+install { ${INSTALL_LIB_DIR} ${S2N_INSTALLED_LIB} }
+
+set {
+  parent {
+    LDFLAGS_PKGCONF
+  }
+  ..${LDFLAGS_PKGCONF}
+  -ls2n
+  -lcrypto
+}
+
+set {
+  parent {
+    CFLAGS
+  }
+  ..${CFLAGS}
+  -I ${S2N_INCLUDE_DIR}
+}

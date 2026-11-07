@@ -1,7 +1,7 @@
 #include "iwn_grpc_client.h"
 #include "iwn_url.h"
 #include "iwn_pairs.h"
-#include "ssl/iwn_brssl_poller_adapter.h"
+#include "ssl/iwn_tls_poller_adapter.h"
 #include "poller/iwn_direct_poller_adapter.h"
 
 #include <iowow/iwrefs.h>
@@ -1344,7 +1344,8 @@ static iwrc _client_connect(struct iwn_grpc_client *client) {
   }
 
   if (client->flags & _FLAG_SECURE) {
-    RCC(rc, finish, iwn_brssl_client_poller_adapter(&(struct iwn_brssl_client_poller_adapter_spec) {
+    RCC(rc, finish, iwn_tls_client_poller_adapter(&(struct iwn_tls_client_poller_adapter_spec) {
+      .tls_impl = client->spec.ssl.tls_impl,
       .poller = client->poller,
       .host = client->url.host,
       .alpn_protocol_names = "h2", //< Only HTTP/2 is supported and allowed
@@ -1476,6 +1477,12 @@ iwrc iwn_grpc_client_open(const struct iwn_grpc_client_spec *spec_, struct iwn_g
     } else {
       client->url.port = 80;
     }
+  }
+
+  if ((client->flags & _FLAG_SECURE) && !iwn_tls_impl_available(client->spec.ssl.tls_impl)) {
+    rc = IWN_TLS_ERROR_NOT_AVAILABLE;
+    iwlog_ecode_error(rc, "TLS implementation '%s' is not available", iwn_tls_impl_name(client->spec.ssl.tls_impl));
+    goto finish;
   }
 
   if (!client->spec.authority) {

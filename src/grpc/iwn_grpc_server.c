@@ -1,6 +1,6 @@
 #include "iwn_grpc_server.h"
 #include "iwn_url.h"
-#include "ssl/iwn_brssl_poller_adapter.h"
+#include "ssl/iwn_tls_poller_adapter.h"
 #include "poller/iwn_direct_poller_adapter.h"
 
 #include <iowow/iwrefs.h>
@@ -1555,7 +1555,8 @@ static iwrc _conn_start(struct iwn_grpc_server_conn *conn) {
   }
 
   if (conn->flags & _FLAG_SECURE) {
-    rc = iwn_brssl_server_poller_adapter(&(struct iwn_brssl_server_poller_adapter_spec) {
+    rc = iwn_tls_server_poller_adapter(&(struct iwn_tls_server_poller_adapter_spec) {
+      .tls_impl = server->spec.ssl.tls_impl,
       .poller = server->poller,
       .alpn_protocol_names = "h2", //< Only HTTP/2 is supported and allowed
       .on_event = _conn_on_event,
@@ -1771,6 +1772,11 @@ static iwrc _listen_url_prepare(struct iwn_grpc_server *server) {
     if (!spec->ssl.certs || !spec->ssl.private_key || spec->ssl.certs_len < 1 || spec->ssl.private_key_len < 1) {
       rc = GRPC_ERROR_CONFIG;
       iwlog_ecode_error2(rc, "TLS certificates are required for the secure gRPC server url");
+      goto finish;
+    }
+    if (!iwn_tls_impl_available(spec->ssl.tls_impl)) {
+      rc = IWN_TLS_ERROR_NOT_AVAILABLE;
+      iwlog_ecode_error(rc, "TLS implementation '%s' is not available", iwn_tls_impl_name(spec->ssl.tls_impl));
       goto finish;
     }
   }

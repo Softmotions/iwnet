@@ -1,6 +1,7 @@
 #include "iwtests.h"
 #include "iwn_proc.h"
 #include "ws/iwn_ws_client.h"
+#include "iwn_tests_tls.h"
 
 #include <iowow/iwlog.h>
 
@@ -50,6 +51,7 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     .on_message = on_message,
     .on_dispose = on_dispose,
     .flags = WS_CONNECT_ASYNC,
+    .tls_impl = iwn_test_tls_impl(),
   }, &ws);
   IW_TEST_ASSERT_EQUAL(rc, 0);
   IW_TEST_ASSERT_PTR_NOT_NULL(ws);

@@ -1,7 +1,7 @@
 #pragma once
 
 /// Proxy layer for fd polled events.
-/// @see iwn_brssl_poller_adapter.c
+/// @see iwn_tls_poller_adapter.h
 
 #include "iwn_poller.h"
 

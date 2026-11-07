@@ -4,6 +4,7 @@
 
 #include "iwn_poller_adapter.h"
 #include "iwn_pairs.h"
+#include "iwn_tls.h"
 
 #include <iowow/iwxstr.h>
 #include <iowow/iwjson.h>
@@ -56,7 +57,7 @@ typedef bool (*iwn_http_server_chunk_handler)(struct iwn_http_req*, bool *again)
 ///
 typedef bool (*iwn_http_server_proxy_handler)(struct iwn_http_req*);
 
-/// Server TLS 1.2 config.
+/// Server TLS config.
 struct iwn_http_server_ssl_spec {
   const char *certs;           ///< PEM certificates text data or path to PEM file.
   const char *private_key;     ///< PEM private key text data or path to PEM file.
@@ -64,6 +65,7 @@ struct iwn_http_server_ssl_spec {
   ssize_t     private_key_len; ///< -1 If `private_key` data is a file path.
   bool private_key_in_buffer;  ///< true if `certs_data` specified as data buffer rather a file name.
   bool certs_in_buffer;        ///< true if `private_key_in_buffer` specified as data buffer rather a file name.
+  iwn_tls_impl_e tls_impl;     ///< TLS implementation. Default: `IWN_TLS_IMPL_BEARSSL`.
 };
 
 struct iwn_http_server_spec {
@@ -78,7 +80,7 @@ struct iwn_http_server_spec {
   void *user_data;                                   ///< Arbitrary user data propagated into struct
                                                      ///  iwn_http_req::user_data
   iwn_http_server_on_dispose      on_server_dispose; ///< Server dispose callback handler.
-  struct iwn_http_server_ssl_spec ssl;               ///< TLS 1.2 parameters.
+  struct iwn_http_server_ssl_spec ssl;               ///< TLS parameters.
   int port;                                          ///< If -1 listen attribute treated as a Unix socket file.
                                                      ///  Default: 8080 http, 8443 https
   int socket_queue_size;                             ///< Default: 64
@@ -92,7 +94,7 @@ struct iwn_http_server_spec {
   /// Enable transparent HTTP/1.1 <-> HTTP/2 transport negotiation on this server.
   /// HTTP/2 is negotiated by TLS ALPN (`h2`) or by the HTTP/2 connection preface
   /// (prior knowledge, plain text connections).
-  /// Requires the library to be built with `ENABLE_HTTP2`, otherwise the flag is ignored.
+  /// Requires the library to be built with `IWN_ENABLE_HTTP2`, otherwise the flag is ignored.
   bool http2;
 };
 

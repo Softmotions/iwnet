@@ -22,10 +22,10 @@ protobuf stubs. The module is experimental at this time and needs more testing.
 
 ## How to enable iwnet gRPC
 
-Turn ON `ENABLE_GRPC` flag.
+Turn ON `IWN_ENABLE_GRPC` flag.
 
 ```sh
-ENABLE_GRPC=1 .. ./build.sh ...
+IWN_ENABLE_GRPC=1 .. ./build.sh ...
 ```
 
 Call `iwn_grpc_init()` once before using the client or the server.
@@ -244,6 +244,11 @@ struct iwn_grpc_server_spec spec = {
 ```
 
 PEM data can be passed directly with `certs_in_buffer = true` / `private_key_in_buffer = true`.
+
+The TLS backend is selected by `iwn_grpc_server_spec::ssl::tls_impl` and
+`iwn_grpc_client_spec::ssl::tls_impl`. `IWN_TLS_IMPL_BEARSSL` (TLS 1.2) is the default,
+`IWN_TLS_IMPL_S2N` (TLS 1.2/1.3) is available when the library is built with
+`IWN_ENABLE_S2N=1`.
 
 Server defaults:
 

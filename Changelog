@@ -1,3 +1,15 @@
+2026-11-07	Anton Adamansky  <adamansky@gmail.com>  [v1.6.0-dev]
+	* ssl: Added an optional AWS s2n-tls (TLS 1.2/1.3) TLS backend (`IWN_ENABLE_S2N`, default off).
+	  TLS connections now go through the new `iwn_tls_poller_adapter.h` layer and the
+	  implementation is selected per server/client. The default
+	  `IWN_TLS_IMPL_BEARSSL` keeps the previous BearSSL TLS 1.2 behaviour. `s2n-tls` is fetched
+	  and built by `s2n.autark` and requires `cmake` plus OpenSSL `libcrypto` development files.
+	* Autark: Renamed the `ENABLE_GRPC` option to `IWN_ENABLE_GRPC` and `ENABLE_HTTP2` to
+	  `IWN_ENABLE_HTTP2`.
+	* Tests: HTTP, gRPC and websocket TLS cases can be run against the s2n-tls backend with
+	  the `IWN_TEST_TLS=s2n` environment variable; the suite runs them automatically when
+	  built with `IWN_ENABLE_S2N=1`.
+
 2026-11-06	Anton Adamansky  <adamansky@gmail.com>  [v1.6.0-dev]
 	* iwn_http_server: Added optional HTTP/2 server transport (`ENABLE_HTTP2`, based on libhive).
 	  HTTP/1.1 and HTTP/2 clients are served transparently on the same socket, HTTP/2 is

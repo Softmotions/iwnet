@@ -4,6 +4,7 @@
 
 #include "iwn_ws.h" // IWYU pragma: export
 #include "iwn_poller.h"
+#include "iwn_tls.h"
 #include <iowow/iwjson.h>
 
 IW_EXTERN_C_START;
@@ -37,6 +38,7 @@ struct iwn_ws_client_spec {
   void   *user_data;   ///< Arbitrary user data which will referred by `iwn_ws_client_ctx`.
   long    timeout_sec; ///< Connection inactivity timeout
   uint8_t flags;       ///< `IWN_WS_VERIFY_*` flags
+  iwn_tls_impl_e tls_impl; ///< TLS implementation. Default: `IWN_TLS_IMPL_BEARSSL`.
 
   uint8_t reconnect_attempts_num;      ///< Number of reconnect attempts. Default: 0
   uint8_t reconnect_attempt_pause_sec; ///< Number of seconds to wait before next reconnect attempt. Default: 5

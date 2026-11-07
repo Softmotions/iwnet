@@ -1,5 +1,6 @@
 #include "iwtests.h"
 #include "iwn_ws_server.h"
+#include "iwn_tests_tls.h"
 
 #include <iowow/iwlog.h>
 #include <iowow/iwconv.h>
@@ -116,6 +117,7 @@ int main(int argc, char *argv[]) {
   };
 
   if (ssl) {
+    spec.ssl.tls_impl = iwn_test_tls_impl();
     spec.ssl.private_key = "./key.pem";
     spec.ssl.private_key_len = -1;
     spec.ssl.certs = "./cert.pem";

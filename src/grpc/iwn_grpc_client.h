@@ -4,7 +4,8 @@
 
 #include "iwn_grpc.h" // IWYU pragma: export
 #include "iwn_poller_adapter.h"
-#include  "iwn_pairs.h"
+#include "iwn_pairs.h"
+#include "iwn_tls.h"
 
 IW_EXTERN_C_START;
 
@@ -93,6 +94,11 @@ struct iwn_grpc_client_spec {
   struct iwn_poller *poller;    ///< Poller instance. Required.
   void *user_data;              ///< User data for callbacks.
   long  inactivity_timeout_sec; ///< Connection data inactivity timeout in seconds.
+
+  /// TLS client settings. Used for secured (`grpc://`) urls.
+  struct {
+    iwn_tls_impl_e tls_impl;    ///< TLS implementation. Default: `IWN_TLS_IMPL_BEARSSL`.
+  } ssl;
 
   /// gRPC specific settings.
   struct {
