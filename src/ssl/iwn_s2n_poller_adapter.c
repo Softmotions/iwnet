@@ -329,8 +329,9 @@ static iwrc _adapter_init(struct pa *a) {
   pthread_mutex_init(&a->mtx, &attr);
   pthread_mutexattr_destroy(&attr);
 
-  if (pthread_key_create(&a->ready_fd_tl, 0) != 0) {
-    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  int rci = pthread_key_create(&a->ready_fd_tl, 0);
+  if (rci) {
+    return iwrc_set_errno(IW_ERROR_THREADING_ERRNO, rci);
   }
   a->tl_ready = true;
   return 0;

@@ -1,10 +1,17 @@
 option { IWN_S2N_URL                AWS s2n-tls external project sources URL }
 option { IWN_S2N_CMAKE_ARGS         Extra CMake arguments used to build AWS s2n-tls }
+option { IWN_S2N_LIBS               Libraries required to link AWS s2n-tls. Default: -lcrypto }
 
 if { !defined { IWN_S2N_URL }
   set {
     IWN_S2N_URL
-    https://github.com/aws/s2n-tls/archive/refs/tags/v1.7.13.zip
+    https://github.com/aws/s2n-tls/archive/refs/tags/v1.7.13.tar.gz
+  }
+}
+
+if { !defined { IWN_S2N_LIBS }
+  set {
+    IWN_S2N_LIBS -lcrypto
   }
 }
 
@@ -40,6 +47,7 @@ run {
     -DBUILD_TESTING=OFF
     -DUNSAFE_TREAT_WARNINGS_AS_ERRORS=OFF
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+    -DS2N_STACKTRACE=OFF
     ${IWN_S2N_CMAKE_ARGS}
   }
   consumes {
@@ -78,7 +86,7 @@ set {
   }
   ..${LDFLAGS_PKGCONF}
   -ls2n
-  -lcrypto
+  ${IWN_S2N_LIBS}
 }
 
 set {

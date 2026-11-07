@@ -39,7 +39,11 @@ IWN_ENABLE_GRPC=1 IWN_ENABLE_S2N=1 BUILD_TYPE=Debug ./build.sh -c
 | `CC`                       | auto      | C compiler (`clang` is preferred, it enables the optional blocks API).                    |
 
 The external dependency sources can be overridden with `IOWOW_URL`, `LIBHIVE_URL` and
-`IWN_S2N_URL` (each defaults to a pinned upstream release). A complete list of the
+`IWN_S2N_URL` (each defaults to a pinned upstream release). The s2n-tls build can be tuned
+with `IWN_S2N_CMAKE_ARGS` (extra CMake arguments) and `IWN_S2N_LIBS` (libraries required to
+link it, `-lcrypto` by default). s2n-tls stacktraces are disabled by default to avoid the
+`execinfo` link dependency on BSD systems; pass `IWN_S2N_CMAKE_ARGS="-DS2N_STACKTRACE=ON"`
+(and the required libraries in `IWN_S2N_LIBS`) to re-enable them. A complete list of the
 available options is printed by:
 
 ```sh
@@ -54,11 +58,21 @@ TLS connections are handled by a selectable backend (`iwn_tls_impl_e`):
 * `IWN_TLS_IMPL_S2N` — [AWS s2n-tls](https://github.com/aws/s2n-tls), TLS 1.2 and TLS 1.3.
 
 s2n-tls support is optional and enabled with `IWN_ENABLE_S2N=1`. The build fetches and
-compiles a pinned s2n-tls release, so `cmake` and OpenSSL `libcrypto` development files
-are required:
+compiles a pinned s2n-tls release, so `cmake` (3.13 or newer) and OpenSSL `libcrypto`
+development files are required:
 
 ```sh
   IWN_ENABLE_S2N=1 ./build.sh -c
+```
+
+On Linux and FreeBSD `libcrypto` is part of the base system. On macOS OpenSSL is usually
+provided by Homebrew (keg-only), so point both the s2n-tls build and the final link to it:
+
+```sh
+  IWN_ENABLE_S2N=1 \
+    IWN_S2N_CMAKE_ARGS="-DCMAKE_PREFIX_PATH=$(brew --prefix openssl)" \
+    IWN_S2N_LIBS="-L$(brew --prefix openssl)/lib -lcrypto" \
+    ./build.sh -c
 ```
 
 The backend is selected per server/client with the `tls_impl` field of
