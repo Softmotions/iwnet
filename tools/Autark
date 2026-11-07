@@ -17,6 +17,7 @@ run {
   shell { ./strliteral -i 'data_cacert' SS{cacert.pem} > C{include/data_cacert.inc} }
   consumes { 
     strliteral 
+    SS{cacert.pem}
   }
   produces {
     C{include/data_cacert.inc} 

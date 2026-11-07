@@ -1,5 +1,5 @@
 check {
-  changelog_gnu.sh { S{Changelog} }
+  changelog_md.sh { S{CHANGELOG.md} }
   system.sh
   test_blocks.sh { IW_BLOCKS }
   test_header.sh { arpa/inet.h HAVE_ARPA_INET_H } 

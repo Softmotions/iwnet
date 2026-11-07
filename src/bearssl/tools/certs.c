@@ -26,7 +26,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <errno.h>
 
 #include "brssl.h"
 

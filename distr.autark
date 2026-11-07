@@ -5,7 +5,7 @@ install-sources {
  .ignore
  .lvimrc
  Autark
- Changelog
+ CHANGELOG.md
  LICENSE
  README.md
  build.sh
