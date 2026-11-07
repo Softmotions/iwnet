@@ -24,6 +24,7 @@
 - Tests: Added in-process `iwn_wf` test coverage (route matching, request/query/header parsing,
   sessions, in-memory session store) and HTTP/2 runs of the HTTP server test cases.
 
+
 # [v1.5.0] - 2026-11-04
 
 - iwn_proc: Added `iwn_proc_spec::kill_process_group`: the child is started as a leader of its own
