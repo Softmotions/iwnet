@@ -168,7 +168,7 @@ set {
   }
   if { defined { SYSTEM_WINDOWS } 
     -D__USE_MINGW_ANSI_STDIO
-    -Wno-pedantic-ms-format"
+    -Wno-pedantic-ms-format
   }
   if { defined { IW_BLOCKS } 
     -fblocks
