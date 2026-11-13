@@ -6,6 +6,10 @@
 #include <errno.h>
 #include <unistd.h>
 
+#if defined(SO_NOSIGPIPE)
+#include <sys/socket.h>
+#endif
+
 struct pa {
   struct iwn_poller_adapter     b;
   iwn_on_poller_adapter_event   on_event;
@@ -25,7 +29,11 @@ static ssize_t _read(struct iwn_poller_adapter *a, uint8_t *buf, size_t len) {
 }
 
 static ssize_t _write(struct iwn_poller_adapter *a, const uint8_t *buf, size_t len) {
+#ifdef MSG_NOSIGNAL
+  return send(a->fd, buf, len, MSG_NOSIGNAL);
+#else
   return write(a->fd, buf, len);
+#endif
 }
 
 static const char* _get_protocol_name(struct iwn_poller_adapter *a) {
@@ -61,6 +69,13 @@ iwrc iwn_direct_poller_adapter(
   if (!a) {
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
+#if defined(SO_NOSIGPIPE)
+  {
+    // Apple platforms have no MSG_NOSIGNAL: suppress SIGPIPE on the socket.
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+  }
+#endif
   a->b.fd = fd;
   a->b.user_data = user_data;
   a->b.poller = p;

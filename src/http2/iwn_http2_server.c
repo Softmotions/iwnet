@@ -26,6 +26,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -81,14 +82,25 @@ struct h2_req {
   size_t   bstream_len;    ///< Length of the buffered request body.
   uint32_t stream_id;
   int      code;
-  uint8_t  flags;
-  bool     remote_end;
-  bool     dispatched;
-  bool     in_chunk_delivery;
-  bool     resp_headers_sent;
-  bool     resp_ended;
-  bool     resp_eof;
-  bool     closed;
+  atomic_size_t out_pending;     ///< Bytes in `out` not yet accepted by hive.
+  atomic_size_t pending_bytes;   ///< Bytes queued by a response writer from another thread.
+  uint8_t       flags;
+  bool remote_end;
+  bool dispatched;
+  bool in_chunk_delivery;
+  bool resp_headers_sent;
+  bool resp_ended;
+  bool resp_eof;
+  bool closed;
+};
+
+struct h2_out_pending {
+  uint32_t       stream_id;
+  struct iwxstr *data;
+  iwn_http_server_chunk_handler chunk_cb;
+  bool set_cb;
+  bool eof;
+  bool rst;
 };
 
 struct h2_conn {
@@ -104,8 +116,12 @@ struct h2_conn {
   struct iwulist  reqlist;               ///< Live requests in creation order.
   struct iwulist  events;                ///< Pending app events.
   struct iwulist  graveyard;
+  struct iwulist  out_queue;             ///< Deferred response writes, struct h2_out_pending*.
   struct iwxstr  *input_buf;
-  pthread_mutex_t mtx; ///< Recursive. Guards session and all requests.
+  pthread_mutex_t mtx;                   ///< Recursive. Guards session and all requests.
+  pthread_mutex_t out_mtx;               ///< Leaf lock. Guards out_queue.
+  atomic_bool     flush_scheduled;
+  atomic_uint     refs;
   pthread_t       loop_tid;
   int  fd;
   int  active_streams;
@@ -118,6 +134,22 @@ struct h2_conn {
   bool closed;
 };
 
+/// Connection code (the poller event loop and the deferred flush task) marks
+/// the current thread, so response writers can decide whether they may touch
+/// the request state directly or have to queue the operation.
+static _Thread_local struct h2_conn *tl_conn;
+
+static struct h2_conn* _conn_ref(struct h2_conn *conn) {
+  atomic_fetch_add_explicit(&conn->refs, 1, memory_order_relaxed);
+  return conn;
+}
+
+static void _conn_unref(struct h2_conn *conn);
+static void _conn_schedule_flush(struct h2_conn *conn);
+static iwrc _conn_defer(
+  struct h2_conn *conn, struct h2_req *req, const char *buf, size_t len,
+  iwn_http_server_chunk_handler chunk_cb, bool eof, bool rst);
+
 static void _conn_flush_locked(struct h2_conn *conn);
 static void _req_dispatch(struct h2_req *req);
 
@@ -129,6 +161,10 @@ static inline bool _same_thread(pthread_t tid) {
   return pthread_equal(tid, pthread_self());
 }
 
+static inline bool _conn_is_owner(struct h2_conn *conn) {
+  return (conn->in_loop && _same_thread(conn->loop_tid)) || (tl_conn == conn);
+}
+
 ///////////////////////////////////////////////////////////////////////////
 //                              Request                                    //
 ///////////////////////////////////////////////////////////////////////////
@@ -138,6 +174,7 @@ static void _req_out_clear(struct h2_req *req) {
     iwxstr_clear(req->out);
   }
   req->out_off = 0;
+  atomic_store_explicit(&req->out_pending, 0, memory_order_relaxed);
 }
 
 static iwrc _req_out_cat(struct h2_req *req, const char *buf, size_t len) {
@@ -150,7 +187,11 @@ static iwrc _req_out_cat(struct h2_req *req, const char *buf, size_t len) {
       return iwrc_set_errno(IW_ERROR_ALLOC, errno);
     }
   }
-  return iwxstr_cat(req->out, buf, len);
+  iwrc rc = iwxstr_cat(req->out, buf, len);
+  if (!rc) {
+    atomic_fetch_add_explicit(&req->out_pending, len, memory_order_relaxed);
+  }
+  return rc;
 }
 
 static inline bool _req_out_avail(struct h2_req *req) {
@@ -634,7 +675,22 @@ static void _resp_stream_write(
   struct h2_req *req = (void*) request;
   iwrc rc = 0;
   if (buf_len < 0) {
-    buf_len = buf ? strlen(buf) : 0;
+    buf_len = buf ? (ssize_t) strlen(buf) : 0;
+  }
+  if (req->conn && !_conn_is_owner(req->conn)) {
+    // Called from another thread: queue the operation for the connection
+    // thread, which owns the libhive session and the request state.
+    rc = _conn_defer(req->conn, req, buf, (size_t) buf_len, chunk_cb, chunk_cb == 0, false);
+    if (buf && buf_free) {
+      buf_free(buf);
+    }
+    if (chunk_cb && again) {
+      *again = true;
+    }
+    if (rc) {
+      iwlog_ecode_error3(rc);
+    }
+    return;
   }
   req->chunk_cb = chunk_cb;
   if (!chunk_cb) {
@@ -679,7 +735,13 @@ static iwrc _resp_chunk_write(
   iwrc rc = 0;
   struct h2_req *req = (void*) request;
   if (body_len < 0) {
-    body_len = body ? strlen(body) : 0;
+    body_len = body ? (ssize_t) strlen(body) : 0;
+  }
+  if (req->conn && !_conn_is_owner(req->conn)) {
+    if (chunk_cb && again) {
+      *again = true;
+    }
+    return _conn_defer(req->conn, req, body, (size_t) body_len, chunk_cb, false, false);
   }
   req->chunk_cb = chunk_cb;
   req->flags |= H2_REQ_CHUNKED_RESP;
@@ -703,6 +765,9 @@ finish:
 static iwrc _resp_chunk_end(struct iwn_http_req *request) {
   iwrc rc = 0;
   struct h2_req *req = (void*) request;
+  if (req->conn && !_conn_is_owner(req->conn)) {
+    return _conn_defer(req->conn, req, 0, 0, 0, true, false);
+  }
   req->flags &= ~H2_REQ_CHUNKED_RESP;
   req->chunk_cb = 0;
   req->resp_eof = true;
@@ -713,6 +778,36 @@ static iwrc _resp_chunk_end(struct iwn_http_req *request) {
   _conn_flush_locked(req->conn);
 finish:
   return rc;
+}
+
+/// Aborts the request stream. Thread safe: an abort issued from another
+/// thread is queued and executed by the connection thread.
+static iwrc _req_abort(struct iwn_http_req *request) {
+  struct h2_req *req = (void*) request;
+  if (!req->conn) {
+    return IW_ERROR_INVALID_STATE;
+  }
+  if (!_conn_is_owner(req->conn)) {
+    return _conn_defer(req->conn, req, 0, 0, 0, true, true);
+  }
+  struct h2_conn *conn = req->conn;
+  if (!conn->sess || conn->closed || conn->abort) {
+    return IW_ERROR_INVALID_STATE;
+  }
+  req->chunk_cb = 0;
+  req->resp_eof = true;
+  if (hive_submit_rst_stream(conn->sess, req->stream_id, HIVE_H2_CANCEL) != HIVE_OK) {
+    return IW_ERROR_FAIL;
+  }
+  conn->send_blocked = false;
+  _conn_flush_locked(conn);
+  return 0;
+}
+
+static size_t _req_pending(struct iwn_http_req *request) {
+  struct h2_req *req = (void*) request;
+  return atomic_load_explicit(&req->out_pending, memory_order_relaxed)
+         + atomic_load_explicit(&req->pending_bytes, memory_order_relaxed);
 }
 
 // Framework glue
@@ -773,6 +868,8 @@ static const struct iwn_http_req_ops _req_ops = {
   .response_stream_start = _resp_stream_start,
   .response_stream_write = _resp_stream_write,
   .response_stream_end = _resp_stream_end,
+  .request_abort = _req_abort,
+  .response_pending = _req_pending,
   .wf_set = _req_wf_set,
   .wf_data = _req_wf_data,
   .ws_set = _req_ws_set,
@@ -802,6 +899,7 @@ static ssize_t _resp_read_cb(
       size_t n = avail < length ? avail : length;
       memcpy(*buf, iwxstr_ptr(req->out) + req->out_off, n);
       req->out_off += n;
+      atomic_fetch_sub_explicit(&req->out_pending, n, memory_order_relaxed);
       if (req->out_off >= iwxstr_size(req->out)) {
         _req_out_clear(req);
       }
@@ -838,7 +936,12 @@ static ssize_t _resp_read_cb(
       if (conn->abort) {
         return HIVE_ERR;
       }
-      continue;
+      if (!again && !_req_resp_has_data(req) && !req->resp_eof) {
+        // The data provider has nothing to send right now. A pending EOF is
+        // still delivered by this invocation.
+        break;
+      }
+      continue; // Consume the data produced by the provider (or deliver EOF).
     }
     break;
   }
@@ -1080,6 +1183,8 @@ static int _hcb_on_begin_headers(hive_session_t *session, uint32_t stream_id, vo
   req->in = in;
   req->stream_id = stream_id;
   req->code = 200;
+  atomic_init(&req->out_pending, 0);
+  atomic_init(&req->pending_bytes, 0);
   req->src.ptr = req;
   req->src.read_callback = _resp_read_cb;
 
@@ -1230,6 +1335,182 @@ static int _hcb_on_connection_error(hive_session_t *session, int hive_err, uint3
   return 0;
 }
 
+///////////////////////////////////////////////////////////////////////////
+//                     Deferred response writes                           //
+///////////////////////////////////////////////////////////////////////////
+
+/// Response writers which are not running on the connection thread queue
+/// their data here. The queue is guarded by the leaf `out_mtx` lock, the data
+/// is applied to the requests by the connection thread (`_conn_flush_pending_locked()`)
+/// under `conn->mtx`. This keeps the libhive session single threaded while the
+/// public response data API stays thread safe.
+
+static struct h2_out_pending* _conn_pending_get_locked(struct h2_conn *conn, uint32_t stream_id) {
+  for (size_t i = 0; i < iwulist_length(&conn->out_queue); ++i) {
+    struct h2_out_pending *p = *(struct h2_out_pending**) iwulist_get(&conn->out_queue, i);
+    if (p->stream_id == stream_id) {
+      return p;
+    }
+  }
+  struct h2_out_pending *p = calloc(1, sizeof(*p));
+  if (!p) {
+    return 0;
+  }
+  p->stream_id = stream_id;
+  p->data = iwxstr_create_empty();
+  if (!p->data || iwulist_push(&conn->out_queue, &p)) {
+    iwxstr_destroy(p->data);
+    free(p);
+    return 0;
+  }
+  return p;
+}
+
+static iwrc _conn_defer_locked(
+  struct h2_conn *conn, struct h2_req *req, const char *buf, size_t len,
+  iwn_http_server_chunk_handler chunk_cb, bool eof, bool rst) {
+  struct h2_out_pending *p = _conn_pending_get_locked(conn, req->stream_id);
+  if (!p) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  if (len) {
+    iwrc rc = iwxstr_cat(p->data, buf, len);
+    if (rc) {
+      return rc;
+    }
+    atomic_fetch_add_explicit(&req->pending_bytes, len, memory_order_relaxed);
+  }
+  if (chunk_cb) {
+    p->chunk_cb = chunk_cb;
+    p->set_cb = true;
+  }
+  if (eof) {
+    p->eof = true;
+  }
+  if (rst) {
+    p->rst = true;
+  }
+  return 0;
+}
+
+static iwrc _conn_defer(
+  struct h2_conn *conn, struct h2_req *req, const char *buf, size_t len,
+  iwn_http_server_chunk_handler chunk_cb, bool eof, bool rst) {
+  if (!conn || !req || !conn->sess || conn->closed || conn->abort) {
+    return IW_ERROR_INVALID_STATE;
+  }
+  pthread_mutex_lock(&conn->out_mtx);
+  iwrc rc = _conn_defer_locked(conn, req, buf, len, chunk_cb, eof, rst);
+  pthread_mutex_unlock(&conn->out_mtx);
+  if (!rc) {
+    _conn_schedule_flush(conn);
+  }
+  return rc;
+}
+
+/// Moves the deferred writes of the connection into the request output
+/// buffers. Must be called on the connection thread with `conn->mtx` held.
+static void _conn_flush_pending_locked(struct h2_conn *conn) {
+  struct iwulist batch = conn->out_queue;
+  iwulist_init(&conn->out_queue, 16, sizeof(struct h2_out_pending*));
+  size_t count = iwulist_length(&batch);
+  if (!count) {
+    iwulist_destroy_keep(&batch);
+    return;
+  }
+  for (size_t i = 0; i < count; ++i) {
+    struct h2_out_pending *p = *(struct h2_out_pending**) iwulist_get(&batch, i);
+    struct h2_req *req = conn->reqs ? iwhmap_get_u32(conn->reqs, p->stream_id) : 0;
+    size_t len = p->data ? iwxstr_size(p->data) : 0;
+    if (req && len) {
+      if (atomic_load_explicit(&req->pending_bytes, memory_order_relaxed) >= len) {
+        atomic_fetch_sub_explicit(&req->pending_bytes, len, memory_order_relaxed);
+      } else {
+        atomic_store_explicit(&req->pending_bytes, 0, memory_order_relaxed);
+      }
+    }
+    if (req && !req->closed && conn->sess) {
+      if (p->rst) {
+        req->resp_eof = true;
+        req->chunk_cb = 0;
+        if (hive_submit_rst_stream(conn->sess, p->stream_id, HIVE_H2_CANCEL) != HIVE_OK) {
+          conn->abort = true;
+        }
+      } else {
+        if (p->set_cb) {
+          req->chunk_cb = p->chunk_cb;
+          req->flags |= H2_REQ_STREAM_RESP;
+        }
+        if (len && _req_out_cat(req, iwxstr_ptr(p->data), len)) {
+          conn->abort = true;
+        }
+        if (p->eof) {
+          req->resp_eof = true;
+          req->chunk_cb = 0;
+          req->flags &= ~H2_REQ_CHUNKED_RESP;
+        }
+        if ((p->set_cb || len || p->eof) && !req->resp_headers_sent) {
+          if (_resp_submit(req)) {
+            conn->abort = true;
+          }
+        }
+      }
+    }
+    iwxstr_destroy(p->data);
+    free(p);
+  }
+  iwulist_destroy_keep(&batch);
+  if (!conn->abort) {
+    conn->send_blocked = false;
+    _conn_flush_locked(conn);
+  }
+}
+
+static void _conn_flush_task(void *arg) {
+  struct h2_conn *conn = arg;
+  atomic_store_explicit(&conn->flush_scheduled, false, memory_order_release);
+  struct h2_conn *prev_tl = tl_conn;
+  pthread_mutex_lock(&conn->mtx);
+  tl_conn = conn;
+  if (!conn->closed && !conn->abort && !conn->pa_closed && conn->sess) {
+    _conn_flush_pending_locked(conn);
+  }
+  tl_conn = prev_tl;
+  pthread_mutex_unlock(&conn->mtx);
+  _conn_unref(conn);
+}
+
+static void _conn_schedule_flush(struct h2_conn *conn) {
+  if (!conn->poller) {
+    return;
+  }
+  if (atomic_exchange_explicit(&conn->flush_scheduled, true, memory_order_acq_rel)) {
+    return;
+  }
+  if (iwn_poller_task(conn->poller, _conn_flush_task, _conn_ref(conn))) {
+    atomic_store_explicit(&conn->flush_scheduled, false, memory_order_release);
+    _conn_unref(conn);
+  }
+}
+
+static void _conn_unref(struct h2_conn *conn) {
+  if (!conn || atomic_fetch_sub_explicit(&conn->refs, 1, memory_order_acq_rel) != 1) {
+    return;
+  }
+  for (size_t i = 0; i < iwulist_length(&conn->out_queue); ++i) {
+    struct h2_out_pending *p = *(struct h2_out_pending**) iwulist_get(&conn->out_queue, i);
+    iwxstr_destroy(p->data);
+    free(p);
+  }
+  iwulist_destroy_keep(&conn->out_queue);
+  pthread_mutex_destroy(&conn->out_mtx);
+  pthread_mutex_destroy(&conn->mtx);
+  if (conn->pool) {
+    iwpool_destroy(conn->pool);
+  }
+  free(conn);
+}
+
 static void _conn_dispose(struct iwn_http_req *anchor) {
   struct h2_conn *conn = iwn_http_request_transport_data(anchor);
   if (!conn) {
@@ -1251,9 +1532,11 @@ static void _conn_dispose(struct iwn_http_req *anchor) {
   _conn_graveyard_flush(conn);
 
   iwhmap_destroy(conn->reqs);
+  conn->reqs = 0;
   iwulist_destroy_keep(&conn->events);
   iwulist_destroy_keep(&conn->graveyard);
   iwxstr_destroy(conn->input_buf);
+  conn->input_buf = 0;
   if (conn->sess) {
     hive_session_free(conn->sess);
     conn->sess = 0;
@@ -1262,9 +1545,10 @@ static void _conn_dispose(struct iwn_http_req *anchor) {
     hive_options_free(conn->hive_options);
     conn->hive_options = 0;
   }
+  // Deferred writes which were not flushed yet are dropped by _conn_unref()
+  // when the last reference (a pending flush task) is released.
   pthread_mutex_unlock(&conn->mtx);
-  pthread_mutex_destroy(&conn->mtx);
-  iwpool_destroy(conn->pool);
+  _conn_unref(conn);
 }
 
 static int64_t _conn_on_event(struct iwn_poller_adapter *pa, void *user_data, uint32_t events) {
@@ -1296,6 +1580,12 @@ static int64_t _conn_on_event(struct iwn_poller_adapter *pa, void *user_data, ui
   conn->in_loop = true;
   conn->loop_tid = pthread_self();
   conn->write_wouldblock = false;
+
+  // Apply response data queued by writers from other threads.
+  _conn_flush_pending_locked(conn);
+  if (conn->abort) {
+    goto finish;
+  }
 
   hrc = _conn_send_rounds(conn);
   if (!_hive_rc_is_ok(hrc)) {
@@ -1415,20 +1705,31 @@ finish:
 
 static struct h2_conn* _conn_create(struct iwn_http_req *anchor) {
   struct h2_conn *conn = 0;
-  struct iwpool *pool = 0;
   struct iwxstr *input_buf = 0;
   struct iwhmap *reqs = 0;
   struct hive_options *opt = 0;
 
-  pool = iwpool_create_empty();
-  if (!pool) {
+  conn = calloc(1, sizeof(*conn));
+  if (!conn) {
     return 0;
   }
-  conn = iwpool_calloc(sizeof(*conn), pool);
-  if (!conn) {
-    goto fail;
+  conn->pool = iwpool_create_empty();
+  if (!conn->pool) {
+    free(conn);
+    return 0;
   }
-  conn->pool = pool;
+  atomic_init(&conn->refs, 1);
+  atomic_init(&conn->flush_scheduled, false);
+  // Both mutexes and the deferred write queue must be initialized before the
+  // first `goto fail` so that _conn_unref() can dispose them unconditionally.
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&conn->mtx, &attr);
+  pthread_mutexattr_destroy(&attr);
+  pthread_mutex_init(&conn->out_mtx, 0);
+  iwulist_init(&conn->out_queue, 16, sizeof(struct h2_out_pending*));
+
   conn->anchor = anchor;
   conn->spec = iwn_http_request_server_spec(anchor);
   conn->pa = anchor->poller_adapter;
@@ -1437,12 +1738,6 @@ static struct h2_conn* _conn_create(struct iwn_http_req *anchor) {
   }
   conn->poller = conn->pa->poller;
   conn->fd = conn->pa->fd;
-
-  pthread_mutexattr_t attr;
-  pthread_mutexattr_init(&attr);
-  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-  pthread_mutex_init(&conn->mtx, &attr);
-  pthread_mutexattr_destroy(&attr);
 
   reqs = iwhmap_create_u32(0);
   input_buf = iwxstr_create_empty();
@@ -1488,21 +1783,22 @@ static struct h2_conn* _conn_create(struct iwn_http_req *anchor) {
   return conn;
 
 fail:
-  if (conn) {
-    if (conn->sess) {
-      hive_session_free(conn->sess);
-    }
-    if (conn->hive_options) {
-      hive_options_free(conn->hive_options);
-    }
-    iwxstr_destroy(conn->input_buf);
-    iwhmap_destroy(conn->reqs);
-    iwulist_destroy_keep(&conn->reqlist);
-    iwulist_destroy_keep(&conn->events);
-    iwulist_destroy_keep(&conn->graveyard);
-    pthread_mutex_destroy(&conn->mtx);
+  if (conn->sess) {
+    hive_session_free(conn->sess);
+    conn->sess = 0;
   }
-  iwpool_destroy(pool);
+  if (conn->hive_options) {
+    hive_options_free(conn->hive_options);
+    conn->hive_options = 0;
+  }
+  iwxstr_destroy(conn->input_buf);
+  conn->input_buf = 0;
+  iwhmap_destroy(conn->reqs);
+  conn->reqs = 0;
+  iwulist_destroy_keep(&conn->reqlist);
+  iwulist_destroy_keep(&conn->events);
+  iwulist_destroy_keep(&conn->graveyard);
+  _conn_unref(conn);
   return 0;
 }
 

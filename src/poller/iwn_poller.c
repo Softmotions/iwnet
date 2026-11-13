@@ -57,7 +57,7 @@ struct iwn_poller {
   atomic_long timeout_next;      ///< Next timeout check
   atomic_long timeout_checktime; ///< Last time of timeout check
 
-  struct iwtp *tp;
+  struct iwtp   *tp;
   struct iwhmap *slots;
   char *thread_name;
 
@@ -66,7 +66,9 @@ struct iwn_poller {
   pthread_mutex_t    mtx;
   pthread_barrier_t  _barrier_poll; ///< Poll-in-thread barrier
   pthread_barrier_t *barrier_poll;
-  uint32_t flags;                 ///< Poller mode flags. See iwn_poller_flags_set()
+  pthread_t poll_thread;          ///< Thread created by iwn_poller_poll_in_thread()
+  bool      poll_thread_valid;    ///< `poll_thread` is joinable
+  uint32_t  flags;                ///< Poller mode flags. See iwn_poller_flags_set()
 
   volatile bool stop;
   volatile bool housekeeping;          ///< CAS barrier for timeout cleaner
@@ -319,6 +321,12 @@ static void _destroy(struct iwn_poller *p) {
   if (p) {
     iwn_poller_shutdown_request(p);
     iwtp_shutdown(&p->tp, true);
+    if (p->poll_thread_valid && !pthread_equal(p->poll_thread, pthread_self())) {
+      // The dedicated poll thread runs its own cleanup iteration; the slot
+      // map and the poller must not be freed while it is still alive.
+      pthread_join(p->poll_thread, 0);
+      p->poll_thread_valid = false;
+    }
     _poller_cleanup(p);
 
 #if defined(IWN_EPOLL)
@@ -414,7 +422,7 @@ IW_INLINE int64_t _timer_ready(const struct iwn_poller_task *t, uint32_t events)
 
 static int64_t _timer_ready_fd(const struct iwn_poller_task *t, uint32_t events) {
   uint64_t buf;
-  while (read(t->fd, &buf, sizeof(buf)) != -1);
+  while (read(t->fd, &buf, sizeof(buf)) != -1) ;
   return _timer_ready(t, events);
 }
 
@@ -980,10 +988,15 @@ iwrc iwn_poller_poll_in_thread(struct iwn_poller *p, const char *thr_name, pthre
   if (thr_name) {
     p->thread_name = strdup(thr_name);
   }
+  p->poll_thread_valid = false;
   RCN(finish, pthread_barrier_init(&p->_barrier_poll, 0, 2));
   p->barrier_poll = &p->_barrier_poll;
-  RCN(finish, pthread_create(out_thr, 0, _poll_worker, p));
+  RCN(finish, pthread_create(&p->poll_thread, 0, _poll_worker, p));
+  p->poll_thread_valid = true;
   pthread_barrier_wait(p->barrier_poll);
+  if (out_thr) {
+    *out_thr = p->poll_thread;
+  }
 
 finish:
   if (p->barrier_poll) {
@@ -1060,7 +1073,7 @@ void iwn_poller_poll(struct iwn_poller *p) {
       }
       switch (event[i].filter) {
         case EVFILT_READ:
-        case EVFILT_TIMER:  
+        case EVFILT_TIMER:
           events |= IWN_POLLIN;
           break;
         case EVFILT_WRITE:

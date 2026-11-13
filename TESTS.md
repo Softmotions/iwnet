@@ -345,3 +345,7 @@ IWN_ENABLE_S2N=1 IWNET_RUN_TESTS=1 ./build.sh -c
 # Run a single TLS case against s2n-tls
 IWN_TEST_TLS=s2n ./server1-tests-run.sh -- --ssl
 ```
+
+TLS coverage notes: the s2n-tls *server* path is covered by the HTTP and Websocket
+server test cases. gRPC server TLS is exercised only by the C client test cases,
+`grpc_test_server1` uses a UNIX socket.

@@ -14,6 +14,17 @@
 
 IW_EXTERN_C_START;
 
+/// HTTP/2: streamed/chunked response data writes and iwn_http_request_abort()
+/// may be called from any thread (the operation is queued and applied by the
+/// connection thread).
+/// The response status/header setters and iwn_http_response_stream_start() are
+/// request handler thread APIs.
+#define IWN_HTTP_THREADSAFE_RESPONSE_WRITES 1
+/// iwn_http_request_abort() is supported.
+#define IWN_HTTP_RESPONSE_ABORT 1
+/// iwn_http_response_pending() is supported.
+#define IWN_HTTP_RESPONSE_PENDING 1
+
 struct iwn_http_server {
   const char *listen;
   void       *user_data;
@@ -87,13 +98,19 @@ struct iwn_http_server_spec {
   int request_buf_max_size;                          ///< Default: 8Mb
   int request_buf_size;                              ///< Default: 1023, Min: 1023
   int request_timeout_keepalive_sec;                 ///< -1 Disable timeout, 0 Use default timeout: 120sec
-  int request_timeout_sec;                           ///< -1 Disable timeout, 0 Use default timeout: 20sec
+
+  /// -1 Disable timeout, 0 Use default timeout: 20sec
+  /// @note HTTP/2: a whole-connection inactivity timeout. There is no per-stream
+  /// timeout, so a quiet but healthy long-lived streaming request is terminated
+  /// as well. Disable the timeout for servers which serve such requests.
+  int request_timeout_sec;
   int request_token_max_len;                         ///< Default: 8191, Min: 8191
   int request_max_headers_count;                     ///< Default:  127
 
   /// Enable transparent HTTP/1.1 <-> HTTP/2 transport negotiation on this server.
   /// HTTP/2 is negotiated by TLS ALPN (`h2`) or by the HTTP/2 connection preface
-  /// (prior knowledge, plain text connections).
+  /// (prior knowledge, plain text connections). The HTTP/1.1 `Upgrade: h2c`
+  /// mechanism is not supported.
   /// Requires the library to be built with `IWN_ENABLE_HTTP2`, otherwise the flag is ignored.
   bool http2;
 };
@@ -192,9 +209,13 @@ IW_EXPORT bool iwn_http_request_headers_iterate(
 IW_EXPORT void iwn_http_connection_set_automatic(struct iwn_http_req *request);
 
 /// Force request connection to be in keep-alive mode.
+/// @note HTTP/2: no effect, a connection is shared by concurrent streams and
+/// lives as long as both peers need it.
 IW_EXPORT void iwn_http_connection_set_keep_alive(struct iwn_http_req*, bool keep_alive);
 
 /// Sets connection in `upgrade` mode. User by websocket server.
+/// @note HTTP/2: no-op. Websocket over HTTP/2 (RFC 8441 extended `CONNECT`)
+/// is not implemented.
 IW_EXPORT void iwn_http_connection_set_upgrade(struct iwn_http_req*);
 
 /// Returns true if connection is in upgrade mode.
@@ -209,6 +230,7 @@ IW_EXPORT bool iwn_http_proxy_is_enabled(struct iwn_http_req*);
 /// Sets HTTP URL for proxied endpoint.
 /// @note This method must be called by `iwn_http_server_proxy_handler` in order
 /// to establish a proxy session.
+/// @note HTTP/2: reverse proxy is not supported, `false` is returned.
 IW_EXPORT bool iwn_http_proxy_url_set(struct iwn_http_req*, const char *url, ssize_t url_len);
 
 /// Set a request header to the proxied endpoint.
@@ -349,6 +371,10 @@ IW_EXPORT bool iwn_http_response_printf_va(
 /// Set `again` to true if you want to repeat chunk writing iteration instead of recursive calling
 /// `iwn_http_response_chunk_write()` for next chunk.
 ///
+/// @note HTTP/2: the write is thread safe. A write issued from a thread other
+/// than the request handler thread is queued and applied by the connection
+/// thread.
+///
 IW_EXPORT iwrc iwn_http_response_chunk_write(
   struct iwn_http_req*,
   char                         *body,
@@ -361,6 +387,8 @@ IW_EXPORT iwrc iwn_http_response_chunk_end(struct iwn_http_req*);
 
 /// Starts writing of streamed response.
 /// `chunk_cb` will be called later for fill next stream chunk.
+///
+/// @note Must be called from the request handler thread.
 IW_EXPORT iwrc iwn_http_response_stream_start(struct iwn_http_req*, iwn_http_server_chunk_handler chunk_cb);
 
 /// Continues writing a streamed response.
@@ -368,17 +396,38 @@ IW_EXPORT iwrc iwn_http_response_stream_start(struct iwn_http_req*, iwn_http_ser
 /// Set `again` to true if you want to repeat chunk writing iteration instead of recursive calling
 /// `iwn_http_response_stream_write()` for next chunk.
 ///
+/// @note HTTP/2: the write is thread safe (see iwn_http_response_chunk_write()).
+///
 IW_EXPORT void iwn_http_response_stream_write(
   struct iwn_http_req*,
   char                         *buf,
   ssize_t                       buf_len,
-  void (                       *buf_free )(void*),
+  void                        (*buf_free)(void*),
   iwn_http_server_chunk_handler chunk_cb,
   bool                         *again);
 
 /// Finishes a streamed response.
+///
+/// @note HTTP/2: thread safe.
 IW_EXPORT void iwn_http_response_stream_end(struct iwn_http_req*);
 
+/// Aborts the request stream.
+///
+/// HTTP/2: a `RST_STREAM` with the `CANCEL` code is submitted for the stream.
+/// HTTP/1.1: the connection is closed after the current response.
+///
+/// The abort is queued, the function never blocks on the connection event
+/// loop and may be called from any thread.
+IW_EXPORT iwrc iwn_http_request_abort(struct iwn_http_req*);
+
+/// Returns the number of the response payload bytes which are not yet handed
+/// over to the transport (adapter output buffers and deferred writes).
+///
+/// Thread safe. Bytes already accepted by the TLS/socket layer are not
+/// included.
+IW_EXPORT size_t iwn_http_response_pending(struct iwn_http_req*);
+
+/// @note HTTP/2: not supported, the call is a no-op.
 IW_EXPORT void iwn_http_inject_poller_events_handler(struct iwn_http_req*, iwn_on_poller_adapter_event eh);
 
 IW_EXTERN_C_END;

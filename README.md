@@ -92,6 +92,12 @@ struct iwn_http_server_ssl_spec ssl = {
 
 Use `iwn_tls_impl_available()` to check whether the requested backend is compiled in.
 
+Both backends create the TLS server state per accepted connection: the certificate
+chain and the private key are parsed for every accepted connection, no TLS
+configuration is shared between connections. Neither backend sends the TLS
+`close_notify` alert on teardown, the connection is simply released; peers see a
+transport level close rather than an orderly TLS shutdown.
+
 ## Build from sources
 
 **Prerequisites**
@@ -277,7 +283,8 @@ You may find many helpful code examples by looking into
 
 The HTTP server can transparently serve HTTP/1.1 and HTTP/2 clients on the same
 listening socket. HTTP/2 is negotiated by TLS ALPN (`h2`) or, on plain text
-connections, by the HTTP/2 connection preface (prior knowledge).
+connections, by the HTTP/2 connection preface (prior knowledge). The HTTP/1.1
+`Upgrade: h2c` mechanism (RFC 9113 §3.2) is not supported.
 
 HTTP/2 support is optional and requires the library to be built with
 `IWN_ENABLE_HTTP2=1` (it depends on [libhive](https://github.com/Softmotions/libhive)).
@@ -296,6 +303,35 @@ unchanged. Use `iwn_http_request_is_http2()` to detect the transport if needed.
   # HTTP/2 over TLS (ALPN)
   curl --http2 -k https://localhost:8443/
 ```
+
+### HTTP/2 transport limitations
+
+The HTTP/2 transport is a server side transport. Some HTTP/1.1 specific features
+have no HTTP/2 counterpart:
+
+* **Thread safety.** Of the response API only the *data* writes and the stream
+  control calls are thread safe: `iwn_http_response_chunk_write()`,
+  `iwn_http_response_stream_write()`, `iwn_http_response_chunk_end()`,
+  `iwn_http_response_stream_end()` and `iwn_http_request_abort()` may be called
+  from any thread; such calls are queued on the connection and applied by the
+  connection thread. Response status/header setters and
+  `iwn_http_response_stream_start()` must be called from the request handler
+  thread.
+* **Timeouts.** `iwn_http_server_spec::request_timeout_sec` is a whole-connection
+  inactivity timeout. A quiet but healthy long-lived streaming request is
+  terminated by it as well, since there is no per-stream idle timeout. Servers
+  which serve such requests should disable the timeout (`request_timeout_sec = -1`)
+  or keep it above the longest expected period of a completely idle stream.
+* **Keep-alive.** An HTTP/2 connection is shared by concurrent streams and lives
+  as long as both peers need it, so `iwn_http_connection_set_keep_alive()` and
+  `iwn_http_connection_set_automatic()` have no effect on HTTP/2 requests.
+* **Websocket.** Websocket over HTTP/2 (RFC 8441 extended `CONNECT`) is not
+  implemented. `iwn_http_connection_set_upgrade()` and
+  `iwn_http_inject_poller_events_handler()` are no-ops for HTTP/2 requests, so a
+  websocket server must stay on HTTP/1.1.
+* **Reverse proxy.** The `iwn_http_proxy_*` API is not available for requests
+  served by the HTTP/2 transport, `iwn_http_proxy_url_set()` and friends return
+  `false`.
 
 
 

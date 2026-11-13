@@ -92,6 +92,12 @@ struct iwn_http_server_ssl_spec ssl = {
 
 Use `iwn_tls_impl_available()` to check whether the requested backend is compiled in.
 
+Both backends create the TLS server state per accepted connection: the certificate
+chain and the private key are parsed for every accepted connection, no TLS
+configuration is shared between connections. Neither backend sends the TLS
+`close_notify` alert on teardown, the connection is simply released; peers see a
+transport level close rather than an orderly TLS shutdown.
+
 ## Build from sources
 
 **Prerequisites**

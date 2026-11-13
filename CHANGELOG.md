@@ -1,3 +1,28 @@
+# [v1.6.1] - 2026-11-13
+
+- http2: Streamed and chunked response data writes, `iwn_http_response_stream_end()`,
+  `iwn_http_response_chunk_end()` and the new `iwn_http_request_abort()` are now thread safe.
+  Writes issued from a thread other than the request handler thread are queued on the
+  connection and applied by the poller thread, which keeps the libhive session single
+  threaded (`IWN_HTTP_THREADSAFE_RESPONSE_WRITES`). Response header/status setters and
+  `iwn_http_response_stream_start()` remain handler thread APIs.
+- http2: Added `iwn_http_request_abort()` which resets a request stream with
+  `RST_STREAM(CANCEL)` (`IWN_HTTP_RESPONSE_ABORT`). An endless request body stream can now
+  be terminated by the application; HTTP/1.1 closes the connection after the response.
+- http2: Added `iwn_http_response_pending()` returning the response payload bytes which are
+  not yet handed over to the transport (`IWN_HTTP_RESPONSE_PENDING`).
+- http2: A DATA provider which reports `again == false` and has nothing to produce is no
+  longer re-polled up to `H2_MAX_CHUNK_ITER` times per send; a pending EOF is still
+  delivered by the same invocation.
+- poller: `iwn_poller_destroy()` now joins the thread created by
+  `iwn_poller_poll_in_thread()`. Destroying a poller right after
+  `iwn_poller_shutdown_request()` could free the slot map while the dedicated poll thread
+  was still in its cleanup loop (use after free).
+- poller: The direct and BearSSL poller adapters use `send(..., MSG_NOSIGNAL)` on Linux/BSD.
+  A peer that disconnects in the middle of a response no longer raises `SIGPIPE` in the
+  host process.
+- iwnet.h: `IW_BLOCKS` is defined only when clang blocks (`__BLOCKS__`) are available.
+
 # [v1.6.0] - 2026-11-07
 
 - ssl: Added an optional AWS s2n-tls (TLS 1.2/1.3) TLS backend (`IWN_ENABLE_S2N`, default off).

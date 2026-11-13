@@ -180,9 +180,14 @@ struct iwn_wf_server_spec {
   int request_max_headers_count;                 ///< Default: 127
   int request_timeout_keepalive_sec;             ///< -1 Disable timeout, 0 Use default timeout: 120sec
   int request_timeout_sec;                       ///< -1 Disable timeout, 0 Use default timeout: 20sec
+                                                 ///< @note HTTP/2: whole-connection inactivity timeout,
+                                                 ///< there is no per-stream timeout.
   int request_token_max_len;                     ///< Default: 8192
 
   /// Enable transparent HTTP/1.1 <-> HTTP/2 transport negotiation.
+  /// HTTP/2 is negotiated by TLS ALPN (`h2`) or by the HTTP/2 connection preface
+  /// (prior knowledge, plain text connections). The HTTP/1.1 `Upgrade: h2c`
+  /// mechanism is not supported.
   /// Requires the library to be built with `IWN_ENABLE_HTTP2`.
   bool http2;
 };

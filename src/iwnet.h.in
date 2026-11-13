@@ -4,7 +4,7 @@
 
 #include <iowow/basedefs.h>
 
-#ifndef IW_BLOCKS 
+#if !defined(IW_BLOCKS) && defined(__BLOCKS__)
 //autarkdef IW_BLOCKS 
 #endif
 

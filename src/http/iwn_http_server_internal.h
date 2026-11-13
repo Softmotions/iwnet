@@ -24,25 +24,31 @@ struct iwn_http_req_ops {
   void (*connection_set_keep_alive)(struct iwn_http_req*, bool keep_alive);
   void (*connection_set_upgrade)(struct iwn_http_req*);
   bool (*connection_is_upgrade)(struct iwn_http_req*);
+  iwrc (*request_abort)(struct iwn_http_req*);
 
   // Response
   iwrc (*response_code_set)(struct iwn_http_req*, int code);
-  int (*response_code_get)(struct iwn_http_req*);
+  int  (*response_code_get)(struct iwn_http_req*);
   iwrc (*response_header_add)(struct iwn_http_req*, const char *name, const char *value, ssize_t value_len);
   iwrc (*response_header_set)(struct iwn_http_req*, const char *name, const char *value, ssize_t value_len);
-  struct iwn_val (*response_header_get)(struct iwn_http_req*, const char *name);
+  struct iwn_val (*response_header_get)(struct iwn_http_req*, const char*name);
   void (*response_body_clear)(struct iwn_http_req*);
   void (*response_body_set)(struct iwn_http_req*, const char *body, ssize_t body_len, void (*body_free)(void*));
   iwrc (*response_end)(struct iwn_http_req*);
   iwrc (*response_transfer_buf)(struct iwn_http_req*, int status_code, const char *content_type, struct iwxstr *buf);
   iwrc (*response_chunk_write)(
-    struct iwn_http_req*, char *body, ssize_t body_len, iwn_http_server_chunk_handler chunk_cb, bool *again);
+    struct iwn_http_req*,
+    char                         *body,
+    ssize_t                       body_len,
+    iwn_http_server_chunk_handler chunk_cb,
+    bool                         *again);
   iwrc (*response_chunk_end)(struct iwn_http_req*);
   iwrc (*response_stream_start)(struct iwn_http_req*, iwn_http_server_chunk_handler chunk_cb);
   void (*response_stream_write)(
     struct iwn_http_req*, char *buf, ssize_t buf_len, void (*buf_free)(void*),
     iwn_http_server_chunk_handler chunk_cb, bool *again);
-  void (*response_stream_end)(struct iwn_http_req*);
+  void   (*response_stream_end)(struct iwn_http_req*);
+  size_t (*response_pending)(struct iwn_http_req*);
 
   // Framework glue
   void (*wf_set)(
@@ -50,9 +56,9 @@ struct iwn_http_req_ops {
     void (*wf_on_request_dispose)(struct iwn_http_req*),
     void (*wf_on_response_headers_write)(struct iwn_http_req*));
   void* (*wf_data)(struct iwn_http_req*);
-  void (*ws_set)(struct iwn_http_req*, void *user_data);
+  void  (*ws_set)(struct iwn_http_req*, void *user_data);
   void* (*ws_data)(struct iwn_http_req*);
-  void (*poller_events_inject)(struct iwn_http_req*, iwn_on_poller_adapter_event);
+  void  (*poller_events_inject)(struct iwn_http_req*, iwn_on_poller_adapter_event);
 };
 
 void iwn_http_request_wf_set(

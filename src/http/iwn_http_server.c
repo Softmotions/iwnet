@@ -2428,6 +2428,31 @@ void iwn_http_response_stream_end(struct iwn_http_req *request) {
   iwn_http_response_stream_write(request, 0, 0, 0, 0, 0);
 }
 
+iwrc iwn_http_request_abort(struct iwn_http_req *request) {
+  if (!request) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->request_abort(request);
+  }
+  // HTTP/1.1 has no stream reset: the connection is closed after the current
+  // response.
+  struct client *client = (void*) request;
+  client->flags |= HTTP_END_SESSION;
+  return 0;
+}
+
+size_t iwn_http_response_pending(struct iwn_http_req *request) {
+  if (!request) {
+    return 0;
+  }
+  if (IW_UNLIKELY(request->impl)) {
+    return request->impl->response_pending(request);
+  }
+  // HTTP/1.1 responses are written synchronously by the poller.
+  return 0;
+}
+
 iwrc iwn_http_response_chunk_write(
   struct iwn_http_req          *request,
   char                         *body,

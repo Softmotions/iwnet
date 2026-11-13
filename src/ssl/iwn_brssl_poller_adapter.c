@@ -10,6 +10,10 @@
 #include <pthread.h>
 #include <unistd.h>
 
+#if defined(SO_NOSIGPIPE)
+#include <sys/socket.h>
+#endif
+
 struct x509_client_context {
   const br_x509_class    *vtable;
   br_x509_minimal_context minimal;
@@ -138,7 +142,11 @@ static void _on_dispose(const struct iwn_poller_task *t) {
 
 static int _write_fd(struct pa *a, const unsigned char *buf, size_t len) {
   while (1) {
+#ifdef MSG_NOSIGNAL
+    ssize_t wlen = send(a->b.fd, buf, len, MSG_NOSIGNAL);
+#else
     ssize_t wlen = write(a->b.fd, buf, len);
+#endif
     if (wlen < 0 && errno == EINTR) {
       continue;
     }
@@ -424,6 +432,13 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   RCB(finish, a);
   a->pool = pool;
 
+#if defined(SO_NOSIGPIPE)
+  {
+    // Apple platforms have no MSG_NOSIGNAL: suppress SIGPIPE on the socket.
+    int one = 1;
+    setsockopt(spec->fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+  }
+#endif
   a->b.fd = spec->fd;
   a->b.poller = p;
   a->b.read = _read;
