@@ -320,13 +320,16 @@ static void _poller_cleanup(struct iwn_poller *p) {
 static void _destroy(struct iwn_poller *p) {
   if (p) {
     iwn_poller_shutdown_request(p);
-    iwtp_shutdown(&p->tp, true);
     if (p->poll_thread_valid && !pthread_equal(p->poll_thread, pthread_self())) {
-      // The dedicated poll thread runs its own cleanup iteration; the slot
-      // map and the poller must not be freed while it is still alive.
+      // The poll thread must be stopped first: it schedules event tasks into
+      // the thread pool and could enqueue a task into an already shut down
+      // pool (leaking the task and the connection it references). It also runs
+      // its own cleanup iteration, so the slot map must not be freed while it
+      // is still alive.
       pthread_join(p->poll_thread, 0);
       p->poll_thread_valid = false;
     }
+    iwtp_shutdown(&p->tp, true);
     _poller_cleanup(p);
 
 #if defined(IWN_EPOLL)

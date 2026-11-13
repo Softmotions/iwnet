@@ -1,3 +1,11 @@
+# [v1.6.3] - 2026-11-13
+
+- poller: `iwn_poller_destroy()` stops the thread created by
+  `iwn_poller_poll_in_thread()` before shutting down the worker pool. The poll
+  thread could schedule one last event task after the pool shutdown started;
+  such a task was never executed and leaked together with the connection state
+  it referenced.
+
 # [v1.6.2] - 2026-11-13
 
 - http2: Fixed a race between deferred response writes issued from a non-handler
