@@ -1,3 +1,14 @@
+# [v1.6.2] - 2026-11-13
+
+- http2: Fixed a race between deferred response writes issued from a non-handler
+  thread (`iwn_http_response_stream_write()`, `iwn_http_response_chunk_write()`,
+  `iwn_http_response_stream_end()`, `iwn_http_response_chunk_end()`,
+  `iwn_http_request_abort()`) and the connection flush. The pending write queue
+  is appended to under the leaf `out_mtx` lock, but the flush detached it under
+  the connection mutex only; a concurrent writer could push into the detached
+  list and leave a freed entry in `conn->out_queue`, crashing the poller task
+  later in `_conn_unref()`.
+
 # [v1.6.1] - 2026-11-13
 
 - http2: Streamed and chunked response data writes, `iwn_http_response_stream_end()`,

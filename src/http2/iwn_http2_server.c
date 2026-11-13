@@ -1411,8 +1411,14 @@ static iwrc _conn_defer(
 /// Moves the deferred writes of the connection into the request output
 /// buffers. Must be called on the connection thread with `conn->mtx` held.
 static void _conn_flush_pending_locked(struct h2_conn *conn) {
+  // The queue is appended to by _conn_defer_locked() under the leaf `out_mtx`
+  // lock; the swap must be serialized by the very same lock, otherwise a
+  // concurrent writer can push an entry into the list being detached and leave
+  // a dangling pointer in `conn->out_queue`.
+  pthread_mutex_lock(&conn->out_mtx);
   struct iwulist batch = conn->out_queue;
   iwulist_init(&conn->out_queue, 16, sizeof(struct h2_out_pending*));
+  pthread_mutex_unlock(&conn->out_mtx);
   size_t count = iwulist_length(&batch);
   if (!count) {
     iwulist_destroy_keep(&batch);
@@ -1497,12 +1503,14 @@ static void _conn_unref(struct h2_conn *conn) {
   if (!conn || atomic_fetch_sub_explicit(&conn->refs, 1, memory_order_acq_rel) != 1) {
     return;
   }
+  pthread_mutex_lock(&conn->out_mtx);
   for (size_t i = 0; i < iwulist_length(&conn->out_queue); ++i) {
     struct h2_out_pending *p = *(struct h2_out_pending**) iwulist_get(&conn->out_queue, i);
     iwxstr_destroy(p->data);
     free(p);
   }
   iwulist_destroy_keep(&conn->out_queue);
+  pthread_mutex_unlock(&conn->out_mtx);
   pthread_mutex_destroy(&conn->out_mtx);
   pthread_mutex_destroy(&conn->mtx);
   if (conn->pool) {
