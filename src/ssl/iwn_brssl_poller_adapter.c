@@ -182,31 +182,18 @@ static inline int64_t _next_poll(br_ssl_engine_context *cc) {
   return ret;
 }
 
-static void _has_pending_write_bytes_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
-  struct pa *a = slot_user_data;
-  bool *ret = fn_user_data;
+static bool _has_pending_write_bytes(struct iwn_poller_adapter *pa) {
+  struct pa *a = (void*) pa;
   br_ssl_engine_context *cc = a->eng;
   pthread_mutex_lock(&a->mtx);
-  *ret = (br_ssl_engine_current_state(cc) & BR_SSL_SENDREC) != 0;
+  bool ret = (br_ssl_engine_current_state(cc) & BR_SSL_SENDREC) != 0;
   pthread_mutex_unlock(&a->mtx);
-};
-
-static bool _has_pending_write_bytes(struct iwn_poller_adapter *a) {
-  bool ret = false;
-  iwn_poller_probe(a->poller, a->fd, _has_pending_write_bytes_probe, &ret);
   return ret;
-};
+}
 
-static void _arm_needed_probe(struct iwn_poller *p, void *slot_user_data, void *fn_user_data) {
-  struct pa *a = slot_user_data;
-  bool *ret = fn_user_data;
-  *ret = pthread_getspecific(a->ready_fd_tl) != (void*) 1;
-};
-
-static bool _arm_needed(struct iwn_poller_adapter *a) {
-  bool ret = false;
-  iwn_poller_probe(a->poller, a->fd, _arm_needed_probe, &ret);
-  return ret;
+static bool _arm_needed(struct iwn_poller_adapter *pa) {
+  struct pa *a = (void*) pa;
+  return pthread_getspecific(a->ready_fd_tl) != (void*) 1;
 };
 
 iwrc _arm(struct iwn_poller_adapter *a, uint32_t events) {

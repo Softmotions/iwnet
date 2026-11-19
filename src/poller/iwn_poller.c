@@ -70,7 +70,7 @@ struct iwn_poller {
   bool      poll_thread_valid;    ///< `poll_thread` is joinable
   uint32_t  flags;                ///< Poller mode flags. See iwn_poller_flags_set()
 
-  volatile bool stop;
+  atomic_bool   stop;
   volatile bool housekeeping;          ///< CAS barrier for timeout cleaner
 };
 
@@ -328,6 +328,13 @@ static void _destroy(struct iwn_poller *p) {
       // is still alive.
       pthread_join(p->poll_thread, 0);
       p->poll_thread_valid = false;
+    }
+    // The start barrier is destroyed only after the poll thread is joined:
+    // destroying it while a waiter is still returning is undefined and was a
+    // data race in `iwn_poller_poll_in_thread()`.
+    if (p->barrier_poll) {
+      pthread_barrier_destroy(p->barrier_poll);
+      p->barrier_poll = 0;
     }
     iwtp_shutdown(&p->tp, true);
     _poller_cleanup(p);
@@ -729,7 +736,7 @@ void iwn_poller_poke(struct iwn_poller *p) {
 }
 
 void iwn_poller_shutdown_request(struct iwn_poller *p) {
-  if (p && __sync_bool_compare_and_swap(&p->stop, false, true)) {
+  if (p && !atomic_exchange_explicit(&p->stop, true, memory_order_acq_rel)) {
     iwn_poller_poke(p);
   }
 }
@@ -821,7 +828,7 @@ static iwrc _create(const struct iwn_poller_spec *spec_, struct iwn_poller **out
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   p->fd = -1;
-  p->stop = true;
+  atomic_init(&p->stop, true);
   p->flags = spec.flags & (IWN_POLLER_POLL_NO_FDS);
 #ifdef IWN_EPOLL
   p->timer_fd = -1;
@@ -962,7 +969,7 @@ iwrc iwn_poller_add_destroy_hook(struct iwn_poller *poller, iwn_poller_destroy_h
 }
 
 bool iwn_poller_alive(struct iwn_poller *p) {
-  return p && !p->stop;
+  return p && !atomic_load_explicit(&p->stop, memory_order_acquire);
 }
 
 iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
@@ -1000,8 +1007,10 @@ iwrc iwn_poller_poll_in_thread(struct iwn_poller *p, const char *thr_name, pthre
   if (out_thr) {
     *out_thr = p->poll_thread;
   }
+  return rc;
 
 finish:
+  // No poll thread is running (creation failed): the barrier has no waiters.
   if (p->barrier_poll) {
     pthread_barrier_destroy(p->barrier_poll);
     p->barrier_poll = 0;
@@ -1014,7 +1023,7 @@ void iwn_poller_flags_set(struct iwn_poller *p, uint32_t flags) {
 }
 
 void iwn_poller_poll(struct iwn_poller *p) {
-  p->stop = false;
+  atomic_store_explicit(&p->stop, false, memory_order_release);
   if (p->thread_name) {
     iwp_set_current_thread_name(p->thread_name);
     free(p->thread_name);
@@ -1024,24 +1033,24 @@ void iwn_poller_poll(struct iwn_poller *p) {
   int max_events = p->max_poll_events;
 
 #if defined(IWN_KQUEUE)
-  p->stop = p->fds_count < 1;
+  atomic_store_explicit(&p->stop, p->fds_count < 1, memory_order_release);
   struct kevent event[max_events];
 #elif defined(IWN_EPOLL)
   _eventfd_ensure(p);
   _timerfd_ensure(p);
-  p->stop = p->fds_count < 3;
+  atomic_store_explicit(&p->stop, p->fds_count < 3, memory_order_release);
   struct epoll_event event[max_events];
 #endif
 
   if (p->flags & IWN_POLLER_POLL_NO_FDS) {
-    p->stop = false;
+    atomic_store_explicit(&p->stop, false, memory_order_release);
   }
 
   if (p->barrier_poll) {
     pthread_barrier_wait(p->barrier_poll);
   }
 
-  while (!p->stop) {
+  while (!atomic_load_explicit(&p->stop, memory_order_acquire)) {
 #if defined(IWN_KQUEUE)
     int nfds = kevent(p->fd, 0, 0, event, max_events, 0);
 #elif defined(IWN_EPOLL)

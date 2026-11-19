@@ -1396,15 +1396,31 @@ static iwrc _conn_defer_locked(
 static iwrc _conn_defer(
   struct h2_conn *conn, struct h2_req *req, const char *buf, size_t len,
   iwn_http_server_chunk_handler chunk_cb, bool eof, bool rst) {
-  if (!conn || !req || !conn->sess || conn->closed || conn->abort) {
+  iwrc rc;
+  if (!conn || !req) {
     return IW_ERROR_INVALID_STATE;
   }
+  // `out_mtx` also serializes this path with `_conn_dispose()`, which clears
+  // `sess` under the very same lock before it releases the anchor reference.
+  // A deferred write can therefore either take its reference and schedule the
+  // flush before the connection is destroyed, or observe `sess == 0` and fail
+  // cleanly; it can never schedule work on freed memory.
+  // `conn->mtx` must not be used here: the dispose path holds it while it
+  // invokes the application request-dispose callback, and an application may
+  // hold a lock taken by that callback while it calls a response API.
   pthread_mutex_lock(&conn->out_mtx);
-  iwrc rc = _conn_defer_locked(conn, req, buf, len, chunk_cb, eof, rst);
-  pthread_mutex_unlock(&conn->out_mtx);
-  if (!rc) {
-    _conn_schedule_flush(conn);
+  if (!conn->sess) {
+    rc = IW_ERROR_INVALID_STATE;
+  } else {
+    rc = _conn_defer_locked(conn, req, buf, len, chunk_cb, eof, rst);
+    if (!rc) {
+      // Takes a connection reference and reads `conn->poller`; both are valid
+      // while `out_mtx` is held. The poller disposes its connections before it
+      // is freed, and `_conn_dispose()` needs this lock.
+      _conn_schedule_flush(conn);
+    }
   }
+  pthread_mutex_unlock(&conn->out_mtx);
   return rc;
 }
 
@@ -1531,9 +1547,19 @@ static void _conn_dispose(struct iwn_http_req *anchor) {
   // teardown concurrent with `_hcb_send()` could clear `conn->pa` between its
   // NULL check and the `conn->pa->write()` call.
   pthread_mutex_lock(&conn->mtx);
+
+  // `sess` is also cleared under the leaf `out_mtx`, which `_conn_defer()`
+  // holds while it checks the connection state, takes its reference and
+  // schedules the flush. After this window no deferred write can reference the
+  // connection, so the anchor reference below is guaranteed to be the last
+  // non-task one.
+  pthread_mutex_lock(&conn->out_mtx);
   conn->pa_closed = true;
   conn->pa = 0;
   conn->closed = true;
+  struct hive_session *sess = conn->sess;
+  conn->sess = 0;
+  pthread_mutex_unlock(&conn->out_mtx);
 
   for (size_t i = 0; i < iwulist_length(&conn->reqlist); ++i) {
     struct h2_req *req = *(struct h2_req**) iwulist_get(&conn->reqlist, i);
@@ -1549,9 +1575,8 @@ static void _conn_dispose(struct iwn_http_req *anchor) {
   iwulist_destroy_keep(&conn->graveyard);
   iwxstr_destroy(conn->input_buf);
   conn->input_buf = 0;
-  if (conn->sess) {
-    hive_session_free(conn->sess);
-    conn->sess = 0;
+  if (sess) {
+    hive_session_free(sess);
   }
   if (conn->hive_options) {
     hive_options_free(conn->hive_options);

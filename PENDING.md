@@ -2,21 +2,6 @@
 
 New records are on the top.
 
-## HTTP/2 connection lifetime during poller destroy
-
-- Stress teardown of a closed HTTP/2 connection (destroying the poller right
-  after the peer socket closed, with a deferred response flush still queued)
-  can still crash/hang after v1.6.5: a `_conn_flush_task` was observed arming a
-  freed `h2_conn` (`conn->poller` and `conn->pa` read from reused memory) while
-  `iwn_poller_destroy()` was joining the worker pool. `_conn_defer()` checks
-  `conn->sess`/`closed`/`abort` and schedules the flush without `conn->mtx`,
-  but taking that mutex there would invert the existing order with an
-  application request-dispose callback that may lock its own state
-  (`conn->mtx` -> callback vs. application lock -> response API -> `conn->mtx`).
-  A fix needs either a lifetime anchor independent of the response API path or
-  a state guard that does not block the dispose callback. Found by a downstream
-  TLS client stress test; single-run test suites do not reproduce it.
-
 ## BearSSL adapter: TLS engine access from task threads
 
 - `iwn_brssl_poller_adapter`'s `read`/`write` operate on the BearSSL engine
