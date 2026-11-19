@@ -1,3 +1,14 @@
+# [v1.6.5] - 2026-11-19
+
+- http2: Fixed a race between connection teardown and a deferred response flush
+  task. `_conn_dispose()` cleared `h2_conn::pa` and set the `closed`/`pa_closed`
+  flags outside the connection mutex, while the flush task holds that mutex and
+  uses `conn->pa` in the libhive send callback (`_hcb_send()`). A concurrent
+  teardown could null the adapter pointer between its NULL check and the
+  `conn->pa->write()` call, crashing the poller with a NULL dereference. The
+  fields are now updated under `conn->mtx` (also in `_conn_on_event()`), so the
+  flush task either finishes with a live adapter or skips the flush.
+
 # [v1.6.4] - 2026-11-19
 
 - build: `hive.h` is installed into the `--prefix` include directory when the
