@@ -21,6 +21,11 @@ set {
   ^{ C{${INSTALL_INCLUDE_DIR}} /hive.h }
 }
 
+set {
+  LIBHIVE_SOURCE_HEADER
+  ^{ ${LIBHIVE_SRC_DIR} /include/hive.h }
+}
+
 run {
   shell { ^{PREFIX= C{}} ^{LIBDIR= C{${INSTALL_LIB_DIR}}} make -C ${LIBHIVE_SRC_DIR} 
     if { eq { ${BUILD_TYPE} Release }
@@ -39,3 +44,9 @@ run {
 }
 
 install { ${INSTALL_LIB_DIR} ${LIBHIVE_LIB} }
+# `hive.h` is a public include of libiwnet when the HTTP/2 or gRPC transport
+# is enabled: the static archive links libhive and out-of-tree consumers (for
+# example an HTTP/2 client session) include <hive.h>. It is installed from the
+# libhive source tree, not from the build cache: in a nested build the cache
+# belongs to iwnet while `--prefix` points at the parent project.
+install { ${INSTALL_INCLUDE_DIR} ${LIBHIVE_SOURCE_HEADER} }

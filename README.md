@@ -39,7 +39,12 @@ IWN_ENABLE_GRPC=1 IWN_ENABLE_S2N=1 BUILD_TYPE=Debug ./build.sh -c
 | `CC`                       | auto      | C compiler (`clang` is preferred, it enables the optional blocks API).                    |
 
 The external dependency sources can be overridden with `IOWOW_URL`, `LIBHIVE_URL` and
-`IWN_S2N_URL` (each defaults to a pinned upstream release). The s2n-tls build can be tuned
+`IWN_S2N_URL` (each defaults to a pinned upstream release). With `IWN_ENABLE_HTTP2=1`
+(or `IWN_ENABLE_GRPC=1`) the libhive static library and its public header are
+installed next to `libiwnet` (`libhive.a` in the library directory and
+`include/hive.h`); `libiwnet.pc` exports the prefix include directory, so code
+that drives a libhive session directly (for example an HTTP/2 client) can
+`#include <hive.h>`. The s2n-tls build can be tuned
 with `IWN_S2N_CMAKE_ARGS` (extra CMake arguments) and `IWN_S2N_LIBS` (libraries required to
 link it, `-lcrypto` by default). s2n-tls stacktraces are disabled by default to avoid the
 `execinfo` link dependency on BSD systems; pass `IWN_S2N_CMAKE_ARGS="-DS2N_STACKTRACE=ON"`
