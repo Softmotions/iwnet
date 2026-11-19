@@ -1,3 +1,30 @@
+# [v1.6.6] - 2026-11-19
+
+- http2: Fixed a use-after-free when a deferred response write races connection
+  teardown. `_conn_defer()` checked the connection state and scheduled a flush
+  task (which takes a connection reference) without synchronization with
+  `_conn_dispose()`; the flush task could then run with a freed connection.
+  The state check, the queue append, the reference acquisition and the flush
+  scheduling are now serialized by the leaf `out_mtx`, and `_conn_dispose()`
+  clears `sess` under that lock before releasing the anchor reference.
+  `conn->mtx` is deliberately not used there: the dispose path holds it while
+  invoking the application request-dispose callback, so taking it from a
+  response API would invert the lock order.
+- ssl: The BearSSL and s2n adapters no longer use `iwn_poller_probe()` from
+  their `arm`/`has_pending_write_bytes` callbacks. A probe takes and releases a
+  poller slot reference; when it was the last reference, the slot and its
+  connection were destroyed from inside `arm()`, recursively invoking the
+  application request-dispose callback on a thread that was already flushing
+  the connection. `arm()` now calls `iwn_poller_arm_events()` directly and the
+  pending-write check locks the adapter mutex directly; both callbacks already
+  have the adapter pointer.
+- poller: `iwn_poller_poll_in_thread()` no longer destroys the start barrier
+  while the poll thread may still be returning from `pthread_barrier_wait()`;
+  the barrier is destroyed in `iwn_poller_destroy()` after the poll thread is
+  joined.
+- poller: `iwn_poller::stop` is an `atomic_bool`; the shutdown request and the
+  poll loop no longer race on a plain `volatile bool`.
+
 # [v1.6.5] - 2026-11-19
 
 - http2: Fixed a race between connection teardown and a deferred response flush
