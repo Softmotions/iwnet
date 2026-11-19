@@ -1,3 +1,13 @@
+# [v1.6.4] - 2026-11-19
+
+- build: `hive.h` is installed into the `--prefix` include directory when the
+  HTTP/2 (`IWN_ENABLE_HTTP2`) or gRPC (`IWN_ENABLE_GRPC`) transport is enabled.
+  Previously the header was only written into the iwnet build cache by libhive's
+  `make install`, so an out-of-tree consumer of a nested iwnet build got
+  `-I<prefix>/include` from `libiwnet.pc` but no `hive.h` there. This broke
+  consumers that drive a libhive session directly (for example an HTTP/2
+  client). `libhive.a` was already installed and is unchanged.
+
 # [v1.6.3] - 2026-11-13
 
 - poller: `iwn_poller_destroy()` stops the thread created by
