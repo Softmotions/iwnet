@@ -1525,11 +1525,15 @@ static void _conn_dispose(struct iwn_http_req *anchor) {
     return;
   }
   iwn_http_request_transport_set(anchor, 0, 0);
+
+  // The adapter pointer and the close flags are read by the deferred flush
+  // task under `conn->mtx`; update them under the same lock. Otherwise a
+  // teardown concurrent with `_hcb_send()` could clear `conn->pa` between its
+  // NULL check and the `conn->pa->write()` call.
+  pthread_mutex_lock(&conn->mtx);
   conn->pa_closed = true;
   conn->pa = 0;
   conn->closed = true;
-
-  pthread_mutex_lock(&conn->mtx);
 
   for (size_t i = 0; i < iwulist_length(&conn->reqlist); ++i) {
     struct h2_req *req = *(struct h2_req**) iwulist_get(&conn->reqlist, i);
@@ -1565,9 +1569,9 @@ static int64_t _conn_on_event(struct iwn_poller_adapter *pa, void *user_data, ui
   if (!conn) {
     return -1;
   }
-  conn->pa = pa;
-
   pthread_mutex_lock(&conn->mtx);
+
+  conn->pa = pa;
 
   if (conn->pa_closed || conn->closed || conn->abort || !conn->sess) {
     pthread_mutex_unlock(&conn->mtx);
