@@ -9,6 +9,9 @@ if { !defined { IOWOW_URL }
 
 check {
   fetch_resource.sh { fetch-url{${IOWOW_URL}} C{extern_iowow} IOWOW_SRC_DIR }
+  # Installed before the iwnet script is evaluated: libiowow.pc is required by
+  # the pkg-config calls in iwnet's Autark.
+  iowow_build.sh { C{} ${IOWOW_SRC_DIR} ${BUILD_TYPE} }
 }
 
 run {
