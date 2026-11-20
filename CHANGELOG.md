@@ -1,3 +1,75 @@
+# [v1.7.0] - 2026-11-20
+
+- http: Fixed integer overflows of `Content-Length` values and hex chunk sizes in
+  the HTTP/1.1 request parser. Both were accumulated in an `ssize_t` without a
+  bounds check, so a long enough number wrapped to a negative body length. The
+  body scanner then truncated that length to `int` and passed it to
+  `_stream_jump()`, which moved the stream index *backwards* over already consumed
+  bytes: an echo or body-storing handler returned bytes of an earlier request on
+  the same connection buffer. Overflowing values are now rejected with
+  `400 Bad Request` before the multiplication (`_length_accumulate()`), and
+  `_stream_jump()` takes `ssize_t` and refuses negative offsets.
+- http: A streamed (chunked or oversized) request body that the handler does not
+  consume by `iwn_http_request_chunk_next()` no longer leaves the connection in a
+  desynchronized state. `iwn_http_response_body_clear()` now resets the response
+  body length, so an empty response no longer inherits the `content-length` of the
+  previous response on the same connection, and such a connection is closed after
+  the response instead of being reused (`HTTP_REQ_COMPLETE`). A request error
+  detected after the response was already written closes the connection instead of
+  appending a second (400) response to the same request.
+- http: Duplicated `Content-Length` request headers are rejected with
+  `400 Bad Request` (RFC 9112); previously the first header value was used
+  silently. Error responses now always close the connection.
+- http: A request carrying both `Transfer-Encoding` and `Content-Length` is
+  rejected with `400 Bad Request` (RFC 9112 §6.1). Previously the message framing
+  depended on the header order: `Content-Length` was used when it came first and
+  the chunked framing when `Transfer-Encoding` came first, so intermediaries that
+  resolve the ambiguity differently could be used for request smuggling.
+- http: A `Transfer-Encoding` request field value is parsed as a transfer coding
+  list (RFC 9112 §6.1) instead of matching the literal `chunked` text. A coding the
+  server does not implement (`gzip`, `gzip, chunked`, a parameterized coding) is
+  answered with `501 Not Implemented` instead of being silently ignored, while a
+  repeated `chunked` coding or an empty field value is rejected with
+  `400 Bad Request`. Case insensitive codings and optional whitespace around them
+  are accepted (`Transfer-Encoding: chunked ` previously lost the chunked framing
+  and silently dropped the request body).
+- http: Request parser defects found by the new fuzzing harness:
+  - a request without header fields (`GET / HTTP/1.0\r\n\r\n`) was rejected with
+    `400 Bad Request`;
+  - `Content-Length` with trailing whitespace was rejected, while an empty
+    `Content-Length` value was accepted as `0`. The value must be digits with
+    optional surrounding whitespace (RFC 9112 §6.3) now;
+  - a header field name which is a prefix of `content-length` or
+    `transfer-encoding` (for example `Conte: 5`) was treated as that field;
+  - a chunk size line which does not start with a hex digit was silently ignored,
+    the request body was decoded as empty instead of rejecting the request;
+  - chunked trailer sections (RFC 9112 §7.1.2) were parsed as a part of the next
+    chunk and rejected, they are parsed and ignored now;
+  - a chunk extension containing whitespace (`3 ;ext=1`) was rejected, optional
+    whitespace around a chunk extension is allowed (RFC 9112 §7.1.1) now;
+  - a streamed request body larger than the buffer limit left the buffered stream
+    in an inconsistent state (the emitted request body chunk pointed beyond the
+    consumed stream length);
+  - bytes of a pipelined request following a chunked request were consumed by the
+    request parser. The parser stops at the end of the request now.
+- http: The end of a streamed request body is reported to the chunk handler
+  (`iwn_http_request_chunk_next()`) as `HS_TOK_REQ_END`, so the trailer section is
+  parsed before the request handler is notified about the end of the body. This
+  keeps the connection reusable for chunked requests.
+- tests: Added the `http_parser1` regression test covering overflowing and non hex
+  `Content-Length`/chunk sizes, duplicated `Content-Length` headers,
+  `Content-Length` combined with `Transfer-Encoding`, transfer coding list values
+  and streamed request bodies ignored by the handler
+  (`src/http/tests/http_parser1.c`).
+- fuzz: Added a fuzzy testing harness for the HTTP/1 request parser (`fuzz/`): a
+  portable randomized `iwtests.h` driver (`fuzzdriver`) and a coverage guided
+  libFuzzer target (`fuzzlib`). The parser is driven from memory by
+  `iwn_http_request_parse_buf()`, the request framing is decoded independently and
+  every input is checked for parser invariants (token bounds, body length
+  bookkeeping, progress), framing semantics, determinism and truncated input
+  handling. Enabled with `IWNET_BUILD_FUZZ=1`/`IWNET_RUN_FUZZ=1`, see
+  `fuzz/README.md`.
+
 # [v1.6.6] - 2026-11-19
 
 - http2: Fixed a use-after-free when a deferred response write races connection
