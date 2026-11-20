@@ -2,6 +2,26 @@
 
 New records are on the top.
 
+## HTTP/1.0 request carrying `Transfer-Encoding`
+
+- RFC 9112 §6.1: "A server or client that receives an HTTP/1.0 message containing
+  a Transfer-Encoding header field MUST treat the message as if the framing is
+  faulty, even if a Content-Length is present, and close the connection after
+  processing the message." The request parser does not look at the request version
+  while parsing `Transfer-Encoding`, so an HTTP/1.0 request with
+  `Transfer-Encoding: chunked` is served using the chunked framing (the connection
+  is not kept alive for HTTP/1.0 unless the client asked for it, so the "close after
+  processing" part already holds).
+
+## Reverse proxy: request headers are forwarded unparsed
+
+- `_proxy_init()` hands the connection over to the proxy endpoint at the first
+  complete request header line and streams the rest of the request (headers and
+  body) verbatim. The `Content-Length`/`Transfer-Encoding` validation in the HTTP/1.1
+  parser therefore only applies to requests served by iwnet itself; a proxied request
+  is forwarded with whatever framing the client sent, so the upstream endpoint must
+  reject ambiguous framing on its own.
+
 ## BearSSL adapter: TLS engine access from task threads
 
 - `iwn_brssl_poller_adapter`'s `read`/`write` operate on the BearSSL engine

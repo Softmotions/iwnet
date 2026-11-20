@@ -28,6 +28,9 @@ option { IWNET_RUN_TESTS          Build and run test cases }
 option { IWN_ENABLE_GRPC          Enable gRPC client. Default: 0  }
 option { IWN_ENABLE_HTTP2         Enable HTTP/2 server transport (requires libhive). Default: 0 }
 option { IWN_ENABLE_S2N           Enable AWS s2n-tls TLS implementation. Default: 0 }
+option { IWNET_BUILD_FUZZ         Build fuzzy testing harness for the HTTP/1 request parser }
+option { IWNET_RUN_FUZZ           Build and run the portable fuzzy testing driver }
+option { ENABLE_FUZZ              Instrument the library for libFuzzer coverage }
 option { ENABLE_ASAN              Turn on address sanitizer }
 option { ENABLE_UBSAN             Turn on UB sanitizer }
 option { ENABLE_DEBINFO           Generate debuginfo even in release mode }
@@ -40,6 +43,18 @@ set {
 if { ${IWNET_RUN_TESTS}
   set {
     IWNET_BUILD_TESTS 1
+  }
+}
+
+if { ${IWNET_RUN_FUZZ}
+  set {
+    IWNET_BUILD_FUZZ 1
+  }
+}
+
+if { ${ENABLE_FUZZ}
+  set {
+    IWNET_BUILD_FUZZ 1
   }
 }
 
@@ -131,6 +146,13 @@ set {
   ..@@{${PKGCONF} --cflags libiowow}
 
   ..${SANITIZER_FLAGS}
+
+  # libFuzzer coverage instrumentation, the runtime is linked by the fuzz targets only.
+  if { ${ENABLE_FUZZ}
+    if { contains { ${CC} clang }
+      -fsanitize=fuzzer-no-link
+    }
+  }
 
   if { prefix { ${BUILD_TYPE} Debug }
     -O0

@@ -93,3 +93,33 @@ void iwn_http_request_transport_set(struct iwn_http_req*, void *data, void (*dis
 
 /// Returns alternative transport context associated with the connection.
 void* iwn_http_request_transport_data(struct iwn_http_req*);
+
+///////////////////////////////////////////////////////////////////////////
+// Request parser entry point for tests and fuzzy testing.
+///////////////////////////////////////////////////////////////////////////
+
+/// Outcome of ::iwn_http_request_parse_buf()
+struct iwn_http_parse_result {
+  int     status;        ///< Request rejection HTTP status: `400` or `501`. `0` if accepted
+  int     headers;       ///< Number of request header fields parsed
+  ssize_t body_len;      ///< Decoded request body length, `-1` if no request body was parsed
+  const char *violation; ///< Description of a broken parser invariant, set on error returns
+  bool streamed;         ///< The request body is streamed (chunked or larger than the buffer limit)
+  bool complete;         ///< The whole request, including its body, was consumed by the parser
+};
+
+/// Parses an HTTP/1.1 request from the given memory buffer.
+///
+/// No network IO is performed and the request handler is not called: this entry point
+/// exists for tests (see `fuzz/`) and drives the very same request parser as the server.
+/// The buffer is treated exactly like a buffer received from a connection, including the
+/// streamed (chunked) request body processing.
+///
+/// @param buf Request bytes. Must not be `0` unless `len` is `0`.
+/// @param len Length of `buf`.
+/// @param[out] out Request parse outcome.
+///
+/// @return `0` if the buffer was parsed, `IW_ERROR_ASSERTION` if an internal parser
+///         invariant was violated (see `iwn_http_parse_result::violation`).
+///
+iwrc iwn_http_request_parse_buf(const char *buf, size_t len, struct iwn_http_parse_result *out);

@@ -25,6 +25,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -81,8 +82,16 @@ struct parser {
   ssize_t body_consumed;
   int16_t match_index;
   int16_t header_count;
+  int16_t error_status; ///< Rejection HTTP status of the request, `0` means `400 Bad Request`
   int8_t  state;
   int8_t  meta;
+  int8_t  content_length_parsed;
+  int8_t  content_length_ows;     ///< Trailing OWS seen after the `Content-Length` value digits
+  int8_t  content_length_digits;  ///< At least one `Content-Length` value digit was parsed
+  int8_t  transfer_encoding_parsed;
+  int8_t  transfer_encoding_chunked;
+  int8_t  current_header_is_te;
+  int8_t  current_header_is_cl;
 };
 
 struct header {
@@ -145,9 +154,9 @@ struct client {
   int64_t _transport_events; ///< Poller events requested by the transport
 
   atomic_int refs;
-  int     fd;
-  uint8_t state;     ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
-  uint8_t flags;     ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE
+  int      fd;
+  uint8_t  state;    ///< HTTP_SESSION_{INIT,READ,WRITE,NOP}
+  uint16_t flags;    ///< HTTP_END_SESSION,HTTP_AUTOMATIC,HTTP_CHUNKED_RESPONSE...
 
   char ip[46]; ///< Client ip address
 };
@@ -170,12 +179,13 @@ struct client {
 #define HTTP_STREAM_RESPONSE  0x20U
 #define HTTP_UPGRADE          0x40U
 #define HTTP_HAS_CONTENT_LEN  0x80U
+#define HTTP_REQ_COMPLETE     0x0100U  ///< The current request (including its body) is fully parsed
+#define HTTP_RESPONSE_QUEUED  0x0200U  ///< A response for the current request has been queued
 
 // http version indicators
 #define HTTP_1_0 0
 #define HTTP_1_1 1
 
-#define HS_META_NOT_CHUNKED  0
 #define HS_META_NON_ZERO     0
 #define HS_META_END_CHK_SIZE 1
 #define HS_META_END_CHUNK    2
@@ -206,7 +216,8 @@ enum meta_type_e {
 
 enum state_e {
   ST, MT, MS, TR, TS, VN, RR, RN, HK, HS, HV, HR, HE,
-  ER, HN, BD, CS, CB, CE, CR, CN, CD, C1, C2, BR, HS_STATE_LEN
+  ER, HN, BD, CS, CB, CE, CR, CN, CD, C1, C2, BR,
+  TV, T1, CW, HS_STATE_LEN
 };
 
 static const int8_t _transitions[] = {
@@ -219,7 +230,7 @@ static const int8_t _transitions[] = {
 /* TS targetsp */ BR, BR, BR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
 /* VN version */ BR, BR, RR, BR, BR, BR, VN, VN, VN, VN, VN, BR,
 /* RR rl \r */ BR, RN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* RN rl \n */ BR, BR, BR, BR, BR, BR, HK, HK, HK, HK, BR, BR,
+/* RN rl \n */ BR, BR, ER, BR, BR, BR, HK, HK, HK, HK, BR, BR,
 /* HK headkey */ BR, BR, BR, HS, BR, BR, HK, HK, HK, HK, BR, BR,
 /* HS headspc */ HS, BR, HR, HV, HS, HV, HV, HV, HV, HV, HV, BR,
 /* HV headval */ HV, BR, HR, HV, HV, HV, HV, HV, HV, HV, HV, BR,
@@ -230,12 +241,16 @@ static const int8_t _transitions[] = {
 /* BD body */ BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD, BD,
 /* CS chksz */ BR, BR, CR, BR, BR, CE, CS, CS, BR, BR, BR, BR,
 /* CB chkbd */ CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
-/* CE chkext */ BR, BR, CR, CE, CE, CE, CE, CE, CE, CE, CE, BR,
+/* CE chkext */ CE, BR, CR, CE, CE, CE, CE, CE, CE, CE, CE, BR,
 /* CR chksz\r */ BR, CN, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
 /* CN chksz\n */ CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB, CB,
 /* CD chkend */ BR, BR, C1, BR, BR, BR, BR, BR, BR, BR, BR, BR,
 /* C1 chkend\r */ BR, C2, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
-/* C2 chkend\n */ BR, BR, BR, BR, BR, BR, CS, CS, BR, BR, BR, BR
+/* C2 chkend\n */ BR, BR, BR, BR, BR, BR, CS, CS, BR, BR, BR, BR,
+/* BR badreq */ BR, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* TV trailer */ TV, BR, T1, TV, TV, TV, TV, TV, TV, TV, TV, TV,
+/* T1 trailer\r */ BR, CD, BR, BR, BR, BR, BR, BR, BR, BR, BR, BR,
+/* CW chksz ows */ CW, BR, BR, BR, CW, CE, BR, BR, BR, BR, BR, BR
 };
 
 static const int8_t _meta_transitions[] = {
@@ -300,8 +315,8 @@ static int8_t const _token_start_states[] = {
   0, HS_TOK_METHOD, 0, HS_TOK_TARGET, 0, HS_TOK_VERSION, 0, 0, HS_TOK_HEADER_KEY,
 //HS HV                 HR HE ER HN BD           CS CB                 CE CR CN
   0, HS_TOK_HEADER_VAL, 0, 0, 0, 0, HS_TOK_BODY, 0, HS_TOK_CHUNK_BODY, 0, 0, 0,
-//CD C1 C2 BR
-  0, 0, 0, 0
+//CD C1 C2 BR TV T1 CW
+  0, 0, 0, 0, 0, 0, 0
 };
 
 static char const *_status_text[] = {
@@ -496,9 +511,118 @@ IW_INLINE bool _stream_can_contain(struct client *client, int64_t size) {
   return client->server->spec.request_buf_max_size - client->stream.index + 1 >= size;
 }
 
-static bool _stream_jump(struct stream *stream, int offset) {
+/// Appends `digit` to the number accumulated in `acc` in given `base`.
+/// Returns `false` if the result would not fit into `ssize_t`.
+static bool _length_accumulate(ssize_t *acc, int digit, int base) {
+  if (*acc > (SSIZE_MAX - digit) / base) {
+    return false;
+  }
+  *acc = *acc * base + digit;
+  return true;
+}
+
+/// Checks a request header field name for request smuggling vectors
+/// (RFC 9112 §6.1): a duplicated `Content-Length` header or `Content-Length`
+/// combined with `Transfer-Encoding`. Such ambiguity is rejected because
+/// intermediaries may disagree about the message framing.
+/// @return `false` if the request must be rejected.
+static bool _header_name_check(struct parser *parser, struct stream *stream, const struct token *key) {
+  if (key->type != HS_TOK_HEADER_KEY) {
+    return true;
+  }
+  parser->current_header_is_te = 0;
+  parser->current_header_is_cl = 0;
+  const char *name = stream->buf + key->index;
+  bool is_content_length = key->len == (int) IW_LLEN("content-length")
+                           && strncasecmp(name, "content-length", key->len) == 0;
+  bool is_transfer_encoding = key->len == (int) IW_LLEN("transfer-encoding")
+                              && strncasecmp(name, "transfer-encoding", key->len) == 0;
+  if (!is_content_length && !is_transfer_encoding) {
+    // The parser state machine matches the `content-length`/`transfer-encoding` key prefixes,
+    // a shorter header name must not be taken as one of them.
+    if (parser->meta == M_CLV || parser->meta == M_MCK) {
+      parser->meta = M_WFK;
+    }
+    return true;
+  }
+  if (is_content_length) {
+    if (parser->content_length_parsed || parser->transfer_encoding_parsed) {
+      return false;
+    }
+    parser->content_length_parsed = 1;
+    parser->current_header_is_cl = 1;
+    return true;
+  }
+  if (parser->content_length_parsed) {
+    return false;
+  }
+  parser->transfer_encoding_parsed = 1;
+  parser->current_header_is_te = 1;
+  return true;
+}
+
+/// Checks `tchar` of RFC 9110 §5.6.2.
+IW_INLINE bool _is_tchar(char c) {
+  return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+         || c == '!' || c == '#' || c == '$' || c == '%' || c == '&' || c == '\''
+         || c == '*' || c == '+' || c == '-' || c == '.' || c == '^' || c == '_'
+         || c == '`' || c == '|' || c == '~';
+}
+
+/// Parses a `Transfer-Encoding` field value of the current request (RFC 9112 §6.1).
+///
+/// The `chunked` transfer coding is the only coding implemented by this parser, it
+/// must be the sole and the final coding of the request. Any other transfer coding
+/// (including `chunked` parameters, which are not implemented) is reported as
+/// `501 Not Implemented`, while a repeated `chunked` coding or an invalid field
+/// value is a malformed request (`400 Bad Request`).
+///
+/// @return HTTP status code of the request rejection, `0` on success.
+static int _transfer_encoding_parse(struct parser *parser, const char *buf, int len) {
+  int status = 0;
+  int pos = 0;
+  while (pos < len) {
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t' || buf[pos] == ',')) {
+      ++pos;
+    }
+    if (pos >= len) {
+      break;
+    }
+    int start = pos;
+    while (pos < len && _is_tchar(buf[pos])) {
+      ++pos;
+    }
+    if (pos == start) {
+      return 400; // Not a transfer coding token
+    }
+    bool is_chunked = (pos - start) == (int) IW_LLEN("chunked")
+                      && strncasecmp(buf + start, "chunked", IW_LLEN("chunked")) == 0;
+    while (pos < len && (buf[pos] == ' ' || buf[pos] == '\t')) {
+      ++pos;
+    }
+    if (pos < len && buf[pos] == ';') {
+      return 501; // Parameterized transfer codings are not implemented
+    }
+    if (!is_chunked) {
+      status = 501; // Transfer coding is not implemented
+    } else if (parser->transfer_encoding_chunked) {
+      return 400; // The chunked coding applied more than once
+    } else {
+      parser->transfer_encoding_chunked = 1;
+    }
+    if (pos < len && buf[pos] != ',') {
+      return 400;
+    }
+  }
+  if (!parser->transfer_encoding_chunked && !status) {
+    return 400; // No transfer codings given
+  }
+  return status;
+}
+
+static bool _stream_jump(struct stream *stream, ssize_t offset) {
   stream->flags |= HS_SF_CONSUMED;
-  if (stream->index + offset > stream->length) {
+  if (offset < 0 || offset > stream->length - stream->index) {
     return false;
   }
   stream->index += offset;
@@ -538,10 +662,13 @@ IW_INLINE void _response_free(struct client *client) {
   }
   _response_body_free(response);
   response->headers = 0;
+  response->body_len = 0;
   response->code = 200;
 }
 
 static bool _client_response_error(struct client *client, int code, char *response) {
+  // The request could not be parsed: the connection can not be reused
+  client->flags |= HTTP_END_SESSION;
   return iwn_http_response_write(&client->request, code, "text/plain", response, -1);
 }
 
@@ -654,13 +781,17 @@ again:
       if (!on_response_completed(&client->request)) {
         client->flags |= HTTP_END_SESSION;
       }
-    } else if (client->flags & HTTP_KEEP_ALIVE) {
+    } else if (  (client->flags & HTTP_KEEP_ALIVE)
+              && (client->flags & HTTP_REQ_COMPLETE)) {
       client->state = HTTP_SESSION_INIT;
       if (client->server->spec.request_timeout_keepalive_sec > 0) {
         iwn_poller_set_timeout(client->server->spec.poller, client->fd,
                                client->server->spec.request_timeout_keepalive_sec);
       }
     } else {
+      // The request body was not fully parsed (a streamed request body ignored by
+      // the handler) or keep-alive is not requested: the parser state does not
+      // match the connection stream anymore, do not reuse the connection.
       client->flags |= HTTP_END_SESSION;
     }
   }
@@ -771,6 +902,10 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
         return emitted;
       }
       emitted = _stream_emit(stream);
+      if (!_header_name_check(parser, stream, &emitted)) {
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
+      }
     } else if (from == HS && to == HR) {
       _stream_begin_token(stream, HS_TOK_HEADER_VAL);
     }
@@ -799,6 +934,23 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       emitted = _stream_emit(stream);
       break;
     case HR:
+      if (parser->current_header_is_cl) {
+        parser->current_header_is_cl = 0;
+        if (!parser->content_length_digits) {
+          // `Content-Length` value must be 1*DIGIT (RFC 9112 §6.3)
+          emitted.type = HS_TOK_ERROR;
+          return emitted;
+        }
+      } else if (parser->current_header_is_te) {
+        parser->current_header_is_te = 0;
+        int status = _transfer_encoding_parse(parser, stream->buf + stream->token.index, stream->token.len);
+        if (status) {
+          parser->error_status = (int16_t) status;
+          emitted.type = HS_TOK_ERROR;
+          return emitted;
+        }
+        parser->meta = M_MCK; // The chunked coding: `END_VALUE` moves to `M_CHK`
+      }
       if (_meta_trigger(parser, HS_META_END_VALUE)) {
         emitted.type = HS_TOK_ERROR;
         return emitted;
@@ -811,16 +963,16 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
       parser->match_index++;
       break;
     case HV:
-      if (parser->meta == M_MCK) {
-        MATCH("chunked", HS_META_NOT_CHUNKED);
-        parser->match_index++;
-      } else if (parser->meta == M_CLV) {
-        if (c < '0' || c > '9') {
+      if (parser->meta == M_CLV) {
+        if (c == ' ' || c == '\t') {
+          parser->content_length_ows = 1; // Trailing OWS of the field value is ignored
+        } else if (  c < '0' || c > '9' || parser->content_length_ows
+                  || !_length_accumulate(&parser->content_length, c - '0', 10)) {
           emitted.type = HS_TOK_ERROR;
           break;
+        } else {
+          parser->content_length_digits = 1;
         }
-        parser->content_length *= 10;
-        parser->content_length += c - '0';
       }
       break;
     case HN:
@@ -849,15 +1001,18 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
         emitted.type = HS_TOK_ERROR;
         return emitted;
       }
+      int digit = -1;
       if (c >= 'A' && c <= 'F') {
-        parser->content_length *= 0x10;
-        parser->content_length += c - 55;
+        digit = c - 'A' + 10;
       } else if (c >= 'a' && c <= 'f') {
-        parser->content_length *= 0x10;
-        parser->content_length += c - 87;
+        digit = c - 'a' + 10;
       } else if (c >= '0' && c <= '9') {
-        parser->content_length *= 0x10;
-        parser->content_length += c - '0';
+        digit = c - '0';
+      }
+      if (digit < 0 || !_length_accumulate(&parser->content_length, digit, 0x10)) {
+        // The chunk size is a sequence of HEXDIG (RFC 9112 §7.1)
+        emitted.type = HS_TOK_ERROR;
+        return emitted;
       }
       break;
     case CB:
@@ -874,6 +1029,11 @@ struct token _transition(struct client *client, char c, int8_t from, int8_t to) 
         }
         if (to == CB) {
           parser->state = CD;
+          if (parser->content_length == 0) {
+            // Terminal zero-length chunk: the body is complete, its trailer section follows.
+            // The empty chunk body token is not reported, `HS_TOK_REQ_END` concludes the body.
+            emitted.type = HS_TOK_NONE;
+          }
         }
         parser->content_length = 0;
         parser->body_consumed = 0;
@@ -1480,6 +1640,12 @@ struct token _token_parse(struct client *client) {
       }
     } else if (to == BD && parser->state == HN && parser->meta == M_ZER) {
       to = CS;
+    } else if (to == BR && parser->state == CD && parser->meta == M_LST && type != HS_NL) {
+      // Trailer section of the chunked request body (RFC 9112 §7.1.2), its fields are ignored
+      to = TV;
+    } else if (to == BR && parser->state == CS && (type == HS_SPC || type == HS_TAB)) {
+      // BWS before a chunk extension (RFC 9112 §7.1.1)
+      to = CW;
     }
     int8_t from = parser->state;
     parser->state = to;
@@ -1487,6 +1653,10 @@ struct token _token_parse(struct client *client) {
     _stream_consume(stream);
     if (emitted.type != HS_TOK_NONE) {
       return emitted;
+    }
+    if (parser->meta == M_END) {
+      // The request is complete, do not consume bytes of the next pipelined request
+      return _meta_emit_token(parser);
     }
   }
   if (parser->state == CB) {
@@ -1600,6 +1770,9 @@ again:
 #endif
   do {
     token = _token_parse(client);
+    if (token.type == HS_TOK_REQ_END || client->parser.meta == M_END) {
+      client->flags |= HTTP_REQ_COMPLETE;
+    }
     if (token.type != HS_TOK_NONE) {
       if (IW_UNLIKELY(client->tokens.size == client->tokens.capacity)) {
         ssize_t ncap = client->tokens.capacity * 2;
@@ -1615,7 +1788,16 @@ again:
     }
     switch (token.type) {
       case HS_TOK_ERROR:
-        _client_response_error(client, 400, "Bad request");
+        if (client->flags & HTTP_RESPONSE_QUEUED) {
+          // The response has already been written: the request error cannot be
+          // reported anymore, close the connection instead of appending a second
+          // response to the same request.
+          client->flags |= HTTP_END_SESSION;
+        } else if (client->parser.error_status == 501) {
+          _client_response_error(client, 501, "Not implemented");
+        } else {
+          _client_response_error(client, 400, "Bad request");
+        }
         break;
       case HS_TOK_BODY:
         client->state = HTTP_SESSION_NOP;
@@ -1637,9 +1819,13 @@ again:
         }
         break;
       case HS_TOK_CHUNK_BODY:
+      case HS_TOK_REQ_END:
         client->state = HTTP_SESSION_NOP;
+        if (!client->chunk_cb) {
+          break;
+        }
         bool again = false;
-        if (!client->chunk_cb || !client->chunk_cb(&client->request, &again)) {
+        if (!client->chunk_cb(&client->request, &again)) {
           client->flags |= HTTP_END_SESSION;
           return;
         } else if (again) {
@@ -2198,6 +2384,7 @@ void iwn_http_response_body_clear(struct iwn_http_req *request) {
     }
     client->response.body = 0;
   }
+  client->response.body_len = 0;
 }
 
 void iwn_http_response_body_set(
@@ -2230,7 +2417,8 @@ static void _client_autodetect_keep_alive(struct client *client) {
   }
   int version = val.buf[val.len - 1] == '1';
   val = iwn_http_request_header_get(&client->request, "connection", IW_LLEN("connection"));
-  if (  (val.len == IW_LLEN("close") && strncasecmp(val.buf, "close", IW_LLEN("close")) == 0)
+  if (  (client->flags & HTTP_END_SESSION)
+     || (val.len == IW_LLEN("close") && strncasecmp(val.buf, "close", IW_LLEN("close")) == 0)
      || (val.len == 0 && version == HTTP_1_0)) {
     client->flags &= ~HTTP_KEEP_ALIVE;
   } else {
@@ -2300,6 +2488,7 @@ IW_INLINE void _client_response_setbuf(struct client *client, struct iwxstr *xst
   s->buf = iwxstr_destroy_keep_ptr(xstr);
   s->capacity = s->length;
   client->state = HTTP_SESSION_WRITE;
+  client->flags |= HTTP_RESPONSE_QUEUED;
   _response_free(client);
 }
 
@@ -2311,6 +2500,7 @@ IW_INLINE void _client_response_setbuf2(struct client *client, char *buf, ssize_
   s->length = buf_len;
   s->capacity = s->length;
   client->state = HTTP_SESSION_WRITE;
+  client->flags |= HTTP_RESPONSE_QUEUED;
   _response_free(client);
 }
 
@@ -2769,6 +2959,117 @@ void* iwn_http_request_ws_data(struct iwn_http_req *request) {
   }
   struct client *client = (void*) request;
   return client->_ws_data;
+}
+
+iwrc iwn_http_request_parse_buf(const char *buf, size_t len, struct iwn_http_parse_result *out) {
+  iwrc rc = 0;
+  int status = 0;
+  struct token token;
+  struct server *server = 0;
+  struct client *client = 0;
+  ssize_t iterations;
+
+  if (!out || (!buf && len)) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  memset(out, 0, sizeof(*out));
+  out->body_len = -1;
+  if (len == 0) {
+    out->status = 400;
+    return 0;
+  }
+  server = calloc(1, sizeof(*server));
+  client = calloc(1, sizeof(*client));
+  if (!server || !client) {
+    rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
+    goto finish;
+  }
+  // Defaults applied by iwn_http_server_create()
+  server->spec.request_buf_max_size = 8 * 1024 * 1024;
+  server->spec.request_max_headers_count = 127;
+  server->spec.request_token_max_len = 8191;
+  server->spec.request_timeout_sec = -1;
+  client->server = server;
+  client->fd = -1;
+  RCC(rc, finish, _client_init(client));
+  client->stream.buf = malloc(len + 1 /* \0 */);
+  if (!client->stream.buf) {
+    rc = iwrc_set_errno(IW_ERROR_ALLOC, errno);
+    goto finish;
+  }
+  memcpy(client->stream.buf, buf, len);
+  client->stream.buf[len] = '\0';
+  client->stream.length = (ssize_t) len;
+  client->stream.capacity = (ssize_t) len;
+
+  iterations = (ssize_t) len * 2 + 64;
+  for ( ; ; ) {
+    if (--iterations < 0) {
+      // The parser must consume at least one byte of the buffer per `_token_parse()` call
+      out->violation = "the parser does not make progress";
+      rc = IW_ERROR_ASSERTION;
+      goto finish;
+    }
+    token = _token_parse(client);
+    if (token.type == HS_TOK_REQ_END || client->parser.meta == M_END) {
+      client->flags |= HTTP_REQ_COMPLETE;
+    }
+    if (  client->parser.content_length < 0
+       || client->parser.body_consumed > client->parser.content_length) {
+      out->violation = "invalid request body length bookkeeping";
+      rc = IW_ERROR_ASSERTION;
+      goto finish;
+    }
+    if (token.type != HS_TOK_NONE) {
+      // The stream buffer is rewound to the stream anchor for a streamed body, so the token bounds
+      // are checked against the whole parse buffer
+      if (  token.index < 0 || token.len < 0 || token.len > (ssize_t) len
+         || token.index > (ssize_t) len - token.len) {
+        out->violation = "a token points outside of the parse buffer";
+        rc = IW_ERROR_ASSERTION;
+        goto finish;
+      }
+    }
+    if (client->parser.header_count > out->headers) {
+      out->headers = client->parser.header_count;
+    }
+    switch (token.type) {
+      case HS_TOK_ERROR:
+        status = client->parser.error_status ? client->parser.error_status : 400;
+        goto done;
+      case HS_TOK_BODY:
+        out->body_len = token.len;
+        out->complete = (client->flags & HTTP_REQ_COMPLETE) != 0;
+        goto done;
+      case HS_TOK_BODY_STREAM:
+        out->streamed = true;
+        out->body_len = 0;
+        continue;
+      case HS_TOK_CHUNK_BODY:
+        out->body_len = out->body_len < 0 ? token.len : out->body_len + token.len;
+        continue;
+      case HS_TOK_REQ_END:
+        out->complete = true;
+        goto done;
+      case HS_TOK_NONE:
+        goto done;
+      default:
+        continue;
+    }
+  }
+done:
+  if (client->flags & HTTP_REQ_COMPLETE) {
+    out->complete = true;
+  }
+  out->status = status;
+
+finish:
+  if (client) {
+    _client_reset(client);
+    free(client);
+  }
+  free(server);
+  return rc;
 }
 
 struct iwn_http_server_spec* iwn_http_request_server_spec(struct iwn_http_req *request) {

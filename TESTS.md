@@ -349,3 +349,22 @@ IWN_TEST_TLS=s2n ./server1-tests-run.sh -- --ssl
 TLS coverage notes: the s2n-tls *server* path is covered by the HTTP and Websocket
 server test cases. gRPC server TLS is exercised only by the C client test cases,
 `grpc_test_server1` uses a UNIX socket.
+
+## Fuzzy testing
+
+The HTTP/1 request parser has a fuzzing harness in [fuzz/](fuzz/README.md): a portable
+randomized `iwtests.h` driver (`fuzzdriver`, any compiler) and a coverage guided
+libFuzzer target (`fuzzlib`, clang only).
+
+```sh
+./build.sh -c -DIWNET_BUILD_FUZZ=1 -DENABLE_FUZZ=1 \
+           -DENABLE_ASAN=1 -DENABLE_UBSAN=1 -DBUILD_TYPE=Debug
+
+autark-cache/fuzz/fuzzdriver corpus --no-log
+IWN_FUZZ_ROUNDS=2000000 IWN_FUZZ_SEED=1 autark-cache/fuzz/fuzzdriver random_rounds --no-log
+autark-cache/fuzz/fuzzlib -max_total_time=300 -dict=fuzz/http1.dict /tmp/iwnet-corpus
+```
+
+The harness drives the parser from memory with `iwn_http_request_parse_buf()`
+(`src/http/iwn_http_server_internal.h`), so no network IO is involved. See
+[fuzz/README.md](fuzz/README.md) for the checked invariants and the campaign knobs.

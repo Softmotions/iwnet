@@ -149,6 +149,10 @@ IW_EXPORT struct iwn_val iwn_http_request_chunk_get(struct iwn_http_req*);
 /// Streamed mode is activated for chunked requests or when request body greater than 8Mb (defined by
 /// @ref iwn_http_server_spec::request_buf_max_size)
 ///
+/// @note A streamed request body is delivered to the application asynchronously, after the request
+/// handler was called. The connection is closed after the response when the handler did not consume
+/// the request body by `iwn_http_request_chunk_next()`.
+///
 IW_EXPORT bool iwn_http_request_is_streamed(struct iwn_http_req*);
 
 /// Returns `true` when SSL(TLS) user i request transport connection.

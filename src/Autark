@@ -161,3 +161,8 @@ if { ${IWNET_BUILD_SHARED_LIBS}
 
 install { ${INSTALL_PKGCONFIG_DIR} libiwnet.pc }
 install { ${IWNET_PUBLIC_HEADERS_DESTINATION} ${PUB_HDRS} }
+
+# Fuzzy testing harness of the HTTP/1 request parser
+if { ${IWNET_BUILD_FUZZ}
+  include { ../fuzz/Autark }
+}

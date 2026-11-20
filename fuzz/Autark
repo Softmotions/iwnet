@@ -1,0 +1,44 @@
+# Portable randomized fuzzy driver for the HTTP/1.1 request parser.
+# The harness includes `iwn_http_server_internal.h` and uses `iwtests.h`, so the test
+# compile flags are composed here on top of the module `CFLAGS`.
+set {
+  FUZZ_CFLAGS
+  -DIW_STATIC
+  -DIW_TESTS
+  -DIW_TEST_HARNESS="iwnet"
+  ${CFLAGS}
+}
+
+cc {
+  fuzz_standalone.c
+  ${FUZZ_CFLAGS}
+}
+set { FUZZ_DRIVER_OBJS ..${CC_OBJS} }
+run {
+  exec { ${CC} ${FUZZ_DRIVER_OBJS} ${LDFLAGS_TEST} -o fuzzdriver }
+  consumes { ${LIBIWNET_A} ${FUZZ_DRIVER_OBJS} }
+  produces { fuzzdriver }
+}
+
+# Coverage guided libFuzzer target (clang only).
+if { contains { ${CC} clang }
+  cc {
+    fuzz_http1.c
+    set { _ ${FUZZ_CFLAGS} -fsanitize=fuzzer }
+  }
+  set { FUZZ_LIBFUZZER_OBJS ..${CC_OBJS} }
+  run {
+    exec { ${CC} ${FUZZ_LIBFUZZER_OBJS} ${LDFLAGS_TEST} -fsanitize=fuzzer -o fuzzlib }
+    consumes { ${LIBIWNET_A} ${FUZZ_LIBFUZZER_OBJS} }
+    produces { fuzzlib }
+  }
+}
+
+# Only the portable driver is executed, the libFuzzer target runs until it is stopped by hand.
+if { ${IWNET_RUN_FUZZ}
+  run {
+    always
+    shell { fuzzdriver }
+    consumes { fuzzdriver }
+  }
+}

@@ -4,6 +4,7 @@ cc {
     server1.c
     server2.c
     wf_test1.c
+    http_parser1.c
   }
   ${CFLAGS_TESTS}
 }
@@ -28,6 +29,7 @@ if { ${IWNET_RUN_TESTS}
   run {
     always
     exec { ./wf_test1 }
+    exec { ./http_parser1 }
     exec { ./server1-tests-run.sh }
     exec { ./server1-tests-run.sh -- --ssl }
     exec { ./server2-tests-run.sh }
