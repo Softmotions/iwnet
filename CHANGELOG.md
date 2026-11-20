@@ -1,3 +1,11 @@
+# [v1.7.1] - 2026-11-20
+
+- tools: The `strliteral` and `mimegen` code generators are compiled by the host
+  toolchain (`host-cc` rules, `run { host ... }`) instead of the target compiler, so
+  iwnet can be cross compiled again. Before, a cross build linked the generators for
+  the target and then failed to execute them (`./strliteral: Syntax error: word
+  unexpected`) while generating `data_cacert.inc`.
+
 # [v1.7.0] - 2026-11-20
 
 - http: Fixed integer overflows of `Content-Length` values and hex chunk sizes in
