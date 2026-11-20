@@ -1,3 +1,12 @@
+# [v1.7.2] - 2026-11-20
+
+- build: The iowow dependency is installed by the `iowow_build.sh` Autark check before the
+  iwnet script is evaluated, because the iwnet build flags are resolved with
+  `pkg-config libiowow`. Previously a build started from an empty cache failed with
+  `Package libiowow was not found in the pkg-config search path` whenever the iowow
+  dependency unit had not run yet; the cached `@@{}` output only hid the problem in
+  incremental builds.
+
 # [v1.7.1] - 2026-11-20
 
 - tools: The `strliteral` and `mimegen` code generators are compiled by the host
