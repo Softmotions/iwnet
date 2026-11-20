@@ -1,33 +1,47 @@
+# Code generators run on the build host, so they are compiled by the host
+# toolchain (`host-cc`) and linked by `run { host ... }`. This keeps cross
+# builds working: the generated include files are target independent.
+set { HOST_CC ${HOST_CC ${CC}} }
 
-cc {
-  set { _ mimegen.c strliteral.c }
+host-cc {
+  mimegen.c
+  objects { MIMEGEN_OBJS }
 }
 
-foreach {
-  OBJ
-  ${CC_OBJS}
-  run {
-    exec { ${CC} ${OBJ} -o %{${OBJ}} }
-    consumes { ${OBJ} }
-    produces { %{${OBJ}} }
-  }
+host-cc {
+  strliteral.c
+  objects { STRLITERAL_OBJS }
+}
+
+run {
+  host
+  exec { ${HOST_CC} ${MIMEGEN_OBJS} -o mimegen }
+  consumes { ${MIMEGEN_OBJS} }
+  produces { mimegen }
+}
+
+run {
+  host
+  exec { ${HOST_CC} ${STRLITERAL_OBJS} -o strliteral }
+  consumes { ${STRLITERAL_OBJS} }
+  produces { strliteral }
 }
 
 run {
   shell { ./strliteral -i 'data_cacert' SS{cacert.pem} > C{include/data_cacert.inc} }
-  consumes { 
-    strliteral 
+  consumes {
+    strliteral
     SS{cacert.pem}
   }
   produces {
-    C{include/data_cacert.inc} 
+    C{include/data_cacert.inc}
   }
 }
 
 run {
   shell { ./mimegen SS{mime.types} > C{include/generated_mimegen.h} }
-  consumes { 
-    mimegen 
+  consumes {
+    mimegen
     SS{mime.types}
   }
   produces {
