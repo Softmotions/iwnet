@@ -1,15 +1,25 @@
 # Code generators run on the build host, so they are compiled by the host
 # toolchain (`host-cc`) and linked by `run { host ... }`. This keeps cross
 # builds working: the generated include files are target independent.
+#
+# The tools are plain C programs which only use libc, so they get their own
+# sanitizer-free flags instead of inheriting `${CFLAGS}`: target-only flags must
+# not be applied to them, and their objects must not change between build
+# configurations (`ENABLE_ASAN`/`ENABLE_UBSAN` would otherwise leave them
+# instrumented and unlinkable).
 set { HOST_CC ${HOST_CC ${CC}} }
 
 host-cc {
   mimegen.c
+  set { _ -std=gnu11 -O2 }
+  ${HOST_CC}
   objects { MIMEGEN_OBJS }
 }
 
 host-cc {
   strliteral.c
+  set { _ -std=gnu11 -O2 }
+  ${HOST_CC}
   objects { STRLITERAL_OBJS }
 }
 
