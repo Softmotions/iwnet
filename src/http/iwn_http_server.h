@@ -125,8 +125,12 @@ IW_EXPORT WUR iwrc iwn_http_server_create(
   const struct iwn_http_server_spec*,
   int *out_fd);
 
-/// Upgrade server accept routine configuration to use
-/// SSL parameters provider by `ssl`.
+/// Replaces the TLS settings of the server accept routine by the ones provided by `ssl`.
+///
+/// Certificates and the private key are parsed once here and shared by all new
+/// connections. An `ssl` without certificates disables TLS. If the new certificate
+/// chain or the private key cannot be parsed, the error is logged and the TLS
+/// settings currently served are kept. Established connections are not affected.
 ///
 /// @param poller Poller where server accept socket resides.
 /// @param server_fd Server accept connection fd provided by iwn_http_server_create().

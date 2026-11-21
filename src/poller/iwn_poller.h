@@ -151,10 +151,29 @@ IW_EXPORT void iwn_poller_flags_set(struct iwn_poller*, uint32_t flags);
 IW_EXPORT void iwn_poller_poll(struct iwn_poller*);
 
 /// Starts poller poll event loop in separate thread.
+/// @note Poll thread ownership is transferred to the poller: wait for the loop with
+///       ::iwn_poller_join() instead of joining the returned thread directly, otherwise
+///       ::iwn_poller_destroy() will join that thread a second time.
 IW_EXPORT iwrc iwn_poller_poll_in_thread(struct iwn_poller*, const char *thr_name, pthread_t *out_thr);
+
+/// Waits for the poll event loop started by ::iwn_poller_poll_in_thread() to finish.
+///
+/// The poll thread is joined at most once: after this call ::iwn_poller_destroy()
+/// will not join it again.
+///
+/// @return `IW_ERROR_INVALID_STATE` if called from the poll thread itself,
+///         `0` if the poll thread was joined or was not started.
+IW_EXPORT iwrc iwn_poller_join(struct iwn_poller*);
 
 /// Returns `true` if poller event loop is alive.
 IW_EXPORT bool iwn_poller_alive(struct iwn_poller*);
+
+/// Returns the events requested for `fd` by ::iwn_poller_adapter::arm() from inside an
+/// adapter event callback which are not applied yet, `0` if nothing is pending.
+///
+/// Such a request is applied by the poller when the callback returns, so a non zero
+/// result proves that the request reached the poller.
+IW_EXPORT uint32_t iwn_poller_armed_events(struct iwn_poller*, int fd);
 
 /// Runs a given `probe` callback in the context of polled filed descriptor `fd`.
 /// All fd related data structures will be alive during callback call.

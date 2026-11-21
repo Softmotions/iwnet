@@ -78,7 +78,6 @@ static int _handle_transport(struct iwn_wf_req *req, void *user_data) {
   RCC(rc, finish, jbl_set_string(jbl, "transport", iwn_http_request_is_http2(req->http) ? "h2" : "http/1.1"));
   RCC(rc, finish, jbl_set_bool(jbl, "ua", ua_found));
   IW_TEST_ASSERT(iwn_http_response_write_jbl(req->http, 200, jbl));
-  jbl = 0;
 
 finish:
   jbl_destroy(&jbl);

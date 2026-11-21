@@ -3,6 +3,8 @@ cc {
     proxy1.c
     server1.c
     server2.c
+    server3.c
+    tls_arm1.c
     wf_test1.c
     http_parser1.c
   }
@@ -34,7 +36,9 @@ if { ${IWNET_RUN_TESTS}
     exec { ./server1-tests-run.sh -- --ssl }
     exec { ./server2-tests-run.sh }
     exec { ./server2-tests-run.sh -- --ssl }
+    exec { ./server3-tests-run.sh }
     exec { ./proxy1-tests-run.sh }
+    exec { ./tls_arm1 }
     if { ${IWN_ENABLE_HTTP2}
       exec { ./server1-tests-run.sh --http2 }
       exec { ./server1-tests-run.sh --http2 -- --ssl }
@@ -44,6 +48,11 @@ if { ${IWNET_RUN_TESTS}
     if { ${IWN_ENABLE_S2N}
       shell { IWN_TEST_TLS=s2n ./server1-tests-run.sh -- --ssl }
       shell { IWN_TEST_TLS=s2n ./server2-tests-run.sh -- --ssl }
+      shell { IWN_TEST_TLS=s2n ./server3-tests-run.sh }
+      shell { IWN_TEST_TLS=s2n ./tls_arm1 }
+      # Serving TLS does not depend on the system CA store, so it must also work
+      # where the system store is unavailable (e.g. a minimal container).
+      shell { IWN_TEST_TLS=s2n SSL_CERT_FILE=/nonexistent/ca.pem SSL_CERT_DIR=/nonexistent ./server1-tests-run.sh -- --ssl }
       if { ${IWN_ENABLE_HTTP2}
         shell { IWN_TEST_TLS=s2n ./server1-tests-run.sh --http2 -- --ssl }
         shell { IWN_TEST_TLS=s2n ./server2-tests-run.sh --http2 -- --ssl }
@@ -55,6 +64,7 @@ if { ${IWNET_RUN_TESTS}
           exec { valgrind --leak-check=full --error-exitcode=9 ./wf_test1 }
           exec { ./server1-tests-run.sh --valgrind }
           exec { ./server1-tests-run.sh --valgrind -- --ssl }
+          exec { ./server3-tests-run.sh --valgrind }
           if { ${IWN_ENABLE_HTTP2}
             exec { ./server1-tests-run.sh --http2 --valgrind }
             exec { ./server1-tests-run.sh --http2 --valgrind -- --ssl }

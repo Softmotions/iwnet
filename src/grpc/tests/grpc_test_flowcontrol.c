@@ -378,7 +378,7 @@ static void _fixture_stop(void) {
   if (_fx.poller) {
     if (_fx.poll_thread) {
       iwn_poller_shutdown_request(_fx.poller);
-      pthread_join(_fx.poll_thread, 0);
+      IW_TEST_ASSERT_EQUAL(iwn_poller_join(_fx.poller), 0);
     }
     iwn_poller_destroy(&_fx.poller);
   }

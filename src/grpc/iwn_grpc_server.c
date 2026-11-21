@@ -1,6 +1,7 @@
 #include "iwn_grpc_server.h"
 #include "iwn_url.h"
 #include "ssl/iwn_tls_poller_adapter.h"
+#include "ssl/iwn_tls_config.h"
 #include "poller/iwn_direct_poller_adapter.h"
 
 #include <iowow/iwrefs.h>
@@ -131,6 +132,9 @@ struct iwn_grpc_server {
 
   pthread_mutex_t mtx;
   struct iwhmap  *conns_map; ///< fd -> iwn_grpc_server_conn
+
+  /// TLS settings shared by all server connections, `0` if the server is not secure.
+  struct iwn_tls_server_config *tls_config;
 
   int      listen_fd;
   unsigned flags;
@@ -1555,10 +1559,9 @@ static iwrc _conn_start(struct iwn_grpc_server_conn *conn) {
   }
 
   if (conn->flags & _FLAG_SECURE) {
-    rc = iwn_tls_server_poller_adapter(&(struct iwn_tls_server_poller_adapter_spec) {
+    rc = iwn_tls_server_poller_adapter_borrow(&(struct iwn_tls_server_poller_adapter_spec) {
       .tls_impl = server->spec.ssl.tls_impl,
       .poller = server->poller,
-      .alpn_protocol_names = "h2", //< Only HTTP/2 is supported and allowed
       .on_event = _conn_on_event,
       .on_dispose = _conn_on_dispose,
       .user_data = conn,
@@ -1566,13 +1569,7 @@ static iwrc _conn_start(struct iwn_grpc_server_conn *conn) {
       .events = IWN_POLLIN,
       .events_mod = IWN_POLLET,
       .fd = conn->fd,
-      .certs = server->spec.ssl.certs,
-      .certs_len = server->spec.ssl.certs_len,
-      .certs_in_buffer = server->spec.ssl.certs_in_buffer,
-      .private_key = server->spec.ssl.private_key,
-      .private_key_len = server->spec.ssl.private_key_len,
-      .private_key_in_buffer = server->spec.ssl.private_key_in_buffer,
-    });
+    }, server->tls_config);
   } else {
     rc = iwn_direct_poller_adapter(
       server->poller, conn->fd,
@@ -1677,6 +1674,7 @@ static void _server_destroy(void *d) {
 
   iwhmap_destroy(server->conns_map);
   pthread_mutex_destroy(&server->mtx);
+  iwn_tls_server_config_free(server->tls_config);
 
 #ifdef IW_BLOCKS
   Block_release(spec->on_request_block);
@@ -1992,6 +1990,19 @@ iwrc iwn_grpc_server_open(const struct iwn_grpc_server_spec *spec_, struct iwn_g
 #endif
 
   RCC(rc, finish, _listen_url_prepare(server));
+  if (server->flags & _FLAG_SECURE) {
+    // Parse certificates and the private key once for all accepted connections.
+    RCC(rc, finish, iwn_tls_server_config_new(&(struct iwn_tls_server_config_spec) {
+      .tls_impl = server->spec.ssl.tls_impl,
+      .alpn_protocol_names = "h2", //< Only HTTP/2 is supported and allowed
+      .certs = server->spec.ssl.certs,
+      .certs_in_buffer = server->spec.ssl.certs_in_buffer,
+      .certs_len = server->spec.ssl.certs_len,
+      .private_key = server->spec.ssl.private_key,
+      .private_key_in_buffer = server->spec.ssl.private_key_in_buffer,
+      .private_key_len = server->spec.ssl.private_key_len,
+    }, &server->tls_config));
+  }
   RCC(rc, finish, _listen_socket_open(server));
 
 finish:

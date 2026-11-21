@@ -57,15 +57,14 @@ static iwrc _run_tests(void) {
 }
 
 static void test_concurrent_unary(void) {
-  pthread_t poll_thread = 0;
-  iwrc rc = _grpc_test_setup(&poll_thread);
+  iwrc rc = _grpc_test_setup();
   IW_TEST_ASSERT_EQUAL_FATAL(rc, 0);
 
   IW_TEST_ASSERT_EQUAL(rc = _run_tests(), 0);
   if (rc) {
     iwn_poller_shutdown_request(_ctx.poller);
   }
-  pthread_join(poll_thread, 0);
+  IW_TEST_ASSERT_EQUAL(iwn_poller_join(_ctx.poller), 0);
 
   IW_TEST_ASSERT(sbox[0].steps[STEP_ON_DESTROY] == 1);
   IW_TEST_ASSERT(sbox[0].steps[STEP_ON_CLOSED] == 1);

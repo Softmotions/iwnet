@@ -3,6 +3,7 @@
 #include "iwn_poller.h"
 #include "poller/iwn_direct_poller_adapter.h"
 #include "ssl/iwn_tls_poller_adapter.h"
+#include "ssl/iwn_tls_config.h"
 
 #include "iwn_base64.h"
 #include "iwn_url.h"
@@ -43,6 +44,8 @@ struct iwn_ws_client {
   struct iwn_ws_client_ctx   ctx;
   struct iwn_ws_client_spec  spec;
   struct iwn_poller_adapter *pa;
+  /// TLS settings reused for reconnects, `0` if the client is not secure.
+  struct iwn_tls_client_config *tls_config;
   char *host;
   char *path;
   char *query;
@@ -84,6 +87,7 @@ IW_INLINE iwrc _wslayrc(enum wslay_error err) {
 
 static void _ws_destroy(struct iwn_ws_client *ws) {
   if (ws) {
+    iwn_tls_client_config_free(ws->tls_config);
     free(ws->path);
     free(ws->urlbuf);
     wslay_event_context_free(ws->wsl);
@@ -551,7 +555,15 @@ static iwrc _ws_connect(struct iwn_ws_client *ws) {
   }, ws)));
 
   if (ws->flags & _FLAG_SECURE) {
-    RCC(rc, finish, iwn_tls_client_poller_adapter(&(struct iwn_tls_client_poller_adapter_spec) {
+    if (!ws->tls_config) {
+      // Parse CA certificates once and reuse the settings for reconnects.
+      RCC(rc, finish, iwn_tls_client_config_new(&(struct iwn_tls_client_config_spec) {
+        .tls_impl = spec->tls_impl,
+        .verify_peer = spec->flags & WS_VERIFY_PEER,
+        .verify_host = spec->flags & WS_VERIFY_HOST,
+      }, &ws->tls_config));
+    }
+    RCC(rc, finish, iwn_tls_client_poller_adapter_borrow(&(struct iwn_tls_client_poller_adapter_spec) {
       .tls_impl = spec->tls_impl,
       .poller = spec->poller,
       .host = ws->host,
@@ -564,7 +576,7 @@ static iwrc _ws_connect(struct iwn_ws_client *ws) {
       .fd = ws->fd,
       .verify_peer = spec->flags & WS_VERIFY_PEER,
       .verify_host = spec->flags & WS_VERIFY_HOST
-    }));
+    }, ws->tls_config));
   } else {
     RCC(rc, finish,
         iwn_direct_poller_adapter(spec->poller, ws->fd,

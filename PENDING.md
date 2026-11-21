@@ -2,6 +2,26 @@
 
 New records are on the top.
 
+## Autark cache keeps objects from a previous build configuration
+
+- Switching between build configurations which only change compiler flags (for
+  example `ENABLE_ASAN=1` -> plain, or `ENABLE_UBSAN=1` -> plain) leaves stale `*.o`
+  files in `autark-cache/`: the object rules are not re-run for those switches, so
+  the link fails with undefined `__asan_*`/`__ubsan_*` references. Recovering needs
+  a clean rebuild (`./build.sh -c`) or removing `autark-cache/src/**/*.o` and touching
+  the sources. The host tools (`tools/Autark`) no longer depend on the target flags,
+  so they are not affected any more.
+
+## s2n: the client trust store also loads the system CA certificates
+
+- `iwn_s2n_client_config_new()` uses `s2n_config_new()`, so the system trust store is
+  loaded and the `iwn_cacerts` (or user supplied) bundle is added on top of it. In an
+  environment without a usable system store the client keeps working, but it pays for
+  the system store load and trusts those certificates in addition to the bundle.
+  Dropping the system store (switching to `s2n_config_new_minimal()`) would make the
+  bundle the only trust source and needs a deliberate decision, as locally installed
+  CA certificates would no longer be trusted by the TLS client.
+
 ## HTTP/1.0 request carrying `Transfer-Encoding`
 
 - RFC 9112 §6.1: "A server or client that receives an HTTP/1.0 message containing
@@ -35,9 +55,3 @@ New records are on the top.
   handler to release `pa::mtx` around `on_event` or a dedicated engine lock.
   Found while adding TLS client stress tests to a downstream project; not
   reproduced as a failure yet.
-
-## s2n-tls backend
-
-- The s2n-tls adapter creates a `s2n_config` and parses the certificate
-  chain/private key for every accepted connection (same as the BearSSL adapter does).
-  Sharing a single config per server would avoid this cost.

@@ -1,5 +1,6 @@
 #include "iwnet.h"
 #include "iwn_brssl_poller_adapter.h"
+#include "iwn_tls_config.h"
 
 #include "bearssl/brssl.h"
 #include <iowow/iwlog.h>
@@ -28,23 +29,20 @@ struct pa {
   struct iwpool *pool;
   br_ssl_engine_context *eng;
   pthread_mutex_t mtx;
-  pthread_key_t   ready_fd_tl;
-  const char    **alpn_protocol_names;
-  ssize_t alpn_protocol_names_len;
   union {
     struct  {
       br_ssl_client_context      cc;
       struct x509_client_context x509;
-      anchor_list anchors;
     } client;
 
     struct {
       br_ssl_server_context sc;
-      private_key *pk;
-      br_x509_certificate *certs;
-      size_t certs_num;
     } server;
   };
+
+  /// TLS settings owned by the adapter, `0` when a shared config is borrowed.
+  struct iwn_brssl_server_config *owned_server_config;
+  struct iwn_brssl_client_config *owned_client_config;
 
   bool is_client;
   unsigned char iobuf[BR_SSL_BUFSIZE_BIDI];
@@ -119,15 +117,8 @@ static ssize_t _write(struct iwn_poller_adapter *pa, const uint8_t *data, size_t
 }
 
 IW_INLINE void _destroy(struct pa *a) {
-  if (a->is_client) {
-    VEC_CLEAREXT(a->client.anchors, &free_ta_contents);
-  } else {
-    free_private_key(a->server.pk);
-    if (a->server.certs_num) {
-      free_certificates(a->server.certs, a->server.certs_num);
-    }
-  }
-  pthread_key_delete(a->ready_fd_tl);
+  iwn_brssl_server_config_free(a->owned_server_config);
+  iwn_brssl_client_config_free(a->owned_client_config);
   pthread_mutex_destroy(&a->mtx);
   iwpool_destroy(a->pool);
 }
@@ -191,16 +182,10 @@ static bool _has_pending_write_bytes(struct iwn_poller_adapter *pa) {
   return ret;
 }
 
-static bool _arm_needed(struct iwn_poller_adapter *pa) {
-  struct pa *a = (void*) pa;
-  return pthread_getspecific(a->ready_fd_tl) != (void*) 1;
-};
-
-iwrc _arm(struct iwn_poller_adapter *a, uint32_t events) {
-  if (_arm_needed(a)) {
-    return iwn_poller_arm_events(a->poller, a->fd, events);
-  }
-  return 0;
+static iwrc _arm(struct iwn_poller_adapter *a, uint32_t events) {
+  // When called from the adapter event callback the poller merges the request into
+  // the events armed after the callback returns, so it is never lost.
+  return iwn_poller_arm_events(a->poller, a->fd, events);
 }
 
 static const char* _get_protocol_name(struct iwn_poller_adapter *pa) {
@@ -215,8 +200,6 @@ static int64_t _on_ready(const struct iwn_poller_task *t, uint32_t flags) {
   bool write_done, read_done;
   bool locked = false;
   int64_t nflags;
-
-  pthread_setspecific(a->ready_fd_tl, (void*) 1);
 
   do {
     nflags = -1;
@@ -307,7 +290,6 @@ finish:
     }
   }
 
-  pthread_setspecific(a->ready_fd_tl, 0);
   return nflags;
 }
 
@@ -366,10 +348,240 @@ static const br_x509_class x509_vtable = {
   x509_get_pkey
 };
 
-iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapter_spec *spec) {
-  struct iwn_poller *p = spec->poller;
-  iwrc rc = 0;
+struct iwn_brssl_server_config {
+  struct iwpool *pool;
+  const char   **alpn_protocol_names;
+  ssize_t alpn_protocol_names_len;
+  br_x509_certificate *certs;
+  size_t       certs_num;
+  private_key *pk;
+};
 
+static iwrc _read_certs(
+  const char           *data,
+  ssize_t               len,
+  bool                  in_buffer,
+  br_x509_certificate **out_certs,
+  size_t               *out_certs_num) {
+  if (in_buffer) {
+    *out_certs = read_certificates_data(data, (size_t) len, out_certs_num);
+    if (!*out_certs) {
+      iwlog_error2("Error reading server certs data specified in buffer");
+      return BRS_ERROR_INVALID_CASCERT_DATA;
+    }
+    return 0;
+  }
+
+  char *buf = malloc((size_t) len + 1);
+  if (!buf) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  memcpy(buf, data, (size_t) len);
+  buf[len] = '\0';
+  *out_certs = read_certificates(buf, out_certs_num);
+  free(buf);
+  if (!*out_certs) {
+    iwlog_error("Error reading server certs file: %.*s", (int) len, data);
+    return BRS_ERROR_INVALID_CASCERT_DATA;
+  }
+  return 0;
+}
+
+static iwrc _read_key(const char *data, ssize_t len, bool in_buffer, private_key **out_pk) {
+  if (in_buffer) {
+    *out_pk = read_private_key_data(data, (size_t) len);
+    if (!*out_pk) {
+      iwlog_error2("Error reading server private key data specified in buffer");
+      return BRS_ERROR_INVALID_PRIVKEY_DATA;
+    }
+    return 0;
+  }
+
+  char *buf = malloc((size_t) len + 1);
+  if (!buf) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  memcpy(buf, data, (size_t) len);
+  buf[len] = '\0';
+  *out_pk = read_private_key(buf);
+  free(buf);
+  if (!*out_pk) {
+    iwlog_error("Error reading server private key file: %.*s", (int) len, data);
+    return BRS_ERROR_INVALID_PRIVKEY_DATA;
+  }
+  return 0;
+}
+
+/// Configures the server engine of `a` with the provided certificate chain,
+/// private key and ALPN protocol names, which are only referenced by the engine.
+static void _server_engine_init(
+  struct pa                 *a,
+  const br_x509_certificate *certs,
+  size_t                     certs_num,
+  const private_key         *pk,
+  const char               **alpn_protocol_names,
+  size_t                     alpn_protocol_names_len) {
+  if (pk->key_type == BR_KEYTYPE_EC) {
+    br_ssl_server_init_full_ec(&a->server.sc, certs, certs_num, BR_KEYTYPE_EC, &pk->key.ec);
+  } else {
+    br_ssl_server_init_full_rsa(&a->server.sc, certs, certs_num, &pk->key.rsa);
+  }
+  br_ssl_engine_set_buffer(&a->server.sc.eng, a->iobuf, sizeof(a->iobuf), 1);
+  br_ssl_engine_set_versions(&a->server.sc.eng, BR_TLS11, BR_TLS12);
+  if (alpn_protocol_names_len > 0) {
+    br_ssl_engine_set_protocol_names(&a->server.sc.eng, alpn_protocol_names, alpn_protocol_names_len);
+    br_ssl_engine_add_flags(&a->server.sc.eng, BR_OPT_FAIL_ON_ALPN_MISMATCH);
+  }
+  br_ssl_server_reset(&a->server.sc);
+  a->eng = &a->server.sc.eng;
+}
+
+static iwrc _server_adapter_create(const struct iwn_tls_server_poller_adapter_spec *spec, struct pa **out) {
+  *out = 0;
+  if (!spec->poller) {
+    iwlog_ecode_error2(IW_ERROR_INVALID_ARGS, "No poller specified");
+    return IW_ERROR_INVALID_ARGS;
+  }
+  if (!spec->on_event) {
+    iwlog_ecode_error2(IW_ERROR_INVALID_ARGS, "No on_event specified");
+    return IW_ERROR_INVALID_ARGS;
+  }
+
+  _init();
+
+  struct iwpool *pool = iwpool_create_empty();
+  if (!pool) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  struct pa *a = iwpool_calloc(sizeof(*a), pool);
+  if (!a) {
+    iwpool_destroy(pool);
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  a->pool = pool;
+
+#if defined(SO_NOSIGPIPE)
+  {
+    // Apple platforms have no MSG_NOSIGNAL: suppress SIGPIPE on the socket.
+    int one = 1;
+    setsockopt(spec->fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+  }
+#endif
+  a->b.fd = spec->fd;
+  a->b.poller = spec->poller;
+  a->b.read = _read;
+  a->b.write = _write;
+  a->b.arm = _arm;
+  a->b.get_protocol_name = _get_protocol_name;
+  a->b.has_pending_write_bytes = _has_pending_write_bytes;
+  a->b.user_data = spec->user_data;
+  a->on_event = spec->on_event;
+  a->on_dispose = spec->on_dispose;
+
+  pthread_mutexattr_t attr;
+  pthread_mutexattr_init(&attr);
+  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+  pthread_mutex_init(&a->mtx, &attr);
+  pthread_mutexattr_destroy(&attr);
+
+  *out = a;
+  return 0;
+}
+
+static iwrc _server_adapter_start(
+  struct pa                                       *a,
+  const struct iwn_tls_server_poller_adapter_spec *spec,
+  const br_x509_certificate                       *certs,
+  size_t                                           certs_num,
+  const private_key                               *pk,
+  const char                                     **alpn_protocol_names,
+  size_t                                           alpn_protocol_names_len) {
+  _server_engine_init(a, certs, certs_num, pk, alpn_protocol_names, alpn_protocol_names_len);
+  return iwn_poller_add(&(struct iwn_poller_task) {
+    .fd = spec->fd,
+    .poller = spec->poller,
+    .user_data = a,
+    .on_ready = _on_ready,
+    .on_dispose = _on_dispose,
+    .timeout = spec->timeout_sec,
+    .events = spec->events,
+    .events_mod = spec->events_mod,
+  });
+}
+
+iwrc iwn_brssl_server_config_new(
+  const struct iwn_tls_server_config_spec *spec,
+  struct iwn_brssl_server_config         **out_config) {
+  iwrc rc = 0;
+  if (!spec || !out_config || !spec->certs || !spec->private_key) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  *out_config = 0;
+
+  ssize_t certs_len = spec->certs_len < 0 ? (ssize_t) strlen(spec->certs) : spec->certs_len;
+  ssize_t private_key_len = spec->private_key_len < 0 ? (ssize_t) strlen(spec->private_key) : spec->private_key_len;
+  if (certs_len < 1 || private_key_len < 1) {
+    iwlog_ecode_error2(IW_ERROR_INVALID_ARGS, "Certs or private_key data is empty");
+    return IW_ERROR_INVALID_ARGS;
+  }
+
+  _init();
+
+  struct iwpool *pool = iwpool_create_empty();
+  if (!pool) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  struct iwn_brssl_server_config *config = iwpool_calloc(sizeof(*config), pool);
+  if (!config) {
+    iwpool_destroy(pool);
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  config->pool = pool;
+
+  if (spec->alpn_protocol_names) {
+    const char **pnames = iwpool_split_string(pool, spec->alpn_protocol_names, ",", true);
+    RCB(finish, pnames);
+    config->alpn_protocol_names = pnames;
+    for (const char **pn = pnames; *pn; ++pn) {
+      config->alpn_protocol_names_len++;
+    }
+  }
+
+  RCC(rc, finish, _read_certs(spec->certs, certs_len, spec->certs_in_buffer,
+                              &config->certs, &config->certs_num));
+  RCC(rc, finish, _read_key(spec->private_key, private_key_len, spec->private_key_in_buffer,
+                            &config->pk));
+
+finish:
+  if (rc) {
+    iwn_brssl_server_config_free(config);
+  } else {
+    *out_config = config;
+  }
+  return rc;
+}
+
+void iwn_brssl_server_config_free(struct iwn_brssl_server_config *config) {
+  if (!config) {
+    return;
+  }
+  if (config->pk) {
+    free_private_key(config->pk);
+  }
+  if (config->certs) {
+    free_certificates(config->certs, config->certs_num);
+  }
+  iwpool_destroy(config->pool);
+}
+
+iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapter_spec *spec) {
+  iwrc rc = 0;
+  struct pa *a = 0;
+  struct iwn_brssl_server_config *config = 0;
+
+  if (!spec) {
+    return IW_ERROR_INVALID_ARGS;
+  }
   if (!spec->poller) {
     rc = IW_ERROR_INVALID_ARGS;
     iwlog_ecode_error2(rc, "No poller specified");
@@ -409,6 +621,154 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     return rc;
   }
 
+  // The server adapter internals operate on the generic TLS server adapter spec.
+  const struct iwn_tls_server_poller_adapter_spec gspec = {
+    .poller = spec->poller,
+    .on_event = spec->on_event,
+    .on_dispose = spec->on_dispose,
+    .alpn_protocol_names = spec->alpn_protocol_names,
+    .certs = spec->certs,
+    .private_key = spec->private_key,
+    .certs_len = spec->certs_len,
+    .private_key_len = spec->private_key_len,
+    .user_data = spec->user_data,
+    .timeout_sec = spec->timeout_sec,
+    .events = spec->events,
+    .events_mod = spec->events_mod,
+    .fd = spec->fd,
+    .certs_in_buffer = spec->certs_in_buffer,
+    .private_key_in_buffer = spec->private_key_in_buffer,
+  };
+
+  RCC(rc, finish, iwn_brssl_server_config_new(&(struct iwn_tls_server_config_spec) {
+    .tls_impl = IWN_TLS_IMPL_BEARSSL,
+    .alpn_protocol_names = spec->alpn_protocol_names,
+    .certs = spec->certs,
+    .certs_in_buffer = spec->certs_in_buffer,
+    .certs_len = spec->certs_len,
+    .private_key = spec->private_key,
+    .private_key_in_buffer = spec->private_key_in_buffer,
+    .private_key_len = spec->private_key_len,
+  }, &config));
+
+  RCC(rc, finish, _server_adapter_create(&gspec, &a));
+  a->owned_server_config = config;
+  config = 0;
+  rc = _server_adapter_start(a, &gspec, a->owned_server_config->certs, a->owned_server_config->certs_num,
+                             a->owned_server_config->pk, a->owned_server_config->alpn_protocol_names,
+                             (size_t) a->owned_server_config->alpn_protocol_names_len);
+
+finish:
+  if (rc) {
+    if (a) {
+      _destroy(a);
+    } else {
+      iwn_brssl_server_config_free(config);
+    }
+  }
+  return rc;
+}
+
+iwrc iwn_brssl_server_poller_adapter_borrow(
+  const struct iwn_tls_server_poller_adapter_spec *spec,
+  const struct iwn_brssl_server_config            *config) {
+  iwrc rc = 0;
+  struct pa *a = 0;
+
+  if (!spec || !config) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  RCC(rc, finish, _server_adapter_create(spec, &a));
+  rc = _server_adapter_start(a, spec, config->certs, config->certs_num,
+                             config->pk, config->alpn_protocol_names,
+                             (size_t) config->alpn_protocol_names_len);
+
+finish:
+  if (rc && a) {
+    _destroy(a);
+  }
+  return rc;
+}
+
+struct iwn_brssl_client_config {
+  struct iwpool *pool;
+  const char   **alpn_protocol_names;
+  ssize_t     alpn_protocol_names_len;
+  anchor_list anchors;
+};
+
+iwrc iwn_brssl_client_config_new(
+  const struct iwn_tls_client_config_spec *spec,
+  struct iwn_brssl_client_config         **out_config) {
+  iwrc rc = 0;
+  if (!spec || !out_config) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  *out_config = 0;
+
+  const char *cacerts_data = spec->cacerts_data;
+  size_t cacerts_data_len = spec->cacerts_data_len;
+  if (!cacerts_data || !cacerts_data_len) {
+    cacerts_data = iwn_cacerts;
+    cacerts_data_len = iwn_cacerts_len;
+  }
+
+  _init();
+
+  struct iwpool *pool = iwpool_create_empty();
+  if (!pool) {
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  struct iwn_brssl_client_config *config = iwpool_calloc(sizeof(*config), pool);
+  if (!config) {
+    iwpool_destroy(pool);
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
+  }
+  config->pool = pool;
+
+  if (spec->alpn_protocol_names) {
+    const char **pnames = iwpool_split_string(pool, spec->alpn_protocol_names, ",", true);
+    RCB(finish, pnames);
+    config->alpn_protocol_names = pnames;
+    for (const char **pn = pnames; *pn; ++pn) {
+      config->alpn_protocol_names_len++;
+    }
+  }
+
+  if (!read_trust_anchors_data(&config->anchors, cacerts_data, cacerts_data_len)) {
+    iwlog_ecode_error2(BRS_ERROR_INVALID_CASCERT_DATA, "Unable to load CA certificates");
+    rc = BRS_ERROR_INVALID_CASCERT_DATA;
+    goto finish;
+  }
+
+finish:
+  if (rc) {
+    iwn_brssl_client_config_free(config);
+  } else {
+    *out_config = config;
+  }
+  return rc;
+}
+
+void iwn_brssl_client_config_free(struct iwn_brssl_client_config *config) {
+  if (!config) {
+    return;
+  }
+  VEC_CLEAREXT(config->anchors, &free_ta_contents);
+  iwpool_destroy(config->pool);
+}
+
+static iwrc _client_adapter_create(const struct iwn_tls_client_poller_adapter_spec *spec, struct pa **out) {
+  *out = 0;
+  if (!spec->poller) {
+    iwlog_ecode_error2(IW_ERROR_INVALID_ARGS, "No poller specified");
+    return IW_ERROR_INVALID_ARGS;
+  }
+  if (!spec->on_event) {
+    iwlog_ecode_error2(IW_ERROR_INVALID_ARGS, "No on_event specified");
+    return IW_ERROR_INVALID_ARGS;
+  }
+
   _init();
 
   struct iwpool *pool = iwpool_create_empty();
@@ -416,18 +776,14 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
   struct pa *a = iwpool_calloc(sizeof(*a), pool);
-  RCB(finish, a);
-  a->pool = pool;
-
-#if defined(SO_NOSIGPIPE)
-  {
-    // Apple platforms have no MSG_NOSIGNAL: suppress SIGPIPE on the socket.
-    int one = 1;
-    setsockopt(spec->fd, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+  if (!a) {
+    iwpool_destroy(pool);
+    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
   }
-#endif
+  a->pool = pool;
+  a->is_client = true;
   a->b.fd = spec->fd;
-  a->b.poller = p;
+  a->b.poller = spec->poller;
   a->b.read = _read;
   a->b.write = _write;
   a->b.arm = _arm;
@@ -443,84 +799,37 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
   pthread_mutex_init(&a->mtx, &attr);
   pthread_mutexattr_destroy(&attr);
 
-  pthread_key_create(&a->ready_fd_tl, 0);
+  *out = a;
+  return 0;
+}
 
-  if (spec->alpn_protocol_names) {
-    const char **pnames = iwpool_split_string(pool, spec->alpn_protocol_names, ",", true);
-    RCB(finish, pnames);
-    a->alpn_protocol_names = pnames;
-    for (const char **pn = pnames; *pn; ++pn) {
-      a->alpn_protocol_names_len++;
-    }
+/// Configures the client engine of `a`. The trust anchors and ALPN protocol names
+/// are only referenced by the engine.
+static iwrc _client_adapter_start(
+  struct pa                                       *a,
+  const struct iwn_tls_client_poller_adapter_spec *spec,
+  const br_x509_trust_anchor                      *anchors,
+  size_t                                           anchors_num,
+  const char                                     **alpn_protocol_names,
+  size_t                                           alpn_protocol_names_len) {
+  br_ssl_client_init_full(&a->client.cc, &a->client.x509.minimal, anchors, anchors_num);
+  br_ssl_engine_set_buffer(&a->client.cc.eng, a->iobuf, sizeof(a->iobuf), 1);
+  br_ssl_engine_set_versions(&a->client.cc.eng, BR_TLS11, BR_TLS12);
+  if (alpn_protocol_names_len > 0) {
+    br_ssl_engine_set_protocol_names(&a->client.cc.eng, alpn_protocol_names, alpn_protocol_names_len);
+    br_ssl_engine_add_flags(&a->client.cc.eng, BR_OPT_FAIL_ON_ALPN_MISMATCH);
   }
-  if (spec->certs_in_buffer) {
-    a->server.certs = read_certificates_data(spec->certs, certs_len, &a->server.certs_num);
-    if (!a->server.certs) {
-      iwlog_error2("Error reading server certs data specified in buffer");
-      rc = BRS_ERROR_INVALID_CASCERT_DATA;
-      goto finish;
-    }
-  } else {
-    char *buf = malloc(certs_len + 1);
-    RCB(finish, buf);
-    memcpy(buf, spec->certs, certs_len);
-    buf[certs_len] = '\0';
-    a->server.certs = read_certificates(buf, &a->server.certs_num);
-    free(buf);
-    if (!a->server.certs) {
-      iwlog_error("Error reading server certs file: %.*s", (int) certs_len, spec->certs);
-      rc = BRS_ERROR_INVALID_CASCERT_DATA;
-      goto finish;
-    }
-  }
+  a->client.x509.vtable = &x509_vtable;
+  a->client.x509.verifyhost = spec->verify_host;
+  a->client.x509.verifypeer = spec->verify_peer;
+  br_ssl_engine_set_x509(&a->client.cc.eng, &a->client.x509.vtable);
+  br_ssl_client_reset(&a->client.cc, spec->host, 0);
 
-  if (spec->private_key_in_buffer) {
-    a->server.pk = read_private_key_data(spec->private_key, private_key_len);
-    if (!a->server.pk) {
-      iwlog_error2("Error reading server private key data specified in buffer");
-      rc = BRS_ERROR_INVALID_PRIVKEY_DATA;
-      goto finish;
-    }
-  } else {
-    char *buf = malloc(private_key_len + 1);
-    RCA(buf, finish);
-    memcpy(buf, spec->private_key, private_key_len);
-    buf[private_key_len] = '\0';
-    a->server.pk = read_private_key(buf);
-    free(buf);
-    if (!a->server.pk) {
-      iwlog_error("Error reading server private key file: %.*s", (int) private_key_len, spec->private_key);
-      rc = BRS_ERROR_INVALID_PRIVKEY_DATA;
-      goto finish;
-    }
-  }
+  a->eng = &a->client.cc.eng;
 
-  if (a->server.pk->key_type == BR_KEYTYPE_EC) {
-    br_ssl_server_init_full_ec(&a->server.sc,
-                               a->server.certs,
-                               a->server.certs_num,
-                               BR_KEYTYPE_EC,
-                               &a->server.pk->key.ec);
-  } else {
-    br_ssl_server_init_full_rsa(&a->server.sc,
-                                a->server.certs,
-                                a->server.certs_num,
-                                &a->server.pk->key.rsa);
-  }
-
-  br_ssl_engine_set_buffer(&a->server.sc.eng, a->iobuf, sizeof(a->iobuf), 1);
-  br_ssl_engine_set_versions(&a->server.sc.eng, BR_TLS11, BR_TLS12);
-  if (a->alpn_protocol_names_len > 0) {
-    br_ssl_engine_set_protocol_names(&a->server.sc.eng, a->alpn_protocol_names, a->alpn_protocol_names_len);
-    br_ssl_engine_add_flags(&a->server.sc.eng, BR_OPT_FAIL_ON_ALPN_MISMATCH);
-  }
-  br_ssl_server_reset(&a->server.sc);
-
-  a->eng = &a->server.sc.eng;
-
-  rc = iwn_poller_add(&(struct iwn_poller_task) {
+  return iwn_poller_add(&(struct iwn_poller_task) {
     .fd = spec->fd,
-    .poller = p,
+    .poller = spec->poller,
     .user_data = a,
     .on_ready = _on_ready,
     .on_dispose = _on_dispose,
@@ -528,23 +837,37 @@ iwrc iwn_brssl_server_poller_adapter(const struct iwn_brssl_server_poller_adapte
     .events = spec->events,
     .events_mod = spec->events_mod,
   });
+}
+
+iwrc iwn_brssl_client_poller_adapter_borrow(
+  const struct iwn_tls_client_poller_adapter_spec *spec,
+  const struct iwn_brssl_client_config            *config) {
+  iwrc rc = 0;
+  struct pa *a = 0;
+
+  if (!spec || !config) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  RCC(rc, finish, _client_adapter_create(spec, &a));
+  rc = _client_adapter_start(a, spec, config->anchors.buf, config->anchors.ptr,
+                             config->alpn_protocol_names,
+                             (size_t) config->alpn_protocol_names_len);
 
 finish:
-  if (rc) {
-    if (a) {
-      _destroy(a);
-    } else {
-      iwpool_destroy(pool);
-    }
+  if (rc && a) {
+    _destroy(a);
   }
   return rc;
 }
 
 iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapter_spec *spec) {
-  struct iwn_poller *p = spec->poller;
   iwrc rc = 0;
-  int rci = 0;
+  struct pa *a = 0;
+  struct iwn_brssl_client_config *config = 0;
 
+  if (!spec) {
+    return IW_ERROR_INVALID_ARGS;
+  }
   if (!spec->poller) {
     rc = IW_ERROR_INVALID_ARGS;
     iwlog_ecode_error2(rc, "No poller specified");
@@ -556,88 +879,46 @@ iwrc iwn_brssl_client_poller_adapter(const struct iwn_brssl_client_poller_adapte
     return rc;
   }
 
-  _init();
-
-  struct iwpool *pool = iwpool_create_empty();
-  if (!pool) {
-    return iwrc_set_errno(IW_ERROR_ALLOC, errno);
-  }
-  struct pa *a = iwpool_calloc(sizeof(*a), pool);
-  RCB(finish, a);
-  a->pool = pool;
-
-  a->is_client = true;
-  a->b.fd = spec->fd;
-  a->b.poller = p;
-  a->b.read = _read;
-  a->b.write = _write;
-  a->b.arm = _arm;
-  a->b.get_protocol_name = _get_protocol_name;
-  a->b.user_data = spec->user_data;
-  a->b.has_pending_write_bytes = _has_pending_write_bytes;
-  a->on_event = spec->on_event;
-  a->on_dispose = spec->on_dispose;
-
-  pthread_mutexattr_t attr;
-  pthread_mutexattr_init(&attr);
-  pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-  pthread_mutex_init(&a->mtx, &attr);
-  pthread_mutexattr_destroy(&attr);
-
-  pthread_key_create(&a->ready_fd_tl, 0);
-
-  if (spec->alpn_protocol_names) {
-    const char **pnames = iwpool_split_string(pool, spec->alpn_protocol_names, ",", true);
-    RCB(finish, pnames);
-    a->alpn_protocol_names = pnames;
-    for (const char **pn = pnames; *pn; ++pn) {
-      a->alpn_protocol_names_len++;
-    }
-  }
-
-  const char *cacerts_data = spec->cacerts_data;
-  size_t cacerts_data_len = spec->cacerts_data_len;
-  if (!cacerts_data || !cacerts_data_len) {
-    cacerts_data = iwn_cacerts;
-    cacerts_data_len = iwn_cacerts_len;
-  }
-
-  // Load trust anchors
-  rci = read_trust_anchors_data(&a->client.anchors, cacerts_data, cacerts_data_len);
-  if (!rci) {
-    rc = BRS_ERROR_INVALID_CASCERT_DATA;
-    goto finish;
-  }
-
-  br_ssl_client_init_full(&a->client.cc, &a->client.x509.minimal, a->client.anchors.buf, a->client.anchors.ptr);
-  br_ssl_engine_set_buffer(&a->client.cc.eng, a->iobuf, sizeof(a->iobuf), 1);
-  br_ssl_engine_set_versions(&a->client.cc.eng, BR_TLS11, BR_TLS12);
-  if (a->alpn_protocol_names_len > 0) {
-    br_ssl_engine_set_protocol_names(&a->client.cc.eng, a->alpn_protocol_names, a->alpn_protocol_names_len);
-    br_ssl_engine_add_flags(&a->client.cc.eng, BR_OPT_FAIL_ON_ALPN_MISMATCH);
-  }
-  a->client.x509.vtable = &x509_vtable;
-  a->client.x509.verifyhost = spec->verify_host;
-  a->client.x509.verifypeer = spec->verify_peer;
-  br_ssl_engine_set_x509(&a->client.cc.eng, &a->client.x509.vtable);
-  br_ssl_client_reset(&a->client.cc, spec->host, 0);
-
-  a->eng = &a->client.cc.eng;
-
-  rc = iwn_poller_add(&(struct iwn_poller_task) {
-    .fd = spec->fd,
-    .poller = p,
-    .user_data = a,
-    .on_ready = _on_ready,
-    .on_dispose = _on_dispose,
-    .timeout = spec->timeout_sec,
+  // The client adapter internals operate on the generic TLS client adapter spec.
+  const struct iwn_tls_client_poller_adapter_spec gspec = {
+    .tls_impl = IWN_TLS_IMPL_BEARSSL,
+    .poller = spec->poller,
+    .host = spec->host,
+    .on_event = spec->on_event,
+    .on_dispose = spec->on_dispose,
+    .user_data = spec->user_data,
+    .timeout_sec = spec->timeout_sec,
     .events = spec->events,
     .events_mod = spec->events_mod,
-  });
+    .fd = spec->fd,
+    .verify_peer = spec->verify_peer,
+    .verify_host = spec->verify_host,
+  };
+
+  RCC(rc, finish, iwn_brssl_client_config_new(&(struct iwn_tls_client_config_spec) {
+    .tls_impl = IWN_TLS_IMPL_BEARSSL,
+    .alpn_protocol_names = spec->alpn_protocol_names,
+    .cacerts_data = spec->cacerts_data,
+    .cacerts_data_len = spec->cacerts_data_len,
+    .verify_peer = spec->verify_peer,
+    .verify_host = spec->verify_host,
+  }, &config));
+
+  RCC(rc, finish, _client_adapter_create(&gspec, &a));
+  a->owned_client_config = config;
+  config = 0;
+  rc = _client_adapter_start(a, &gspec, a->owned_client_config->anchors.buf,
+                             a->owned_client_config->anchors.ptr,
+                             a->owned_client_config->alpn_protocol_names,
+                             (size_t) a->owned_client_config->alpn_protocol_names_len);
 
 finish:
   if (rc) {
-    _destroy(a);
+    if (a) {
+      _destroy(a);
+    } else {
+      iwn_brssl_client_config_free(config);
+    }
   }
   return rc;
 }

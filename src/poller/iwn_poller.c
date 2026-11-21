@@ -972,6 +972,20 @@ bool iwn_poller_alive(struct iwn_poller *p) {
   return p && !atomic_load_explicit(&p->stop, memory_order_acquire);
 }
 
+uint32_t iwn_poller_armed_events(struct iwn_poller *p, int fd) {
+  uint32_t ret = 0;
+  if (!p) {
+    return 0;
+  }
+  pthread_mutex_lock(&p->mtx);
+  struct poller_slot *s = iwhmap_get_u32(p->slots, fd);
+  if (s && (s->flags & SLOT_PROCESSING)) {
+    ret = s->events_armed;
+  }
+  pthread_mutex_unlock(&p->mtx);
+  return ret;
+}
+
 iwrc iwn_poller_task(struct iwn_poller *p, void (*task)(void*), void *arg) {
   return iwtp_schedule(p->tp, task, arg);
 }
@@ -1016,6 +1030,25 @@ finish:
     p->barrier_poll = 0;
   }
   return rc;
+}
+
+iwrc iwn_poller_join(struct iwn_poller *p) {
+  if (!p) {
+    return IW_ERROR_INVALID_ARGS;
+  }
+  if (!p->poll_thread_valid) {
+    return 0;
+  }
+  if (pthread_equal(p->poll_thread, pthread_self())) {
+    return IW_ERROR_INVALID_STATE;
+  }
+  int rci = pthread_join(p->poll_thread, 0);
+  if (rci) {
+    return iwrc_set_errno(IW_ERROR_THREADING_ERRNO, rci);
+  }
+  // The thread is joined here, `_destroy()` must not join it again.
+  p->poll_thread_valid = false;
+  return 0;
 }
 
 void iwn_poller_flags_set(struct iwn_poller *p, uint32_t flags) {

@@ -1,6 +1,7 @@
 #include "iwtests.h"
 #include "iwn_proc.h"
 #include "iwn_ws_client.h"
+#include "iwn_tests_tls.h"
 
 #include <iowow/iwlog.h>
 
@@ -14,6 +15,8 @@ static struct iwn_ws_client *ws;
 static int ws_server_pid;
 
 static int ccnt;
+
+static bool ssl;
 
 static void on_connected(const struct iwn_ws_client_ctx *ctx) {
   ++ccnt;
@@ -42,11 +45,12 @@ static void _on_ws_server_output(const struct iwn_proc_ctx *ctx, const char *buf
     return;
   }
   iwrc rc = iwn_ws_client_open(&(struct iwn_ws_client_spec) {
-    .url = "ws://localhost:9292/ws",
+    .url = ssl ? "wss://localhost:9292/ws" : "ws://localhost:9292/ws",
     .poller = poller,
     .on_connected = on_connected,
     .on_message = on_message,
     .on_dispose = on_dispose,
+    .tls_impl = iwn_test_tls_impl(),
     .reconnect_attempt_pause_sec = 1,
     .reconnect_attempts_num = 1
   }, &ws);
@@ -65,11 +69,17 @@ static void _on_ws_server_exit(const struct iwn_proc_ctx *ctx) {
 static void test_ws_client_reconnect(void) {
   iwrc rc = 0;
 
+  for (int i = 0; i < iw_test_argc; ++i) {
+    if (strcmp(iw_test_argv[i], "--ssl") == 0) {
+      ssl = true;
+    }
+  }
+
   RCC(rc, finish, iwn_poller_create(1, 1, &poller));
   RCC(rc, finish, iwn_proc_spawn(&(struct iwn_proc_spec) {
     .poller = poller,
     .path = "./ws_server1",
-    .args = (const char*[]) { 0 },
+    .args = ssl ? (const char*[]) { "--ssl", 0 } : (const char*[]) { 0 },
     .on_stdout = _on_ws_server_output,
     .on_stderr = _on_ws_server_output,
     .on_exit = _on_ws_server_exit

@@ -8,11 +8,13 @@
 #include "iwn_scheduler.h"
 #include "poller/iwn_direct_poller_adapter.h"
 #include "ssl/iwn_tls_poller_adapter.h"
+#include "ssl/iwn_tls_config.h"
 
 #ifdef IWN_HTTP2
 #include "http2/iwn_http2_server.h"
 #endif
 
+#include <iowow/iwarr.h>
 #include <iowow/iwlog.h>
 #include <iowow/iwutils.h>
 #include <iowow/iwpool.h>
@@ -51,6 +53,12 @@ struct server {
   struct iwpool  *pool;
   char stime_text[32];    ///< Formatted as: `%a, %d %b %Y %T GMT`
   volatile bool https;
+
+  /// TLS settings borrowed by all client connections, `0` if the server is not secure.
+  struct iwn_tls_server_config *tls_config;
+  /// TLS settings replaced by iwn_http_server_ssl_set() and possibly still borrowed
+  /// by connections in flight. Freed with the server.
+  struct iwulist tls_configs_retired;
 };
 
 struct token {
@@ -1953,28 +1961,25 @@ static iwrc _client_accept(struct server *server, int fd, struct sockaddr_storag
   RCN(finish, flags);
   RCN(finish, fcntl(fd, F_SETFL, flags | O_NONBLOCK));
 
-  if (server->https) {
-    pthread_mutex_lock(&server->mtx_ssl);
-    rc = iwn_tls_server_poller_adapter(&(struct iwn_tls_server_poller_adapter_spec) {
+  struct iwn_tls_server_config *tls_config = 0;
+  pthread_mutex_lock(&server->mtx_ssl);
+  tls_config = server->tls_config;
+  if (tls_config) {
+    // TLS settings and their ALPN protocols are shared with other connections.
+    rc = iwn_tls_server_poller_adapter_borrow(&(struct iwn_tls_server_poller_adapter_spec) {
       .tls_impl = server->spec.ssl.tls_impl,
-      .alpn_protocol_names = server->spec.http2 ? "h2,http/1.1" : 0,
-      .certs = server->spec.ssl.certs,
-      .certs_in_buffer = server->spec.ssl.certs_in_buffer,
-      .certs_len = server->spec.ssl.certs_len,
       .events = IWN_POLLIN,
       .events_mod = IWN_POLLET,
       .fd = fd,
       .on_dispose = _client_on_poller_adapter_dispose,
       .on_event = _client_on_poller_adapter_event,
       .poller = server->spec.poller,
-      .private_key = server->spec.ssl.private_key,
-      .private_key_in_buffer = server->spec.ssl.private_key_in_buffer,
-      .private_key_len = server->spec.ssl.private_key_len,
       .timeout_sec = server->spec.request_timeout_sec,
       .user_data = client,
-    });
-    pthread_mutex_unlock(&server->mtx_ssl);
-  } else {
+    }, tls_config);
+  }
+  pthread_mutex_unlock(&server->mtx_ssl);
+  if (!tls_config) {
     rc = iwn_direct_poller_adapter(
       server->spec.poller, fd,
       _client_on_poller_adapter_event,
@@ -2866,6 +2871,11 @@ static void _server_destroy(struct server *server) {
   }
   free((void*) server->spec.ssl.certs);
   free((void*) server->spec.ssl.private_key);
+  iwn_tls_server_config_free(server->tls_config);
+  for (size_t i = 0, len = iwulist_length(&server->tls_configs_retired); i < len; ++i) {
+    iwn_tls_server_config_free(*(struct iwn_tls_server_config**) iwulist_at2(&server->tls_configs_retired, i));
+  }
+  iwulist_destroy_keep(&server->tls_configs_retired);
   pthread_mutex_destroy(&server->mtx);
   pthread_mutex_destroy(&server->mtx_ssl);
   iwpool_destroy(server->pool);
@@ -3101,10 +3111,52 @@ void* iwn_http_request_transport_data(struct iwn_http_req *request) {
   return client->_transport_data;
 }
 
+static const char* _server_alpn(const struct server *server) {
+  return server->spec.http2 ? "h2,http/1.1" : 0;
+}
+
+/// Creates shared TLS settings from the given server TLS spec.
+///
+/// Returns 0 with `*out_config == 0` if the spec does not configure TLS.
+static iwrc _server_tls_config_create(
+  const struct server                   *server,
+  const struct iwn_http_server_ssl_spec *ssl,
+  struct iwn_tls_server_config         **out_config) {
+  if (!ssl->certs || !ssl->private_key) {
+    return 0;
+  }
+  if (!iwn_tls_impl_available(ssl->tls_impl)) {
+    iwlog_ecode_error(IWN_TLS_ERROR_NOT_AVAILABLE, "TLS implementation '%s' is not available",
+                      iwn_tls_impl_name(ssl->tls_impl));
+    return IWN_TLS_ERROR_NOT_AVAILABLE;
+  }
+  return iwn_tls_server_config_new(&(struct iwn_tls_server_config_spec) {
+    .tls_impl = ssl->tls_impl,
+    .alpn_protocol_names = _server_alpn(server),
+    .certs = ssl->certs,
+    .certs_in_buffer = ssl->certs_in_buffer,
+    .certs_len = ssl->certs_len,
+    .private_key = ssl->private_key,
+    .private_key_in_buffer = ssl->private_key_in_buffer,
+    .private_key_len = ssl->private_key_len,
+  }, out_config);
+}
+
 static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data) {
   struct server *server = slot_data;
   const struct iwn_http_server_ssl_spec *ssl = fn_data;
+
+  // Parse the new certificates before taking the lock and keep the TLS settings
+  // currently served on any failure.
+  struct iwn_tls_server_config *config = 0;
+  iwrc rc = _server_tls_config_create(server, ssl, &config);
+  if (rc) {
+    iwlog_ecode_error3(rc);
+    return;
+  }
+
   pthread_mutex_lock(&server->mtx_ssl);
+
   free((void*) server->spec.ssl.certs);
   free((void*) server->spec.ssl.private_key);
   server->spec.ssl.certs_len = ssl->certs_len;
@@ -3128,12 +3180,19 @@ static void _probe_ssl_set(struct iwn_poller *p, void *slot_data, void *fn_data)
   server->spec.ssl.certs_in_buffer = ssl->certs_in_buffer;
   server->spec.ssl.private_key_in_buffer = ssl->private_key_in_buffer;
   server->spec.ssl.tls_impl = ssl->tls_impl;
-  server->https = ssl->certs && ssl->certs_len && ssl->private_key && ssl->private_key_len;
-  if (server->https && !iwn_tls_impl_available(ssl->tls_impl)) {
-    server->https = false;
-    iwlog_ecode_error(IWN_TLS_ERROR_NOT_AVAILABLE, "TLS implementation '%s' is not available",
-                      iwn_tls_impl_name(ssl->tls_impl));
+  server->https = config != 0;
+
+  if (server->tls_config) {
+    // Connections in flight may still borrow the replaced settings, release them
+    // with the server.
+    iwrc lrc = iwulist_push(&server->tls_configs_retired, &server->tls_config);
+    if (lrc) {
+      // The retired settings cannot be safely freed here, they are intentionally leaked.
+      iwlog_ecode_error(lrc, "Failed to record retired TLS settings");
+    }
   }
+  server->tls_config = config;
+
   pthread_mutex_unlock(&server->mtx_ssl);
 }
 
@@ -3141,6 +3200,9 @@ bool iwn_http_server_ssl_set(
   struct iwn_poller                     *poller,
   int                                    server_fd,
   const struct iwn_http_server_ssl_spec *ssl) {
+  if (!poller || !ssl) {
+    return false;
+  }
   return iwn_poller_probe(poller, server_fd, _probe_ssl_set, (void*) ssl);
 }
 
@@ -3162,6 +3224,7 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
 
   server->pool = pool;
   server->refs = 1;
+  RCC(rc, finish, iwulist_init(&server->tls_configs_retired, 4, sizeof(struct iwn_tls_server_config*)));
   spec = &server->spec;
   memcpy(spec, spec_, sizeof(*spec));
 
@@ -3210,15 +3273,23 @@ iwrc iwn_http_server_create(const struct iwn_http_server_spec *spec_, int *out_f
     iwlog_ecode_error(rc, "TLS implementation '%s' is not available", iwn_tls_impl_name(spec->ssl.tls_impl));
     goto finish;
   }
-  if (server->https) {
+  // The server owns its copies of the TLS spec data, so that it can be replaced
+  // later by iwn_http_server_ssl_set().
+  if (spec->ssl.certs) {
     if (spec->ssl.certs_len < 0) {
       spec->ssl.certs_len = strlen(spec->ssl.certs);
     }
+    RCA(spec->ssl.certs = strndup(spec->ssl.certs, spec->ssl.certs_len), finish);
+  }
+  if (spec->ssl.private_key) {
     if (spec->ssl.private_key_len < 0) {
       spec->ssl.private_key_len = strlen(spec->ssl.private_key);
     }
-    RCA(spec->ssl.certs = strndup(spec->ssl.certs, spec->ssl.certs_len), finish);
     RCA(spec->ssl.private_key = strndup(spec->ssl.private_key, spec->ssl.private_key_len), finish);
+  }
+  if (server->https) {
+    // Parse certificates and the private key once for all accepted connections.
+    RCC(rc, finish, _server_tls_config_create(server, &spec->ssl, &server->tls_config));
   }
 
   if (!spec->port) {

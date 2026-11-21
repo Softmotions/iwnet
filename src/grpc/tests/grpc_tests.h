@@ -224,7 +224,7 @@ static void _signals_setup(void) {
 
 /// Opens the gRPC client session and starts the poller thread.
 /// The test options are taken from the arguments given after `--`.
-static iwrc _grpc_test_setup(pthread_t *poll_thread) {
+static iwrc _grpc_test_setup(void) {
   iwrc rc = 0;
   char url[128];
 
@@ -255,7 +255,7 @@ static iwrc _grpc_test_setup(pthread_t *poll_thread) {
   RCC(rc, finish, iwn_poller_create(3, 1, &_ctx.poller));
   spec.poller = _ctx.poller;
   RCC(rc, finish, iwn_grpc_client_open(&spec, &_ctx.client));
-  RCC(rc, finish, iwn_poller_poll_in_thread(_ctx.poller, "poller", poll_thread));
+  RCC(rc, finish, iwn_poller_poll_in_thread(_ctx.poller, "poller", 0));
 
 finish:
   if (rc) {

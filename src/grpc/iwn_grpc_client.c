@@ -2,6 +2,7 @@
 #include "iwn_url.h"
 #include "iwn_pairs.h"
 #include "ssl/iwn_tls_poller_adapter.h"
+#include "ssl/iwn_tls_config.h"
 #include "poller/iwn_direct_poller_adapter.h"
 
 #include <iowow/iwrefs.h>
@@ -96,6 +97,8 @@ struct iwn_grpc_client {
   struct iwn_poller  *poller;
   struct iwpool      *pool;
   struct iwn_poller_adapter *pa;
+  /// TLS settings shared by the client connection, `0` if the client is not secure.
+  struct iwn_tls_client_config *tls_config;
 
   struct hive_session  *sess;
   struct hive_callbacks hive_callbacks;
@@ -442,6 +445,7 @@ static void _client_destroy(void *d) {
 
   iwxstr_destroy(client->input_buf);
   pthread_mutex_destroy(&client->mtx);
+  iwn_tls_client_config_free(client->tls_config);
 
   if (client->sess) {
     hive_session_free(client->sess);
@@ -1344,11 +1348,19 @@ static iwrc _client_connect(struct iwn_grpc_client *client) {
   }
 
   if (client->flags & _FLAG_SECURE) {
-    RCC(rc, finish, iwn_tls_client_poller_adapter(&(struct iwn_tls_client_poller_adapter_spec) {
+    if (!client->tls_config) {
+      // Parse CA certificates once for the client connection.
+      RCC(rc, finish, iwn_tls_client_config_new(&(struct iwn_tls_client_config_spec) {
+        .tls_impl = client->spec.ssl.tls_impl,
+        .alpn_protocol_names = "h2", //< Only HTTP/2 is supported and allowed
+        .verify_peer = client->flags & IWN_GRPC_TLS_VERIFY_PEER,
+        .verify_host = client->flags & IWN_GRPC_TLS_VERIFY_HOST,
+      }, &client->tls_config));
+    }
+    RCC(rc, finish, iwn_tls_client_poller_adapter_borrow(&(struct iwn_tls_client_poller_adapter_spec) {
       .tls_impl = client->spec.ssl.tls_impl,
       .poller = client->poller,
       .host = client->url.host,
-      .alpn_protocol_names = "h2", //< Only HTTP/2 is supported and allowed
       .on_event = _on_poller_adapter_event,
       .on_dispose = _on_poller_adapter_dispose,
       .user_data = client,
@@ -1358,7 +1370,7 @@ static iwrc _client_connect(struct iwn_grpc_client *client) {
       .fd = client->fd,
       .verify_peer = client->flags & IWN_GRPC_TLS_VERIFY_PEER,
       .verify_host = client->flags & IWN_GRPC_TLS_VERIFY_HOST,
-    }));
+    }, client->tls_config));
   } else {
     RCC(rc, finish, iwn_direct_poller_adapter(
           client->poller, client->fd,
