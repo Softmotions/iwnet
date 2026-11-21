@@ -1,3 +1,49 @@
+# [v1.8.0] - 2026-11-21
+
+- ssl: TLS settings (certificate chain, private key, CA bundle, ALPN protocols) are
+  created once and shared by all connections of a server or a client instead of being
+  re-created for every accepted connection or reconnect. New internal API in
+  `ssl/iwn_tls_config.h`: `iwn_tls_server_config_new()` with
+  `iwn_tls_server_poller_adapter_borrow()`, and the client counterparts. The settings
+  are immutable and borrow-only: the owner frees them after the last connection
+  borrowing them is disposed. Certificate and key errors are now reported when a
+  server or a client is configured, not per connection.
+- ssl: The TLS poller adapters honour `iwn_poller_adapter::arm()` requests made from
+  inside their own event callback; a thread-local guard dropped them. The dropped
+  request stalled a gRPC client: the `IWN_POLLOUT` request of its deferred GOAWAY
+  handling was lost, so the connection was neither flushed nor closed and the poll
+  loop stayed blocked in `epoll_wait` until an unrelated event arrived. The guard
+  removal also drops one `pthread_key_create()` per TLS connection.
+- ssl: The s2n server `s2n_config` is created with `s2n_config_new_minimal()`: a server
+  never uses the system trust store, so it is neither needed nor loaded. The s2n
+  client keeps `s2n_config_new()`, because it verifies the peer and appends its CA
+  bundle to the system trust store.
+- http: `iwn_http_server_ssl_set()` replaces the whole shared TLS settings object,
+  keeps the replaced settings alive for connections which are still in flight (they
+  are released with the server) and keeps the currently served settings when the new
+  certificate material cannot be parsed. A server started without TLS now owns its
+  copies of the ssl spec data, so `iwn_http_server_ssl_set()` no longer frees memory
+  it does not own.
+- grpc, ws: Clients create the TLS settings once and reuse them for reconnects
+  instead of re-parsing the CA bundle for every connection attempt.
+- poller: Added `iwn_poller_join()` which joins the poll thread started by
+  `iwn_poller_poll_in_thread()` and records the join, so a following
+  `iwn_poller_destroy()` does not join that thread a second time (joining twice is
+  undefined behaviour and aborts under AddressSanitizer).
+- poller: Added the `iwn_poller_armed_events()` diagnostic accessor, which reports
+  `arm()` requests pending from inside an adapter event callback.
+- build: The `mimegen`/`strliteral` code generators are compiled and linked with their
+  own sanitizer-free flags. They inherited `${CFLAGS}` (including `ENABLE_ASAN` and
+  `ENABLE_UBSAN`) but were linked without the sanitizer runtime, so sanitizer builds
+  failed with undefined `__asan_*`/`__ubsan_*` references.
+- tests: Added `tls_arm1` (regression test for the `arm()` contract of the TLS
+  adapters, both backends), `server3` (runtime TLS switch-over of the HTTP server via
+  `iwn_http_server_ssl_set()`), a `server1`/`server2` run with an unusable system CA
+  store, and TLS reconnect coverage for the websocket client (`ws_client_test4
+  -- --ssl`). The `server2` case no longer leaks its JSON response body.
+- tests: gRPC cases wait for the poll event loop with `iwn_poller_join()` instead of
+  joining the poll thread returned by `iwn_poller_poll_in_thread()` themselves.
+
 # [v1.7.2] - 2026-11-20
 
 - build: The iowow dependency is installed by the `iowow_build.sh` Autark check before the
